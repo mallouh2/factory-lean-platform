@@ -8,12 +8,32 @@ import {
 export async function GET(req: NextRequest) {
   try {
     const { db, user } = await authenticatedClient();
-    const {data,error} = await db.rpc("factory_snapshot", {factory:req.nextUrl.searchParams.get("factory") || null});
-    if(error) throw error;
-    return NextResponse.json({...data,user:{id:user.id,email:user.email}});
-  } catch(e) { return NextResponse.json(safeError(e),{status:e instanceof Error && e.message === "unauthorized" ? 401 : 403}); }
+    const { data, error } = await db.rpc("factory_snapshot", {
+      factory: req.nextUrl.searchParams.get("factory") || null,
+    });
+    if (error) throw error;
+    return NextResponse.json({
+      ...data,
+      user: { id: user.id, email: user.email },
+    });
+  } catch (e) {
+    return NextResponse.json(safeError(e), {
+      status: e instanceof Error && e.message === "unauthorized" ? 401 : 403,
+    });
+  }
 }
+const commandErrors: Record<string, string> = {
+  description_required: "reasonDescriptionRequired",
+  invalid_restart_time: "restartTimeInvalid",
+  invalid_order: "activeOrderRequired",
+  invalid_alternative: "alternativeInvalid",
+  support_account_not_found: "supportNotFound",
+  cannot_grant_higher_permissions: "permissionError",
+  owner_required: "permissionError",
+};
 const rpcModules: Record<string, [string, string]> = {
+  configure_center_links: ["centers", "edit"],
+  set_support_by_email: ["support", "edit"],
   set_daily_target: ["orders", "edit"],
   record_output: ["orders", "edit"],
   record_access: ["reports", "export"],
@@ -30,7 +50,7 @@ export async function POST(req: NextRequest) {
       throw new Error("invalid_input");
     const { command, args } = await req.json();
     const context = await authenticatedClient();
-    const {db}=context;
+    const { db } = context;
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
     if (command === "save_record") {
@@ -46,21 +66,46 @@ export async function POST(req: NextRequest) {
         ].includes(args.resource)
       )
         throw new Error("invalid_resource");
-      await authorize(args.factory, args.resource === "products" ? "orders" : args.resource, args.id ? "edit" : "create",context);
-    } else if (command === "change_status") {
-      const {data: allowed} = await db.rpc("can_access",{factory:args.factory,module:"machine_status",action:"edit"});
-      if(!allowed) await authorize(args.factory,"centers","edit",context);
+      await authorize(
+        args.factory,
+        args.resource === "products" ? "orders" : args.resource,
+        args.id ? "edit" : "create",
+        context,
+      );
+    } else if (["change_status", "update_downtime"].includes(command)) {
+      const { data: allowed } = await db.rpc("can_access", {
+        factory: args.factory,
+        module: "machine_status",
+        action: "edit",
+      });
+      if (!allowed)
+        await authorize(
+          args.factory,
+          command === "update_downtime" ? "downtime" : "centers",
+          "edit",
+          context,
+        );
     } else if (rpcModules[command]) {
       const [module, action] = rpcModules[command];
-      await authorize(args.factory, module, action,context);
+      await authorize(args.factory, module, action, context);
     } else if (!["create_factory", "request_membership"].includes(command))
       throw new Error("invalid_command");
     const { data, error } = await db.rpc(command, args);
-    if (data?.error) return NextResponse.json({error: "joinError"}, {status:400});
+    if (data?.error)
+      return NextResponse.json({ error: "joinError" }, { status: 400 });
     if (error) {
       console.warn("factory_command_failed", { command, code: error.code });
       return NextResponse.json(
-        { error: error.code === "42501" ? "permissionError" : "error" },
+        {
+          error:
+            error.code === "42501"
+              ? "permissionError"
+              : error.code === "23505"
+                ? "duplicateRecord"
+                : error.code === "23514"
+                  ? "invalidValues"
+                  : commandErrors[error.message] || "error",
+        },
         { status: 400 },
       );
     }

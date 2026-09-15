@@ -1,4 +1,4 @@
-import {useEffect,useState} from "react";
+import { useEffect, useState } from "react";
 import type { Row, Translate, Language } from "@/types";
 export function localName(row: Row | undefined | null, lang: Language) {
   return String(
@@ -54,8 +54,12 @@ export function Dialog({
   children: React.ReactNode;
   t: Translate;
 }) {
-  const [error,setError]=useState("");
-  useEffect(()=>{const handler=(e:Event)=>setError((e as CustomEvent).detail);window.addEventListener("factory-error",handler);return()=>window.removeEventListener("factory-error",handler)},[]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const handler = (e: Event) => setError((e as CustomEvent).detail);
+    window.addEventListener("factory-error", handler);
+    return () => window.removeEventListener("factory-error", handler);
+  }, []);
   return (
     <dialog
       ref={(el) => {
@@ -70,7 +74,11 @@ export function Dialog({
           ×
         </button>
       </header>
-      {error && <p role="alert" className="toast">{t(error)}</p>}
+      {error && (
+        <p role="alert" className="toast">
+          {t(error)}
+        </p>
+      )}
       {children}
     </dialog>
   );

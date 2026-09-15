@@ -1,0 +1,105 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+/** Runs only on a fictional factory in the separate testing project. */
+module.exports = async function featureFlows(owner, browser, credentials, origin) {
+  const checks = [];
+  const recordCheck = checks.push.bind(checks);
+  checks.push = (...items) => { const count = recordCheck(...items); console.log(items.join('; ')); fs.writeFileSync('test-results/feature-flow-progress.json', JSON.stringify({checks},null,2)); return count; };
+  const get = async (client, suffix = '') => {
+    const r = await client.get(origin + '/api/data' + suffix,{timeout:120000});
+    assert.equal(r.status(), 200, 'snapshot response');
+    return r.json();
+  };
+  let initial = await get(owner);
+  assert.equal(initial.factory.is_demo, true, 'only fictional factory may be changed by this test');
+  const factory = initial.factory.id;
+  const call = async (client, command, args) => {
+    const r = await client.post(origin + '/api/data', { timeout:120000, headers: { origin }, data: { command, args: { factory, ...args } } });
+    const result = await r.json();
+    assert.equal(r.status(), 200, command + ': ' + (result.error || ''));
+    return result.data;
+  };
+  const save = (resource, payload, id = null) => call(owner, 'save_record', { resource, id, payload });
+  const stamp = 'QA-' + Date.now().toString(36);
+  const area = await save('factory', { name: stamp + ' area', name_ar: 'منطقة اختبار وظيفي' });
+  const line = await save('lines', { name: stamp + ' line', name_ar: 'خط اختبار', code: stamp + '-L', area_id: area });
+  const cell = await save('centers', { name: stamp + ' cell', name_ar: 'خلية اختبار', code: stamp + '-CELL', type: 'production_cell', area_id: area, line_id: line });
+  const center = await save('centers', { name: stamp + ' table', name_ar: 'طاولة اختبار', code: stamp + '-TABLE', type: 'assembly_table', area_id: area, line_id: line, parent_id: cell });
+  checks.push('Create area, line, production cell and child manual table');
+  const product = await save('products', { name: stamp + ' pipe', name_ar: 'أنبوب اختبار', code: stamp + '-P', unit: 'unit', diameter: 25, length: 6, standard_rate: 300 });
+  const order = await save('orders', { code: stamp + '-ORDER', product_id: product, line_id: line, status: 'active', target_quantity: 100, start_time: new Date().toISOString(), expected_finish: new Date(Date.now() + 3600000).toISOString() });
+  const operator = initial.tables.memberships.find(m => m.display_name === 'Omar Khalil');
+  await save('centers', { order_id: order, operator_id: operator.id }, center);
+  const alternative = initial.tables.work_centers.find(c => !c.archived).id;
+  await call(owner, 'configure_center_links', { work_center: center, alternatives: [alternative], capabilities: [{ product_id: product, rate: 300 }] });
+  let snapshot = await get(owner);
+  assert.ok(snapshot.tables.work_center_capabilities.some(c => c.work_center_id === center && c.product_id === product));
+  assert.ok(snapshot.tables.operator_assignments.some(a => a.work_center_id === center && a.operator_id === operator.id));
+  checks.push('Product, order, operator assignment, capabilities and alternatives persist');
+  await call(owner, 'change_status', { work_center: center, status: 'running' });
+  const reason = initial.tables.downtime_reasons.find(r => r.name === 'Mechanical Failure');
+  const sub = initial.tables.downtime_reasons.find(r => r.parent_id === reason.id);
+  await call(owner, 'change_status', { work_center: center, status: 'stopped', reason: reason.id, sub_reason: sub?.id || null, notes: 'Functional test bearing replacement', expected_restart: new Date(Date.now() + 3600000).toISOString(), responsible: operator.id, alternative, transferred: true });
+  snapshot = await get(owner);
+  const stop = snapshot.tables.downtime_events.find(e => e.work_center_id === center && !e.ended_at);
+  assert.ok(stop);
+  await call(owner, 'update_downtime', { id: stop.id, expected_restart: new Date(Date.now() + 7200000).toISOString(), notes: 'Functional test revised restart plan', responsible: operator.id, alternative, transferred: true });
+  await call(owner, 'change_status', { work_center: center, status: 'running' });
+  const output = { work_center: center, production_order: order, produced: 11, rejected: 1, notes: 'Functional test output', request_id: crypto.randomUUID() };
+  await call(owner, 'record_output', output);
+  await call(owner, 'record_output', output);
+  const today = new Intl.DateTimeFormat('en-CA', {timeZone:initial.factory.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  await call(owner, 'set_daily_target', { production_order: order, day: today, target: 11 });
+  snapshot = await get(owner);
+  assert.equal(snapshot.tables.production_orders.find(o => o.id === order).produced_quantity, 11);
+  assert.equal(snapshot.tables.status_events.filter(e => e.work_center_id === center).length, 3);
+  assert.ok(snapshot.tables.downtime_events.find(e => e.id === stop.id).ended_at);
+  assert.ok(snapshot.tables.daily_targets.some(t => t.order_id === order && t.target === 11));
+  checks.push('Stop, subreason, revised restart plan and resume preserve history');
+  checks.push('Production output is counted once on retry; daily target persists');
+  const csv = await owner.post(origin + '/api/export', {timeout:120000,headers:{origin},data:{factory,period:'today',area,line,machine:center,reason:reason.id,lang:'ar'}});
+  assert.equal(csv.status(),200);assert.match(csv.headers()['content-type'],/text\/csv/);assert.match(await csv.text(),/طاولة اختبار/);
+  checks.push('Filtered Arabic CSV export includes the tested downtime');
+  const logo = await owner.post(origin + '/api/logo',{timeout:120000,headers:{origin},multipart:{factory,file:{name:'test.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')}}});
+  assert.equal(logo.status(),200);const uploaded=await logo.json();
+  await call(owner,'update_settings',{name:initial.factory.name,timezone:initial.factory.timezone,logo:uploaded.path});
+  assert.equal((await owner.get(origin+'/api/logo?factory='+factory)).status(),200);
+  await call(owner,'update_settings',{name:initial.factory.name,timezone:initial.factory.timezone,logo:initial.factory.logo_path});
+  checks.push('Private logo upload, display and factory settings save work');
+  const role=await save('roles',{name:stamp+' viewer',name_ar:'دور اختبار'});
+  await call(owner,'set_permissions',{role,permissions:[{module:'factory',action:'view'},{module:'dashboard',action:'view'},{module:'centers',action:'view'}]});
+  const manager=initial.tables.memberships.find(m=>m.display_name==='Sara Haddad');
+  await call(owner,'manage_member',{id:manager.id,role,status:'approved'});
+  snapshot=await get(owner);assert.equal(snapshot.tables.memberships.find(m=>m.id===manager.id).role_id,role);
+  await call(owner,'manage_member',{id:manager.id,role:manager.role_id,status:'approved'});
+  checks.push('Custom role permissions and employee role changes persist');
+  const supportContext=await browser.newContext();
+  try {
+    const login=await supportContext.request.post(origin+'/api/auth',{timeout:120000,headers:{origin},data:{action:'signin',email:credentials.support.email,password:credentials.support.password}});
+    assert.equal(login.status(),200);
+    let support=await get(supportContext.request);
+    if(!support.membership){
+      const code=await call(owner,'get_join_code',{});
+      await call(supportContext.request,'request_membership',{code,display_name:'Functional test employee',factory:undefined});
+      support=await get(supportContext.request);assert.equal(support.membership.status,'pending');
+      await call(owner,'manage_member',{id:support.membership.id,role:operator.role_id,status:'approved'});
+      assert.equal((await get(supportContext.request)).factory.id,factory);
+      await call(owner,'manage_member',{id:support.membership.id,role:operator.role_id,status:'rejected'});
+      checks.push('Employee requests access, receives approval and can be rejected');
+    }
+    await call(owner,'set_support_by_email',{email:credentials.support.email,role:manager.role_id,mode:'temporary',expires_at:new Date(Date.now()+3600000).toISOString()});
+    assert.equal((await get(supportContext.request,'?factory='+factory)).factory.id,factory);
+    checks.push('Temporary support grant by email opens the authorized factory');
+  }finally{
+    await call(owner,'set_support_by_email',{email:credentials.support.email,role:manager.role_id,mode:'disabled',expires_at:null});
+    await supportContext.close().catch(() => {});
+  }
+  await call(owner,'change_status',{work_center:center,status:'idle'});
+  await save('orders',{status:'completed'},order);
+  await save('centers',{archived:true},center);await save('centers',{archived:true},cell);await save('lines',{archived:true},line);await save('factory',{archived:true},area);
+  snapshot=await get(owner);assert.equal(snapshot.tables.work_centers.find(c=>c.id===center).archived,true);assert.equal(snapshot.tables.status_events.filter(e=>e.work_center_id===center).length,4);
+  checks.push('Archiving preserves operational history');
+  fs.writeFileSync('test-results/feature-flow-results.json',JSON.stringify({checkedAt:new Date().toISOString(),checks},null,2));
+  return checks;
+};

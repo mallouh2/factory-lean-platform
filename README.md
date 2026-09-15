@@ -1,98 +1,171 @@
-# Factory Lean Platform
+# Factory Lean
 
-A bilingual manufacturing and Lean management application built for one factory per SaaS account.
+A bilingual manufacturing and Lean operations application for one factory per SaaS account. The existing application is preserved: Next.js, Supabase and GitHub remain the foundation. Vercel is deferred at the user's request; the application can run as a normal Node.js server, with a Docker deployment option.
 
-**Current milestone: implementation draft, not production-ready.** Authentication, factory onboarding, a graphical factory floor, work-center configuration, downtime commands, reports and administration screens are implemented in source. The application builds and its initial calculation/localization tests pass. The database migration, authenticated user flows, tenant-isolation tests and Vercel preview have not yet been validated end to end.
+## What works
 
-## Infrastructure
+- Supabase email/password authentication and an email-confirmation callback.
+- Factory creation, editable profile/logo/timezone, join codes, employee requests and approvals.
+- Thirteen starting roles, custom roles and configurable module/action permissions.
+- Areas, production lines, production cells, machines, manual tables and nested work centers.
+- Product capabilities, alternative work centers and operator assignment history.
+- A graphical factory floor, status filters, daily production targets and clickable KPIs.
+- Atomic status changes, downtime reasons/subreasons, restart plans, responsibility and transfer information.
+- Production orders and an append-only output ledger with retry protection.
+- Six management report views, Pareto analysis, date/location filters and server-authorized CSV export.
+- Factory-scoped support grants, expiry and application access auditing.
+- English/Arabic dictionaries, RTL layout, responsive navigation and touch controls.
+- A fictional Nova factory: five areas, two lines, twelve work centers, three products, eight materials and future-module seed relationships.
 
-- Source of truth: `mallouh2/factory-lean-platform` on GitHub, currently public. Meaningful foundation and feature commits are published.
-- Supabase development: `factory-lean-development`, region `ap-south-1`. No application migration has been applied yet.
-- Testing and production Supabase projects: not provisioned.
-- Vercel: a preview deployment was accepted, but deployment inspection returned a scope authorization error. Reconnect Vercel with access to `mrabumallouh12-9286` before continuing deployment validation.
+See [requirements](docs/requirements-checklist.md) and [test evidence](docs/test-results.md) for the exact verification status. A functioning development application is not a production security certification. Detailed security/encryption review is explicitly deferred until after feature acceptance.
+
+## Infrastructure status
+
+GitHub repository: `mallouh2/factory-lean-platform` (public, source of truth).
+
+| Environment | Supabase project | Status |
+|---|---|---|
+| Development | `factory-lean-development` / `jjcvfysjmqimvnumxasm` | Healthy; six migrations; fictional demo |
+| Testing | `factory-lean-testing` / `silmfbpjyepalnggwulp` | Healthy; same six migrations; separate credentials and test data |
+| Production | Not provisioned | Deferred until feature acceptance and deployment review |
+
+Vercel project inspection still returns HTTP 403 for `mrabumallouh12-9286/factory-lean-platform`. No working hosted preview or production URL is claimed. This does not prevent local development, testing or portable Node deployment.
 
 ## Local installation
 
-Node.js 22+ is required. Install exactly the committed dependency versions:
+Use Node.js 22 or newer (Node 24 was used for verification):
 
 ```sh
 npm ci
 cp .env.example .env.local
 ```
 
-Configure `APP_ENV=development`, `APP_ORIGIN=http://localhost:3000`, and the development project's `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. These variables are server-only. Do not prefix them with `NEXT_PUBLIC_`. The application never uses a Supabase service/secret key for requests. The secret-key placeholder is reserved for a future provisioning script.
-
-After infrastructure/environment verification and successful database setup:
+Set `APP_ENV=development`, `APP_ORIGIN=http://localhost:3000`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY` for the development project. All application environment variables stay on the server. No service-role key is used by the application.
 
 ```sh
 npm run dev
 ```
 
-Open `http://localhost:3000`. To test a production build locally, run `npm run build` and then `npm start`.
+Open `http://localhost:3000`. For an optimized build:
 
-## Project structure
+```sh
+npm run build
+npm start
+```
 
-- `src/app`: application shell and same-origin authentication/data/upload HTTP routes.
-- `src/components`: navigation, shared form/dialog/status primitives.
-- `src/features`: authentication, onboarding, graphical floor, machine details, configuration, reports, people, roles, settings and support.
-- `src/services`: server-only Supabase client and reusable authorization/origin checks.
-- `src/locales`: English and Arabic dictionaries; RTL uses logical CSS properties.
-- `src/utils`: pure manufacturing/timezone/report/export calculations.
-- `supabase/migrations`: versioned PostgreSQL schema, RLS, guarded commands and audit triggers.
-- `supabase/tests`: rollback-only database security tests, not yet executed.
-- `tests`: Node test-runner tests.
-- `docs`: architecture, implementation plan, detailed requirements checklist and test evidence.
+`APP_ORIGIN` must match the actual browser origin, including the port. Configure the exact `/auth/confirm` URL in Supabase Auth's redirect allowlist and keep email confirmation enabled. Outbound email delivery and hosted callback behavior still require verification with the eventual deployment and mail configuration.
 
-No ORM, global state framework, chart library or accounting integration is introduced. Next.js/React provide the application, Supabase JS/SSR provide supported authentication, TypeScript checks contracts, and Supabase CLI generates migration filenames. Package versions and lockfile are committed.
+## Database installation
 
-## Database setup and promotion
+Apply the six files in `supabase/migrations/` in filename order to a **new empty** Supabase project. Use Supabase CLI migrations or the connected migration integration; never apply undocumented schema changes. Do not run proposal files.
 
-Use the committed migration unchanged in each environment. Create new migrations with `npx supabase migration new <descriptive_name>`. Never modify an applied migration or make undocumented schema changes.
+The existing development and testing databases already have all six migrations. The connected integration assigns execution timestamps different from the original filenames: [migration mapping](docs/database-migrations.md). Do not blindly run `supabase db push` against these existing projects or reapply migrations. Reconcile the documented migration history first if switching to CLI deployment.
 
-1. Verify the target project is development/testing, never production by accident.
-2. Link using the Supabase CLI or apply the exact committed SQL using the connected migration integration.
-3. Apply `supabase/migrations/20260915100155_phase_one_foundation.sql` to development.
-4. Run `supabase/tests/tenant_isolation.sql`; it creates fixture users and factories within a transaction and rolls everything back.
-5. Run Supabase security/performance advisors, address findings through new migrations, and test remaining role/support/concurrency cases.
-6. Provision a separate testing project, apply the same tested migrations and load fictional demo data there.
-7. After preview acceptance, promote reviewed migrations to a separate production project.
+Create subsequent migrations with:
 
-The Supabase Auth email-confirmation setting must remain enabled. Configure the exact local and Vercel callback URLs in Auth before testing signup. Use `/auth/confirm` as the callback. Logo storage is private and accepts PNG/JPEG/WebP files up to 2 MB.
+```sh
+npx supabase migration new descriptive_change_name
+```
 
-## Authorization
+The schema includes factory isolation, permissions, status/downtime/output events, audits, private logo storage and relational foundations for future inventory, BOM, costing, procurement and Lean improvements.
 
-Every operational table carries a factory ID. Composite foreign keys prevent cross-factory references. RLS evaluates current memberships and role permissions in the database. The HTTP boundary validates the Supabase user and module/action permission; the database independently authorizes commands.
+## Demo setup
 
-Factory creation establishes an owner, initial role names and downtime reasons. Membership approval cannot assign permissions beyond the approving manager's own privileges. Role-permission configuration and support-grant management currently require the owner. Module permissions support view/create/edit/delete/approve/export; limited visibility scopes remain pending.
+The development Nova factory and its users are already provisioned. The requested `ADMIN` alias resolves to `DEMO_EMAIL` only in development; it uses actual Supabase authentication and the password supplied privately by the user. No password or bypass is compiled into the application. Set `DEMO_EMAIL=admin@nova.example.test` in development only.
 
-Important operations use transaction commands rather than direct table writes. Status changes lock the work center, close open downtime, append a status event and update the current status with audit triggers. Application users have no update/delete grant on historical events or audit logs.
+Demo accounts:
 
-Support accounts have no global access. A grant binds a named account to a factory-scoped role; temporary grants require an expiry. The support selection workflow and audit of support reads are not complete yet.
+| Account | Purpose |
+|---|---|
+| `admin@nova.example.test` | Factory owner; development `ADMIN` alias |
+| `manager@nova.example.test` | Factory manager |
+| `operator@nova.example.test` | Technician/operator |
+| `support@nova.example.test` | No automatic factory access |
 
-## Vercel deployment
+For a new development/testing project, set `APP_ENV` and supply the owner's `DEMO_PASSWORD` through your shell's environment or secret manager, then run:
 
-Use this GitHub repository as the source. Configure Preview to use the testing database and Production to use the production database. Never share production credentials or data with previews. Set `APP_ORIGIN` to the exact deployment origin and `APP_ENV` to the correct environment. Keep environment values in Vercel configuration, not source files. Demo aliases must never be configured in production.
+```sh
+node scripts/create-demo-credentials.mjs
+node scripts/seed-demo.mjs
+```
 
-The initial preview was submitted through the Vercel integration from committed source files. Automatic GitHub preview linkage still needs verification. Terminal READY status, successful auth/database interactions and browser review are required before any production promotion.
+The first command creates an ignored credential file, with generated passwords for the other demo accounts. The second produces ignored `.env.demo-seed.sql`. Apply that file only to the selected non-production project using the connected SQL integration or a PostgreSQL client, then apply `supabase/seeds/nova_targets.sql`. These are documented seed operations, not schema migrations. `DEMO_CREDENTIAL_FILE` selects a separate credentials file for testing. Keep the generated files private; never commit them. Credentials do not change on an ordinary seed rerun.
 
-## Demo workflow
+## Try the application
 
-The intended demo is Nova Plastic Pipes Factory, with PVC and HDPE lines and clearly fictional data. **The demo dataset and users have not been provisioned yet.** No working demo login is claimed.
+1. Sign in as the development owner and confirm the **DEMO DATA** banner.
+2. Open the factory floor and select the stopped Cutting Machine.
+3. Inspect its reason, operator, restart information and recent status history.
+4. Update its restart plan, then change its status to Running. The downtime event closes; history remains.
+5. Select a center with an active order and record newly produced/rejected quantities.
+6. Open Production orders to set a daily target or add an order; use Products to manage product data.
+7. Open Work centers to configure a manual station/cell, parent, operator, capabilities and alternatives.
+8. Open Reports; compare dates and locations, switch through all six reports and export downtime CSV.
+9. Use Factory settings to view/regenerate the join code. Approve a requesting employee and assign a role.
+10. Switch to Arabic and check the reversed layout. Resize to tablet/mobile to use the navigation drawer.
 
-The development-only `ADMIN` username alias maps to `DEMO_EMAIL` when `APP_ENV=development` and the Vercel target is not production. It still uses real Supabase password authentication; there is no hard-coded bypass or password. Demo provisioning must use environment-supplied credentials on isolated development/testing projects only.
+OEE shows **Insufficient data** until valid observations exist. Production quantities are total output, including rejects; good output is total minus rejects. Daily targets are explicit dated records, not an assumed sum of lifetime order targets.
 
-## Checks
+## Structure
+
+```text
+src/app/             Next.js pages and same-origin HTTP routes
+src/components/      Navigation, dialogs, fields and status indicators
+src/features/        Factory floor, configuration, people and report screens
+src/services/        Supabase sessions and reusable authorization
+src/locales/         English and Arabic dictionaries
+src/utils/           Timezone, downtime, utilization, OEE and CSV calculations
+supabase/migrations/ Applied schema and business-command migrations
+supabase/seeds/      Fictional data templates without real credentials
+supabase/tests/      Transactional database checks
+supabase/proposals/  Unapplied proposals reserved for the later security review
+tests/               Calculation and functional-flow checks
+docs/                Architecture, requirements, test evidence and migration mapping
+```
+
+Next.js/React provide the UI/server, Supabase JS/SSR provide provider-supported sessions, and TypeScript checks the source. There is no ORM, chart library, global-state framework or monorepo tooling. No new production dependency was added for the completion work.
+
+## Roles and permissions
+
+Permissions live in database tables, not role-name checks in components. The reusable `can(module, action)` presentation check and server/database authorization use the same matrix. Actions are View, Create, Edit, Delete, Approve and Export. Owners retain factory control; delegated managers cannot grant permissions they do not hold.
+
+Operator status controls use the `machine_status` module, separately from engineering/configuration edits. Employee approval, role changes, support grants and configuration changes are auditable. Support grants refer to a verified account by email, bind a factory-scoped role, and may be disabled, temporary or permanent. Temporary access requires expiry. Direct support API-read auditing is reserved for the later security review; application snapshot reads and exports are already audited.
+
+## Running checks
 
 ```sh
 npm test
 npm run typecheck
 npm run build
+node scripts/check-standalone.cjs
+node scripts/check-browser.cjs
 ```
 
-See `docs/test-results.md` for executed checks and `docs/requirements-checklist.md` for open requirements. A successful build is not a security or production acceptance test.
+`supabase/tests/tenant_isolation.sql` and `operational_security.sql` are rollback-only checks already exercised during development. Detailed security expansion is now deferred as requested.
 
-## Known limitations and next phase
+The browser harness and functional-flow checks run against `.env.testing` and a separate ignored credentials file. They exercise the real application and Supabase, not mocked dashboard data. See [test results](docs/test-results.md) for commands, environment requirements and actual outcomes.
 
-Phase 1 remains incomplete: database and demo provisioning, preview scope access, negative security tests, full Arabic/RTL/mobile verification, support read auditing, rate limiting, server-audited exports, production transactions and complete report filtering remain open. Some form timestamps currently require explicit UTC input. Reports intentionally show insufficient OEE data rather than inventing values.
+## Deployment without Vercel
 
-Future modules remain unavailable in navigation. Phase 2 should add transaction-based inventory, versioned BOM/costing, finite-capacity planning, quality and maintenance workflows, and Lean problem/action verification. HR and the Monthly Employee Hall of Fame must remain deferred until their phase is authorized. See `docs/architecture.md` for boundaries.
+The optimized application runs on any compatible Node hosting service. Set the server-only environment variables at runtime, use a dedicated production Supabase project, and place the service behind HTTPS.
+
+The included Dockerfile uses Next.js standalone output, excludes real environment files, and runs as a non-root user:
+
+```sh
+docker build -t factory-lean .
+docker run --env-file /secure/path/factory-production.env -p 3000:3000 factory-lean
+```
+
+The Docker recipe is provided; a Docker daemon is not available in this workspace, so an actual image build is not claimed. The standalone Node build can be verified independently. Preview/testing deployments must use the testing Supabase project. Production must never contain demo credentials or data.
+
+## Known limitations and Phase 2
+
+- Hosted preview/production deployment and real email-delivery acceptance remain open.
+- The detailed security, encryption and production readiness review is deferred by the user.
+- Permissions are module/action booleans; advanced within-module scopes are not implemented.
+- Snapshot screens load up to 5,000 records per table and warn when this limit is reached. Narrowed, server-paginated screens are needed before large-history production use. CSV exports page independently and reject more than 20,000 matching events.
+- Refresh is polling every 30 seconds; no PLC/IoT integration is claimed.
+- OEE observation collection and full operator order workflows belong to later phases; the foundation and honest insufficiency behavior are present.
+- PDF/Excel, inventory operations, procurement workflows, planning Gantt, advanced Lean tools, AI recommendations and HR/Hall of Fame are deliberately not exposed as finished features.
+
+Phase 2 should build transaction-based inventory, versioned BOM/standard-vs-actual costing, finite-capacity planning, maintenance/quality workflows and verified Lean corrective actions. Keep costing separate from accounting.

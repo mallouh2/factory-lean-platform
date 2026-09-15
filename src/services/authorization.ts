@@ -24,7 +24,7 @@ export async function authorize(
   action: string,
   context?: Awaited<ReturnType<typeof authenticatedClient>>,
 ) {
-  const { db, user } = context || await authenticatedClient();
+  const { db, user } = context || (await authenticatedClient());
   const { data, error } = await db.rpc("can_access", {
     factory,
     module,

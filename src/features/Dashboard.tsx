@@ -2,7 +2,11 @@ import { useState } from "react";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 import { Badge, Empty, localName } from "@/components/ui";
-import { downtimeMinutes, reportPeriod, formatLocalInput } from "@/utils/manufacturing.mjs";
+import {
+  downtimeMinutes,
+  reportPeriod,
+  formatLocalInput,
+} from "@/utils/manufacturing.mjs";
 export default function Dashboard(
   props: FeatureProps & {
     onCenter: (row: Row) => void;
@@ -25,8 +29,23 @@ export default function Dashboard(
     0,
   );
   const active = orders.filter((o) => o.status === "active"),
-    total = (s.tables.production_entries || []).filter(e=>String(e.created_at)>=period.from && String(e.created_at)<period.to).reduce((n,e)=>n+Number(e.produced),0),
-    target = (s.tables.daily_targets || []).filter(e=>e.day===formatLocalInput(new Date().toISOString(),String(s.factory?.timezone)).slice(0,10)).reduce((n,e)=>n+Number(e.target),0);
+    total = (s.tables.production_entries || [])
+      .filter(
+        (e) =>
+          String(e.created_at) >= period.from &&
+          String(e.created_at) < period.to,
+      )
+      .reduce((n, e) => n + Number(e.produced), 0),
+    target = (s.tables.daily_targets || [])
+      .filter(
+        (e) =>
+          e.day ===
+          formatLocalInput(
+            new Date().toISOString(),
+            String(s.factory?.timezone),
+          ).slice(0, 10),
+      )
+      .reduce((n, e) => n + Number(e.target), 0);
   const kpis = [
     {
       label: "runningMachines",
@@ -73,16 +92,22 @@ export default function Dashboard(
             onClick={k.action}
           >
             <span>{t(k.label)}</span>
-            <strong><bdi dir="ltr">{k.value}</bdi></strong>
+            <strong>
+              <bdi dir="ltr">{k.value}</bdi>
+            </strong>
             <small aria-hidden="true">↗</small>
           </button>
         ))}
       </div>
-      <div className="summary-strip">
-        <span>
+      <div
+        className="summary-strip"
+        role="group"
+        aria-label={t("productionStatus")}
+      >
+        <button className="summary-link" onClick={() => onNavigate("orders")}>
           {t("activeOrders")} <b>{active.length}</b>
-        </span>
-        <span>
+        </button>
+        <button className="summary-link" onClick={() => onNavigate("orders")}>
           {t("delayedOrders")}{" "}
           <b>
             {
@@ -93,13 +118,14 @@ export default function Dashboard(
               ).length
             }
           </b>
-        </span>
-        <span>
+        </button>
+        <button className="summary-link" onClick={() => onNavigate("orders")}>
           {t("todayProduction")} <b>{total.toLocaleString(lang)}</b>
-        </span>
-        <span>
-          {t("productionTarget")} <b>{target ? target.toLocaleString(lang) : t("notAvailable")}</b>
-        </span>
+        </button>
+        <button className="summary-link" onClick={() => onNavigate("orders")}>
+          {t("productionTarget")}{" "}
+          <b>{target ? target.toLocaleString(lang) : t("notAvailable")}</b>
+        </button>
       </div>
       <section className="panel floor-panel">
         <header className="section-head">

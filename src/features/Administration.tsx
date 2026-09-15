@@ -1,4 +1,4 @@
-import {localDateTimeToUtc} from "@/utils/manufacturing.mjs";
+import { localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import { useState } from "react";
 import type { FeatureProps } from "./types";
 import { Field, Empty, localName, formatTime } from "@/components/ui";
@@ -12,9 +12,12 @@ export default function Administration({
     [role, setRole] = useState(""),
     [selected, setSelected] = useState<string[]>([]),
     [busy, setBusy] = useState(false);
-  const [search, setSearch] = useState("");
-  const [localError,setLocalError]=useState("");
-  const safeCommand: typeof command = (...args)=>command(...args).catch(()=>"");
+  const [search, setSearch] = useState(""),
+    [membershipFilter, setMembershipFilter] = useState("all"),
+    [supportMode, setSupportMode] = useState("disabled");
+  const [localError, setLocalError] = useState("");
+  const safeCommand: typeof command = (...args) =>
+    command(...args).catch(() => "");
   const factory = s.factory!;
   const zone = String(factory.timezone);
   async function settings(e: React.FormEvent<HTMLFormElement>) {
@@ -49,8 +52,12 @@ export default function Administration({
     return (
       <section className="panel narrow">
         <h2>{t("settings")}</h2>
-        {localError&&<p role="alert" className="toast">{t(localError)}</p>}
-        <form onSubmit={e=>void settings(e).catch(()=>{})}>
+        {localError && (
+          <p role="alert" className="toast">
+            {t(localError)}
+          </p>
+        )}
+        <form onSubmit={(e) => void settings(e).catch(() => {})}>
           <Field label={t("factoryName")}>
             <input
               name="name"
@@ -89,7 +96,9 @@ export default function Administration({
             disabled={!can("settings", "edit")}
             onClick={async () =>
               setJoinCode(
-                String(await safeCommand("get_join_code", { factory: factory.id })),
+                String(
+                  await safeCommand("get_join_code", { factory: factory.id }),
+                ),
               )
             }
           >
@@ -120,7 +129,31 @@ export default function Administration({
   if (view === "employees")
     return (
       <section className="panel">
-        <h2>{t("employees")}</h2>
+        <header className="section-head">
+          <h2>{t("employees")}</h2>
+          <input
+            aria-label={t("search")}
+            placeholder={t("search")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </header>
+        <div className="tabs">
+          {["all", "pending", "approved", "rejected"].map((status) => (
+            <button
+              key={status}
+              aria-pressed={membershipFilter === status}
+              onClick={() => setMembershipFilter(status)}
+            >
+              {t(status)} ·{" "}
+              {
+                (s.tables.memberships || []).filter(
+                  (m) => status === "all" || m.status === status,
+                ).length
+              }
+            </button>
+          ))}
+        </div>
         {!s.tables.memberships?.length ? (
           <Empty t={t} />
         ) : (
@@ -134,73 +167,82 @@ export default function Administration({
                 </tr>
               </thead>
               <tbody>
-                {s.tables.memberships.map((member) => (
-                  <tr key={String(member.id)}>
-                    <td>
-                      <strong>{String(member.display_name)}</strong>
-                      <small className="cell-note code">
-                        {String(member.user_id)}
-                      </small>
-                    </td>
-                    <td>{t(String(member.status))}</td>
-                    <td>
-                      {member.is_owner
-                        ? t("owner")
-                        : localName(
-                            s.tables.roles?.find(
-                              (r) => r.id === member.role_id,
-                            ),
-                            lang,
-                          )}
-                    </td>
-                    <td>
-                      {!member.is_owner && can("employees", "approve") && (
-                        <form
-                          className="row-actions"
-                          onSubmit={async (e) => {
-                            e.preventDefault();
-                            const form = new FormData(e.currentTarget);
-                            await safeCommand("manage_member", {
-                              factory: factory.id,
-                              id: member.id,
-                              role: form.get("role"),
-                              status: "approved",
-                            });
-                          }}
-                        >
-                          <select
-                            name="role"
-                            aria-label={t("role")}
-                            required
-                            defaultValue={String(member.role_id || "")}
-                          >
-                            <option value="">{t("role")}</option>
-                            {s.tables.roles?.map((r) => (
-                              <option key={String(r.id)} value={String(r.id)}>
-                                {localName(r, lang)}
-                              </option>
-                            ))}
-                          </select>
-                          <button type="submit">{t("approve")}</button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(t("reject") + "?"))
-                                void safeCommand("manage_member", {
-                                  factory: factory.id,
-                                  id: member.id,
-                                  role: member.role_id,
-                                  status: "rejected",
-                                });
+                {s.tables.memberships
+                  .filter(
+                    (m) =>
+                      (membershipFilter === "all" ||
+                        m.status === membershipFilter) &&
+                      String(m.display_name)
+                        .toLowerCase()
+                        .includes(search.toLowerCase()),
+                  )
+                  .map((member) => (
+                    <tr key={String(member.id)}>
+                      <td>
+                        <strong>{String(member.display_name)}</strong>
+                        <small className="cell-note code">
+                          {String(member.user_id)}
+                        </small>
+                      </td>
+                      <td>{t(String(member.status))}</td>
+                      <td>
+                        {member.is_owner
+                          ? t("owner")
+                          : localName(
+                              s.tables.roles?.find(
+                                (r) => r.id === member.role_id,
+                              ),
+                              lang,
+                            )}
+                      </td>
+                      <td>
+                        {!member.is_owner && can("employees", "approve") && (
+                          <form
+                            className="row-actions"
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              const form = new FormData(e.currentTarget);
+                              await safeCommand("manage_member", {
+                                factory: factory.id,
+                                id: member.id,
+                                role: form.get("role"),
+                                status: "approved",
+                              });
                             }}
                           >
-                            {t("reject")}
-                          </button>
-                        </form>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                            <select
+                              name="role"
+                              aria-label={t("role")}
+                              required
+                              defaultValue={String(member.role_id || "")}
+                            >
+                              <option value="">{t("role")}</option>
+                              {s.tables.roles?.map((r) => (
+                                <option key={String(r.id)} value={String(r.id)}>
+                                  {localName(r, lang)}
+                                </option>
+                              ))}
+                            </select>
+                            <button type="submit">{t("approve")}</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(t("reject") + "?"))
+                                  void safeCommand("manage_member", {
+                                    factory: factory.id,
+                                    id: member.id,
+                                    role: member.role_id,
+                                    status: "rejected",
+                                  });
+                              }}
+                            >
+                              {t("reject")}
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -333,19 +375,19 @@ export default function Administration({
           onSubmit={async (e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget);
-            await safeCommand("set_support", {
+            await safeCommand("set_support_by_email", {
               factory: factory.id,
-              user_id: f.get("user_id"),
+              email: f.get("email"),
               role: f.get("role"),
               mode: f.get("mode"),
               expires_at: f.get("expires_at")
-                ? localDateTimeToUtc(String(f.get("expires_at")),zone)
+                ? localDateTimeToUtc(String(f.get("expires_at")), zone)
                 : null,
             });
           }}
         >
           <Field label={t("supportUser")}>
-            <input name="user_id" required pattern="[0-9a-fA-F-]{36}" />
+            <input name="email" type="email" required maxLength={254} />
           </Field>
           <Field label={t("role")}>
             <select name="role" required>
@@ -357,7 +399,11 @@ export default function Administration({
             </select>
           </Field>
           <Field label={t("status")}>
-            <select name="mode">
+            <select
+              name="mode"
+              value={supportMode}
+              onChange={(e) => setSupportMode(e.target.value)}
+            >
               {["disabled", "temporary", "permanent"].map((x) => (
                 <option key={x} value={x}>
                   {t(x)}
@@ -366,7 +412,12 @@ export default function Administration({
             </select>
           </Field>
           <Field label={t("expires") + ` (${zone})`}>
-            <input name="expires_at" type="datetime-local" />
+            <input
+              name="expires_at"
+              type="datetime-local"
+              required={supportMode === "temporary"}
+              disabled={supportMode !== "temporary"}
+            />
           </Field>
           <button className="primary" disabled={!s.membership?.is_owner}>
             {t("save")}

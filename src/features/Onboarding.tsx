@@ -14,14 +14,43 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
-    const form = Object.fromEntries(new FormData(e.currentTarget));
+    const data = new FormData(e.currentTarget);
+    const logo = data.get("logo");
+    data.delete("logo");
+    const form = Object.fromEntries(data);
     try {
-      await command(
+      const factoryId = await command(
         tab === "createFactory" ? "create_factory" : "request_membership",
         form,
       );
-    } catch {
-      // The shared command handler displays the translated error.
+      if (
+        tab === "createFactory" &&
+        factoryId &&
+        logo instanceof File &&
+        logo.size
+      ) {
+        const upload = new FormData();
+        upload.set("factory", String(factoryId));
+        upload.set("file", logo);
+        const response = await fetch("/api/logo", {
+          method: "POST",
+          body: upload,
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error("logoError");
+        await command("update_settings", {
+          factory: factoryId,
+          name: form.name,
+          timezone: form.timezone,
+          logo: result.path,
+        });
+      }
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent("factory-error", {
+          detail: error instanceof Error ? error.message : "error",
+        }),
+      );
     } finally {
       setBusy(false);
     }
@@ -44,6 +73,13 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
             </Field>
             <Field label={t("industry")}>
               <input name="industry" required maxLength={120} />
+            </Field>
+            <Field label={t("logo")}>
+              <input
+                name="logo"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+              />
             </Field>
             <Field label={t("timezone")}>
               <select name="timezone" defaultValue="Asia/Qatar">

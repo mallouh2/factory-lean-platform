@@ -1,4 +1,8 @@
-import { formatLocalInput, localDateTimeToUtc } from "@/utils/manufacturing.mjs";
+import CenterCapabilities from "./CenterCapabilities";
+import {
+  formatLocalInput,
+  localDateTimeToUtc,
+} from "@/utils/manufacturing.mjs";
 import { useState } from "react";
 import { Dialog, Empty, Field, Badge, localName } from "@/components/ui";
 import type { FeatureProps } from "./types";
@@ -20,6 +24,8 @@ const config: Record<string, { table: string; fields: string[] }> = {
       "line_id",
       "order_id",
       "operator_id",
+      "start_time",
+      "expected_finish",
       "parent_id",
       "production_speed",
       "default_cycle_time",
@@ -38,7 +44,7 @@ const config: Record<string, { table: string; fields: string[] }> = {
       "line_id",
       "status",
       "target_quantity",
-            "start_time",
+      "start_time",
       "expected_finish",
     ],
   },
@@ -46,7 +52,21 @@ const config: Record<string, { table: string; fields: string[] }> = {
     table: "downtime_reasons",
     fields: ["name", "name_ar", "parent_id", "requires_description"],
   },
-  products: { table: "products", fields: ["name", "name_ar", "code", "category", "unit", "diameter", "length", "color", "weight", "standard_rate"] },
+  products: {
+    table: "products",
+    fields: [
+      "name",
+      "name_ar",
+      "code",
+      "category",
+      "unit",
+      "diameter",
+      "length",
+      "color",
+      "weight",
+      "standard_rate",
+    ],
+  },
   roles: { table: "roles", fields: ["name", "name_ar"] },
 };
 const relations: Record<string, string> = {
@@ -58,7 +78,10 @@ const relations: Record<string, string> = {
   parent_id: "downtime_reasons",
 };
 const numbers = [
-  "diameter", "length", "weight", "standard_rate",
+  "diameter",
+  "length",
+  "weight",
+  "standard_rate",
   "production_speed",
   "default_cycle_time",
   "current_cycle_time",
@@ -76,11 +99,14 @@ export default function Configuration({
   const [editing, setEditing] = useState<Row | null>(null),
     [search, setSearch] = useState(""),
     [busy, setBusy] = useState(false),
-    [targetOrder,setTargetOrder] = useState<Row|null>(null);
+    [targetOrder, setTargetOrder] = useState<Row | null>(null);
   const c = config[view];
   const permissionModule = view === "products" ? "orders" : view;
   const zone = String(s.factory?.timezone || "UTC");
-  const relatedTable = (field: string) => field === "parent_id" && view === "centers" ? "work_centers" : relations[field];
+  const relatedTable = (field: string) =>
+    field === "parent_id" && view === "centers"
+      ? "work_centers"
+      : relations[field];
   if (!c) return null;
   const rows = (s.tables[c.table] || []).filter(
     (x) =>
@@ -199,7 +225,11 @@ export default function Configuration({
                   </td>
                   <td>
                     <div className="row-actions">
-                      {view === "orders" && can("orders","edit") && <button onClick={()=>setTargetOrder(row)}>{t("dailyTarget")}</button>}
+                      {view === "orders" && can("orders", "edit") && (
+                        <button onClick={() => setTargetOrder(row)}>
+                          {t("dailyTarget")}
+                        </button>
+                      )}
                       {can(permissionModule, "edit") && (
                         <button onClick={() => setEditing(row)}>
                           {t("edit")}
@@ -207,7 +237,9 @@ export default function Configuration({
                       )}
                       {["factory", "lines", "centers"].includes(view) &&
                         can(permissionModule, "delete") && (
-                          <button onClick={() => void archive(row).catch(() => {})}>
+                          <button
+                            onClick={() => void archive(row).catch(() => {})}
+                          >
                             {t("archive")}
                           </button>
                         )}
@@ -219,7 +251,51 @@ export default function Configuration({
           </table>
         </div>
       )}
-      {targetOrder && <Dialog t={t} title={t("dailyTarget")} onClose={()=>setTargetOrder(null)}><form onSubmit={async e=>{e.preventDefault();const f=new FormData(e.currentTarget);setBusy(true);try{await command("set_daily_target",{factory:s.factory?.id,production_order:targetOrder.id,day:f.get("day"),target:Number(f.get("target"))});setTargetOrder(null)}catch{}finally{setBusy(false)}}}><Field label={t("day")}><input name="day" type="date" required defaultValue={formatLocalInput(new Date().toISOString(),zone).slice(0,10)}/></Field><Field label={t("productionTarget")}><input name="target" type="number" min="1" required /></Field><button className="primary" disabled={busy}>{t("save")}</button></form></Dialog>}
+      {targetOrder && (
+        <Dialog
+          t={t}
+          title={t("dailyTarget")}
+          onClose={() => setTargetOrder(null)}
+        >
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              setBusy(true);
+              try {
+                await command("set_daily_target", {
+                  factory: s.factory?.id,
+                  production_order: targetOrder.id,
+                  day: f.get("day"),
+                  target: Number(f.get("target")),
+                });
+                setTargetOrder(null);
+              } catch {
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Field label={t("day")}>
+              <input
+                name="day"
+                type="date"
+                required
+                defaultValue={formatLocalInput(
+                  new Date().toISOString(),
+                  zone,
+                ).slice(0, 10)}
+              />
+            </Field>
+            <Field label={t("productionTarget")}>
+              <input name="target" type="number" min="1" required />
+            </Field>
+            <button className="primary" disabled={busy}>
+              {t("save")}
+            </button>
+          </form>
+        </Dialog>
+      )}
       {editing && (
         <Dialog
           t={t}
@@ -246,7 +322,13 @@ export default function Configuration({
                     >
                       <option value="">{t("unassigned")}</option>
                       {(s.tables[relatedTable(field)] || [])
-                        .filter((x) => !x.archived && x.id !== editing.id && (field !== "operator_id" || x.status === "approved"))
+                        .filter(
+                          (x) =>
+                            !x.archived &&
+                            x.id !== editing.id &&
+                            (field !== "operator_id" ||
+                              x.status === "approved"),
+                        )
                         .map((x) => (
                           <option key={String(x.id)} value={String(x.id)}>
                             {x.display_name
@@ -270,6 +352,7 @@ export default function Configuration({
                             "assembly_table",
                             "packing_station",
                             "inspection_station",
+                            "production_cell",
                             "other",
                           ]
                         : ["planned", "active", "completed", "cancelled"]
@@ -294,7 +377,13 @@ export default function Configuration({
                   ) : (
                     <input
                       name={field}
-                      type={numbers.includes(field) ? "number" : ["start_time", "expected_finish"].includes(field) ? "datetime-local" : "text"}
+                      type={
+                        numbers.includes(field)
+                          ? "number"
+                          : ["start_time", "expected_finish"].includes(field)
+                            ? "datetime-local"
+                            : "text"
+                      }
                       min={
                         numbers.includes(field)
                           ? [
@@ -313,12 +402,14 @@ export default function Configuration({
                           ? 30
                           : 120
                       }
-                      
                       required={["name", "code", "target_quantity"].includes(
                         field,
                       )}
                       defaultValue={String(
-                        (["start_time", "expected_finish"].includes(field) && editing[field] ? formatLocalInput(String(editing[field]), zone) : editing[field]) ??
+                        (["start_time", "expected_finish"].includes(field) &&
+                        editing[field]
+                          ? formatLocalInput(String(editing[field]), zone)
+                          : editing[field]) ??
                           ([
                             "produced_quantity",
                             "rejected_quantity",
@@ -336,6 +427,9 @@ export default function Configuration({
               {t("save")}
             </button>
           </form>
+          {view === "centers" && editing.id && (
+            <CenterCapabilities {...props} centerId={String(editing.id)} />
+          )}
         </Dialog>
       )}
     </section>

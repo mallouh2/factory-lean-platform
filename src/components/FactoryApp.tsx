@@ -56,22 +56,32 @@ export default function FactoryApp() {
     [loading, setLoading] = useState(true),
     [notice, setNotice] = useState(""),
     [mobile, setMobile] = useState(false),
-    [supportFactory,setSupportFactory] = useState(""),
+    [supportFactory, setSupportFactory] = useState(""),
     [center, setCenter] = useState<Row | null>(null);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
   const can = (module: string, action = "view") =>
-    Boolean(snapshot?.permissions.includes(`${module === "products" ? "orders" : module}:${action}`));
+    Boolean(
+      snapshot?.permissions.includes(
+        `${module === "products" ? "orders" : module}:${action}`,
+      ),
+    );
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/data"+(supportFactory ? "?factory="+encodeURIComponent(supportFactory) : ""), { cache: "no-store" });
+      const res = await fetch(
+        "/api/data" +
+          (supportFactory
+            ? "?factory=" + encodeURIComponent(supportFactory)
+            : ""),
+        { cache: "no-store" },
+      );
       if (res.status === 401) {
         setSnapshot(null);
         return;
       }
       const body = await res.json();
       if (!res.ok) {
-        if(res.status === 403) setSnapshot(null);
+        if (res.status === 403) setSnapshot(null);
         setNotice(body.error || "error");
         return;
       }
@@ -90,6 +100,11 @@ export default function FactoryApp() {
     }, 30000);
     return () => clearInterval(timer);
   }, [load]);
+  useEffect(() => {
+    const handler = (e: Event) => setNotice((e as CustomEvent).detail);
+    window.addEventListener("factory-error", handler);
+    return () => window.removeEventListener("factory-error", handler);
+  }, []);
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
@@ -113,7 +128,11 @@ export default function FactoryApp() {
       return body.data;
     } catch (error) {
       setNotice(error instanceof Error ? error.message || "error" : "error");
-      window.dispatchEvent(new CustomEvent("factory-error",{detail:error instanceof Error ? error.message || "error" : "error"}));
+      window.dispatchEvent(
+        new CustomEvent("factory-error", {
+          detail: error instanceof Error ? error.message || "error" : "error",
+        }),
+      );
       throw error;
     }
   }
@@ -154,17 +173,65 @@ export default function FactoryApp() {
           <button className="onboarding-signout" onClick={() => void signout()}>
             {t("signout")}
           </button>
-          {notice && <div role="alert" className="toast">{t(notice)}</div>}
-          {snapshot.supportFactories?.some(x=>x.mode!=="disabled" && (x.mode==="permanent" || Date.parse(String(x.expires_at))>Date.now())) && <section className="onboarding panel"><h2>{t("support")}</h2>{snapshot.supportFactories.filter(x=>x.mode!=="disabled" && (x.mode==="permanent" || Date.parse(String(x.expires_at))>Date.now())).map(x=><button key={String(x.id)} onClick={()=>setSupportFactory(String(x.factory_id))}>{t("openFactory")} · {String(x.factory_id).slice(0,8)}</button>)}</section>}
+          {notice && (
+            <div role="alert" className="toast">
+              {t(notice)}
+            </div>
+          )}
+          {snapshot.supportFactories?.some(
+            (x) =>
+              x.mode !== "disabled" &&
+              (x.mode === "permanent" ||
+                Date.parse(String(x.expires_at)) > Date.now()),
+          ) && (
+            <section className="onboarding panel">
+              <h2>{t("support")}</h2>
+              {snapshot.supportFactories
+                .filter(
+                  (x) =>
+                    x.mode !== "disabled" &&
+                    (x.mode === "permanent" ||
+                      Date.parse(String(x.expires_at)) > Date.now()),
+                )
+                .map((x) => (
+                  <button
+                    key={String(x.id)}
+                    onClick={() => setSupportFactory(String(x.factory_id))}
+                  >
+                    {t("openFactory")} · {String(x.factory_id).slice(0, 8)}
+                  </button>
+                ))}
+            </section>
+          )}
           {props && <Onboarding {...props} />}
         </>
       ) : (
         <div className="app-shell">
-          {mobile && <button className="nav-backdrop" aria-label={t("close")} onClick={()=>setMobile(false)} />}
+          {mobile && (
+            <button
+              className="nav-backdrop"
+              aria-label={t("close")}
+              onClick={() => setMobile(false)}
+            />
+          )}
           <aside className={`sidebar ${mobile ? "is-open" : ""}`}>
-            <button className="sidebar-close" aria-label={t("close")} onClick={()=>setMobile(false)}>×</button>
+            <button
+              className="sidebar-close"
+              aria-label={t("close")}
+              onClick={() => setMobile(false)}
+            >
+              ×
+            </button>
             <a className="brand" href="#" onClick={() => navigate("dashboard")}>
-              {snapshot.factory.logo_path ? <img className="factory-logo" src={`/api/logo?factory=${snapshot.factory.id}`} alt={t("factoryLogo")} /> : <span className="brand-symbol">▥</span>}
+              {snapshot.factory.logo_path ? (
+                <img
+                  className="factory-logo"
+                  src={`/api/logo?factory=${snapshot.factory.id}`}
+                  alt={t("factoryLogo")}
+                />
+              ) : (
+                <span className="brand-symbol">▥</span>
+              )}
               <span>
                 {t("brand")}
                 <small>{String(snapshot.factory.name)}</small>
@@ -281,7 +348,11 @@ export default function FactoryApp() {
               {snapshot.factory.is_demo && (
                 <div className="demo-banner">{t("demo")}</div>
               )}
-              {snapshot.truncatedTables?.length ? <div className="toast" role="alert">{t("truncatedData")}</div> : null}
+              {snapshot.truncatedTables?.length ? (
+                <div className="toast" role="alert">
+                  {t("truncatedData")}
+                </div>
+              ) : null}
               {notice && (
                 <div
                   role="status"

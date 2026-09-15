@@ -1347,11 +1347,91 @@ hr {
   }
 }
 
-.factory-logo {width:42px;height:42px;object-fit:contain;border-radius:8px;background:white} .sidebar-close,.nav-backdrop{display:none}
-@media(max-width:900px){.nav-backdrop{display:block;position:fixed;inset:0;z-index:29;background:#12233280;border:0;border-radius:0}.sidebar-close{display:block;align-self:flex-end;font-size:26px;color:white;background:transparent;border:0}.sidebar.is-open{z-index:30}}
+.factory-logo {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: white;
+}
+.sidebar-close,
+.nav-backdrop {
+  display: none;
+}
+@media (max-width: 900px) {
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 29;
+    background: #12233280;
+    border: 0;
+    border-radius: 0;
+  }
+  .sidebar-close {
+    display: block;
+    align-self: flex-end;
+    font-size: 26px;
+    color: white;
+    background: transparent;
+    border: 0;
+  }
+  .sidebar.is-open {
+    z-index: 30;
+  }
+}
 /* The control inherits layout direction; only its bilingual text stays LTR. */
-.language-control {direction:inherit}
-.language-control button {direction:ltr}
-.kpi strong {unicode-bidi:plaintext}
-.badge,.machine-card h4 {font-size:.875rem;line-height:1.4}
-@media(max-width:600px){.topbar > div:first-of-type{min-width:0}.breadcrumb{max-width:100%}.topbar h1{font-size:1rem}.kpi > span{font-size:.875rem}.language-control{z-index:28}}
+.language-control {
+  direction: inherit;
+}
+.language-control button {
+  direction: ltr;
+}
+.kpi strong {
+  unicode-bidi: plaintext;
+}
+.badge,
+.machine-card h4 {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+@media (max-width: 600px) {
+  .topbar > div:first-of-type {
+    min-width: 0;
+  }
+  .breadcrumb {
+    max-width: 100%;
+  }
+  .topbar h1 {
+    font-size: 1rem;
+  }
+  .kpi > span {
+    font-size: 0.875rem;
+  }
+  .language-control {
+    z-index: 28;
+  }
+}
+
+.summary-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  min-height: 32px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.summary-link:hover {
+  text-decoration: underline;
+}
+.summary-link b {
+  color: var(--text);
+}
+.restart-plan {
+  padding: 14px 0;
+}
+.restart-plan summary {
+  cursor: pointer;
+  font-weight: 700;
+  margin-bottom: 14px;
+}

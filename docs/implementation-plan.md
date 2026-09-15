@@ -1,11 +1,11 @@
-# Phase 1 implementation plan
+# Current delivery plan
 
-1. Infrastructure: GitHub source of truth; separate Supabase development/testing/production; Vercel preview gates.
-2. Security: verified Supabase Auth, database memberships, configurable module/action permissions, factory RLS, guarded commands, immutable audit events, explicit scoped support grants.
-3. Operations: flexible factory areas/lines/work centers; atomic status and downtime history; production visualization; factory timezone.
-4. Experience: bilingual English/Arabic dictionaries, full RTL, graphical factory floor, accessible statuses, touch-friendly actions, responsive layout.
-5. Management: membership approvals, role configuration, reports and downtime Pareto; honest insufficient-data OEE.
-6. Demo: clearly fictional Nova Plastic Pipes dataset isolated from production; development-only credential provisioning through environment variables.
-7. Verification: calculation tests, database negative authorization tests, build/type checks, English/Arabic/mobile browser review, Vercel preview validation.
+1. Preserve the existing GitHub/Next.js/Supabase implementation — complete.
+2. Maintain separate development/testing databases and fictional credentials — complete.
+3. Complete the remaining work-center configuration, restart plans, daily output/targets, report filters and employee/support controls — implemented; final feature run in progress.
+4. Verify functional flows, English/Arabic/RTL, mobile/tablet/desktop, calculations and production build — evidence recorded in test-results.md.
+5. Publish stable source and accurate setup/checklist documentation — current delivery step.
+6. Resolve hosting and real email-delivery acceptance; Vercel remains deferred with HTTP 403.
+7. Perform the detailed security/encryption review after feature acceptance, as explicitly requested by the user.
 
-Future modules remain unavailable until implemented. A self-assigned score is not a substitute for passed tests. Any inaccessible deployment infrastructure or untested requirement must be reported explicitly.
+No production certification or invented 9/10 score substitutes for unperformed acceptance checks.

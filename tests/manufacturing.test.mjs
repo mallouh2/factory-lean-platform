@@ -99,13 +99,45 @@ test("both dictionaries have identical keys and nonempty translations", () => {
   assert.ok(Object.values(ar).every((x) => x.trim().length));
 });
 
-test("factory local datetime ignores browser timezone",()=>{
- assert.equal(localDateTimeToUtc("2026-09-15T11:30","Asia/Qatar"),"2026-09-15T08:30:00.000Z");
- assert.equal(formatLocalInput("2026-09-15T08:30:00Z","Asia/Qatar"),"2026-09-15T11:30");
+test("factory local datetime ignores browser timezone", () => {
+  assert.equal(
+    localDateTimeToUtc("2026-09-15T11:30", "Asia/Qatar"),
+    "2026-09-15T08:30:00.000Z",
+  );
+  assert.equal(
+    formatLocalInput("2026-09-15T08:30:00Z", "Asia/Qatar"),
+    "2026-09-15T11:30",
+  );
 });
-test("nonexistent DST local time is rejected",()=>assert.throws(()=>localDateTimeToUtc("2026-03-08T02:30","America/New_York"),/invalidDate/));
-test("utilization excludes unknown time before first event",()=>{
- const result=statusUtilization([{work_center_id:"a",created_at:"2026-09-15T08:00Z",new_status:"running"},{work_center_id:"a",created_at:"2026-09-15T09:00Z",new_status:"stopped"}],"a","2026-09-15T07:00Z","2026-09-15T10:00Z",Date.parse("2026-09-15T10:00Z"));
- assert.equal(result.percent,50);assert.equal(result.observedMinutes,120);assert.ok(result.coverage<1);
- assert.equal(statusUtilization([],"a","2026-09-15T07:00Z","2026-09-15T10:00Z"),null);
+test("nonexistent DST local time is rejected", () =>
+  assert.throws(
+    () => localDateTimeToUtc("2026-03-08T02:30", "America/New_York"),
+    /invalidDate/,
+  ));
+test("utilization excludes unknown time before first event", () => {
+  const result = statusUtilization(
+    [
+      {
+        work_center_id: "a",
+        created_at: "2026-09-15T08:00Z",
+        new_status: "running",
+      },
+      {
+        work_center_id: "a",
+        created_at: "2026-09-15T09:00Z",
+        new_status: "stopped",
+      },
+    ],
+    "a",
+    "2026-09-15T07:00Z",
+    "2026-09-15T10:00Z",
+    Date.parse("2026-09-15T10:00Z"),
+  );
+  assert.equal(result.percent, 50);
+  assert.equal(result.observedMinutes, 120);
+  assert.ok(result.coverage < 1);
+  assert.equal(
+    statusUtilization([], "a", "2026-09-15T07:00Z", "2026-09-15T10:00Z"),
+    null,
+  );
 });

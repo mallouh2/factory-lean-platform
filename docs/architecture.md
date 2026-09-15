@@ -1,10 +1,10 @@
 # Architecture decisions
 
-GitHub is the source of truth. Schema changes are reviewed SQL migrations, applied in development, tested, then promoted to isolated testing and production Supabase projects. Application previews on Vercel use testing data only. Production never shares a database or credentials with previews.
+GitHub is the source of truth. Schema changes are reviewed SQL migrations, applied in development, tested, then promoted to isolated testing and production Supabase projects. Vercel is currently deferred. Local or hosted Node previews use testing data only. Production never shares a database or credentials with previews.
 
 The application uses Next.js App Router and TypeScript. React provides the interactive factory floor. Supabase supplies PostgreSQL, Auth and private object storage. The browser talks only to same-origin Next.js route handlers: Supabase configuration remains on the server. Requests use the signed-in user's token, never a privileged service key. RLS remains effective even if a UI permission check is bypassed.
 
-Dependencies are selected only when necessary: Next.js supplies routing, server rendering and Vercel deployment; React supplies interactive controls; Supabase JS and SSR implement supported authentication and cookie rotation. TypeScript verifies contracts. Supabase CLI manages migration filenames and local databases. Charts use accessible HTML and SVG geometry, not a chart library. No ORM, global state library, monorepo framework, or accounting integration is required.
+Dependencies are selected only when necessary: Next.js supplies routing, server rendering and a portable Node deployment; React supplies interactive controls; Supabase JS and SSR implement supported authentication and cookie rotation. TypeScript verifies contracts. Supabase CLI manages migration filenames and local databases. Charts use accessible HTML and SVG geometry, not a chart library. No ORM, global state library, monorepo framework, or accounting integration is required.
 
 ## Modules
 
@@ -27,3 +27,11 @@ The private schema contains guarded privileged commands and authorization lookup
 ## Future boundaries
 
 Planning will consume capabilities, alternatives, calendars and order workload. Inventory will use an immutable movement ledger; available stock is on hand minus reservations. BOM and costing versions belong to products and remain independent of accounting. Lean improvements will reference downtime events and add root cause, corrective action, responsibility and verification. HR, including the Monthly Employee Hall of Fame, remains disabled in navigation until a future phase.
+
+## Operational additions
+
+Work centers can form parent/child production cells, with alternative centers and per-product rates. Operator assignments preserve start/end history. Status and downtime commands lock operational rows; output uses an append-only ledger and a request identifier so retries do not double-count production. Daily targets are explicit factory-local date records.
+
+A scoped snapshot RPC retrieves RLS-filtered data in one round trip. Reports distinguish running/observed utilization from OEE and exclude unobserved history. CSV export is authorized and logged on the server. Future material balances derive from inventory transactions; BOM versions, cost estimates, procurement records and Lean improvement actions remain separate relational modules.
+
+The current snapshot cap is 5,000 rows/table and is disclosed in the UI. Do not treat capped totals as complete production-history reports. Advanced permission scopes, comprehensive support raw-read auditing and scale hardening belong to the deferred security/production review.

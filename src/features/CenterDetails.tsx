@@ -1,3 +1,4 @@
+import DowntimePlan from "./DowntimePlan";
 import { downtimeMinutes, localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import { useState } from "react";
 import { Badge, Dialog, Field, formatTime, localName } from "@/components/ui";
@@ -9,7 +10,7 @@ export default function CenterDetails({
   ...props
 }: FeatureProps & { center: Row; onClose: () => void }) {
   const { snapshot: s, t, lang, command, can } = props;
-  const [outputRequestId] = useState(()=>crypto.randomUUID());
+  const [outputRequestId] = useState(() => crypto.randomUUID());
   const [status, setStatus] = useState(String(center.status)),
     [reason, setReason] = useState(""),
     [busy, setBusy] = useState(false);
@@ -82,7 +83,10 @@ export default function CenterDetails({
     ["rejected_quantity", order?.rejected_quantity],
     ["production_speed", current.production_speed],
     ["start_time", formatTime(current.start_time, lang, zone)],
-    ["expected_finish", formatTime(current.expected_finish, lang, zone)],
+    [
+      "expected_finish",
+      formatTime(current.expected_finish || order?.expected_finish, lang, zone),
+    ],
     ["restart", formatTime(current.last_restart_time, lang, zone)],
   ];
   return (
@@ -104,7 +108,17 @@ export default function CenterDetails({
               lang,
             )}
           </h3>
-          <p>{t("duration")}: {Math.floor(downtimeMinutes(downtime, downtime.started_at, new Date().toISOString()))} {t("minutes")}</p>
+          <p>
+            {t("duration")}:{" "}
+            {Math.floor(
+              downtimeMinutes(
+                downtime,
+                downtime.started_at,
+                new Date().toISOString(),
+              ),
+            )}{" "}
+            {t("minutes")}
+          </p>
           <p>
             {t("started")}: {formatTime(downtime.started_at, lang, zone)}
           </p>
@@ -142,6 +156,10 @@ export default function CenterDetails({
           </p>
         </div>
       )}
+      {downtime &&
+        (can("downtime", "edit") || can("machine_status", "edit")) && (
+          <DowntimePlan {...props} event={downtime} />
+        )}
       {(can("centers", "edit") || can("machine_status", "edit")) && (
         <form onSubmit={submit}>
           <h3>{t("operatorView")}</h3>
@@ -195,10 +213,7 @@ export default function CenterDetails({
                 </select>
               </Field>
               <Field label={`${t("expectedRestart")} (${zone})`}>
-                <input
-                  name="expected_restart"
-                  type="datetime-local"
-                />
+                <input name="expected_restart" type="datetime-local" />
               </Field>
               <Field label={t("responsible")}>
                 <select name="responsible">
@@ -254,10 +269,54 @@ export default function CenterDetails({
           </button>
         </form>
       )}
-      {order?.status === "active" && can("orders","edit") && <form onSubmit={async (e)=>{
-        e.preventDefault(); const f=new FormData(e.currentTarget);setBusy(true);
-        try {await command("record_output",{factory:s.factory?.id,work_center:current.id,production_order:order.id,request_id:outputRequestId,produced:Number(f.get("produced")),rejected:Number(f.get("rejected")),notes:f.get("notes")});onClose();}catch {}finally{setBusy(false)}
-      }}><h3>{t("recordOutput")}</h3><p className="muted">{t("outputHelp")}</p><div className="form-grid"><Field label={t("produced_quantity")}><input name="produced" type="number" min="1" step="1" required /></Field><Field label={t("rejected_quantity")}><input name="rejected" type="number" min="0" step="1" defaultValue="0" required /></Field></div><Field label={t("notes")}><textarea name="notes" maxLength={2000}/></Field><button className="primary" disabled={busy}>{t("recordOutput")}</button></form>}
+      {order?.status === "active" && can("orders", "edit") && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget);
+            setBusy(true);
+            try {
+              await command("record_output", {
+                factory: s.factory?.id,
+                work_center: current.id,
+                production_order: order.id,
+                request_id: outputRequestId,
+                produced: Number(f.get("produced")),
+                rejected: Number(f.get("rejected")),
+                notes: f.get("notes"),
+              });
+              onClose();
+            } catch {
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <h3>{t("recordOutput")}</h3>
+          <p className="muted">{t("outputHelp")}</p>
+          <div className="form-grid">
+            <Field label={t("produced_quantity")}>
+              <input name="produced" type="number" min="1" step="1" required />
+            </Field>
+            <Field label={t("rejected_quantity")}>
+              <input
+                name="rejected"
+                type="number"
+                min="0"
+                step="1"
+                defaultValue="0"
+                required
+              />
+            </Field>
+          </div>
+          <Field label={t("notes")}>
+            <textarea name="notes" maxLength={2000} />
+          </Field>
+          <button className="primary" disabled={busy}>
+            {t("recordOutput")}
+          </button>
+        </form>
+      )}
       <h3>{t("history")}</h3>
       <ol className="timeline">
         {history.map((e) => (
