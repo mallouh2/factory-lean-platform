@@ -17,9 +17,11 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
     const form = Object.fromEntries(new FormData(e.currentTarget));
     try {
       await command(
-        tab === "createFactory" ? "create_factory" : "join_factory",
+        tab === "createFactory" ? "create_factory" : "request_membership",
         form,
       );
+    } catch {
+      // The shared command handler displays the translated error.
     } finally {
       setBusy(false);
     }

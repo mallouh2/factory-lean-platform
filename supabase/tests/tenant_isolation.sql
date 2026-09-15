@@ -24,6 +24,10 @@ do $$begin
  raise exception 'ASSERTION FAILED: cross-factory RPC accepted';
  exception when insufficient_privilege then null;end;
  begin
+ truncate public.audit_logs;
+ raise exception 'ASSERTION FAILED: audit truncate accepted';
+ exception when insufficient_privilege then null;end;
+ begin
  delete from public.audit_logs;
  raise exception 'ASSERTION FAILED: audit delete accepted';
  exception when insufficient_privilege then null;end;

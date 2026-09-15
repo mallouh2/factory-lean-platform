@@ -129,3 +129,30 @@ export function reportPeriod(
     to: zonedMidnight(end.toISOString().slice(0, 10), zone),
   };
 }
+
+export function formatLocalInput(iso, zone) {
+  const parts = new Intl.DateTimeFormat('en-GB', {timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(iso));
+  const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+/** Reject nonexistent local times during DST changes instead of silently moving a production event. */
+export function localDateTimeToUtc(value, zone) {
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error('invalidDate');
+  const wanted=Date.parse(value+':00Z');
+  let utc=wanted;
+  for(let i=0;i<5;i++) utc+=wanted-Date.parse(formatLocalInput(new Date(utc).toISOString(),zone)+':00Z');
+  const result=new Date(utc).toISOString();
+  if(formatLocalInput(result,zone)!==value) throw new Error('invalidDate');
+  return result;
+}
+
+/** Utilization is running time / observed time, not OEE availability or a guessed shift calendar. */
+export function statusUtilization(events, center, from, to, now=Date.now()) {
+  const history=events.filter(e=>e.work_center_id===center).sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));
+  const start=Date.parse(from),end=Math.min(Date.parse(to),now);let running=0,observed=0;
+  for(let i=0;i<history.length;i++){
+    const a=Math.max(start,Date.parse(history[i].created_at)),b=Math.min(end,i+1<history.length?Date.parse(history[i+1].created_at):end);
+    if(b>a){observed+=b-a;if(history[i].new_status==='running')running+=b-a;}
+  }
+  return observed ? {percent:running/observed*100,observedMinutes:observed/60000,runningMinutes:running/60000,coverage:(end>start?observed/(end-start):0)}:null;
+}

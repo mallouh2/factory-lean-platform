@@ -9,3 +9,5 @@ test-results/
 *.tsbuildinfo
 supabase/.temp/
 supabase/.branches/
+
+.next-check/

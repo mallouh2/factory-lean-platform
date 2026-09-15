@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
   poweredByHeader: false,
+  output: "standalone",
+  distDir: process.env.BUILD_DIRECTORY || ".next",
   async headers() {
     return [
       {

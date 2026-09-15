@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 import { Badge, Empty, localName } from "@/components/ui";
-import { downtimeMinutes, reportPeriod } from "@/utils/manufacturing.mjs";
+import { downtimeMinutes, reportPeriod, formatLocalInput } from "@/utils/manufacturing.mjs";
 export default function Dashboard(
   props: FeatureProps & {
     onCenter: (row: Row) => void;
@@ -25,8 +25,8 @@ export default function Dashboard(
     0,
   );
   const active = orders.filter((o) => o.status === "active"),
-    total = active.reduce((n, o) => n + Number(o.produced_quantity), 0),
-    target = active.reduce((n, o) => n + Number(o.target_quantity), 0);
+    total = (s.tables.production_entries || []).filter(e=>String(e.created_at)>=period.from && String(e.created_at)<period.to).reduce((n,e)=>n+Number(e.produced),0),
+    target = (s.tables.daily_targets || []).filter(e=>e.day===formatLocalInput(new Date().toISOString(),String(s.factory?.timezone)).slice(0,10)).reduce((n,e)=>n+Number(e.target),0);
   const kpis = [
     {
       label: "runningMachines",
@@ -73,7 +73,7 @@ export default function Dashboard(
             onClick={k.action}
           >
             <span>{t(k.label)}</span>
-            <strong>{k.value}</strong>
+            <strong><bdi dir="ltr">{k.value}</bdi></strong>
             <small aria-hidden="true">↗</small>
           </button>
         ))}
@@ -98,7 +98,7 @@ export default function Dashboard(
           {t("todayProduction")} <b>{total.toLocaleString(lang)}</b>
         </span>
         <span>
-          {t("productionTarget")} <b>{target.toLocaleString(lang)}</b>
+          {t("productionTarget")} <b>{target ? target.toLocaleString(lang) : t("notAvailable")}</b>
         </span>
       </div>
       <section className="panel floor-panel">

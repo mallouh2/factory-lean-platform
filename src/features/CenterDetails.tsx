@@ -1,3 +1,4 @@
+import { downtimeMinutes, localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import { useState } from "react";
 import { Badge, Dialog, Field, formatTime, localName } from "@/components/ui";
 import type { Row } from "@/types";
@@ -8,6 +9,7 @@ export default function CenterDetails({
   ...props
 }: FeatureProps & { center: Row; onClose: () => void }) {
   const { snapshot: s, t, lang, command, can } = props;
+  const [outputRequestId] = useState(()=>crypto.randomUUID());
   const [status, setStatus] = useState(String(center.status)),
     [reason, setReason] = useState(""),
     [busy, setBusy] = useState(false);
@@ -40,13 +42,15 @@ export default function CenterDetails({
         sub_reason: down ? f.get("sub_reason") || null : null,
         notes: f.get("notes") || "",
         expected_restart: f.get("expected_restart")
-          ? new Date(String(f.get("expected_restart"))).toISOString()
+          ? localDateTimeToUtc(String(f.get("expected_restart")), zone)
           : null,
         responsible: f.get("responsible") || null,
         alternative: f.get("alternative") || null,
         transferred: f.get("transferred") === "on",
       });
       onClose();
+    } catch {
+      // The shared command handler keeps a readable error visible.
     } finally {
       setBusy(false);
     }
@@ -100,6 +104,7 @@ export default function CenterDetails({
               lang,
             )}
           </h3>
+          <p>{t("duration")}: {Math.floor(downtimeMinutes(downtime, downtime.started_at, new Date().toISOString()))} {t("minutes")}</p>
           <p>
             {t("started")}: {formatTime(downtime.started_at, lang, zone)}
           </p>
@@ -137,7 +142,7 @@ export default function CenterDetails({
           </p>
         </div>
       )}
-      {can("centers", "edit") && (
+      {(can("centers", "edit") || can("machine_status", "edit")) && (
         <form onSubmit={submit}>
           <h3>{t("operatorView")}</h3>
           <div className="operator-actions">
@@ -189,12 +194,10 @@ export default function CenterDetails({
                     ))}
                 </select>
               </Field>
-              <Field label={`${t("expectedRestart")} (UTC)`}>
+              <Field label={`${t("expectedRestart")} (${zone})`}>
                 <input
                   name="expected_restart"
-                  type="text"
-                  placeholder="2026-09-15T11:30:00Z"
-                  pattern=".*Z$"
+                  type="datetime-local"
                 />
               </Field>
               <Field label={t("responsible")}>
@@ -251,6 +254,10 @@ export default function CenterDetails({
           </button>
         </form>
       )}
+      {order?.status === "active" && can("orders","edit") && <form onSubmit={async (e)=>{
+        e.preventDefault(); const f=new FormData(e.currentTarget);setBusy(true);
+        try {await command("record_output",{factory:s.factory?.id,work_center:current.id,production_order:order.id,request_id:outputRequestId,produced:Number(f.get("produced")),rejected:Number(f.get("rejected")),notes:f.get("notes")});onClose();}catch {}finally{setBusy(false)}
+      }}><h3>{t("recordOutput")}</h3><p className="muted">{t("outputHelp")}</p><div className="form-grid"><Field label={t("produced_quantity")}><input name="produced" type="number" min="1" step="1" required /></Field><Field label={t("rejected_quantity")}><input name="rejected" type="number" min="0" step="1" defaultValue="0" required /></Field></div><Field label={t("notes")}><textarea name="notes" maxLength={2000}/></Field><button className="primary" disabled={busy}>{t("recordOutput")}</button></form>}
       <h3>{t("history")}</h3>
       <ol className="timeline">
         {history.map((e) => (

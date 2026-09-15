@@ -1,3 +1,4 @@
+import {localDateTimeToUtc} from "@/utils/manufacturing.mjs";
 import { useState } from "react";
 import type { FeatureProps } from "./types";
 import { Field, Empty, localName, formatTime } from "@/components/ui";
@@ -12,6 +13,8 @@ export default function Administration({
     [selected, setSelected] = useState<string[]>([]),
     [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [localError,setLocalError]=useState("");
+  const safeCommand: typeof command = (...args)=>command(...args).catch(()=>"");
   const factory = s.factory!;
   const zone = String(factory.timezone);
   async function settings(e: React.FormEvent<HTMLFormElement>) {
@@ -30,12 +33,14 @@ export default function Administration({
         if (!r.ok) throw new Error(t("error"));
         logo = b.path;
       }
-      await command("update_settings", {
+      await safeCommand("update_settings", {
         factory: factory.id,
         name: form.get("name"),
         timezone: form.get("timezone"),
         logo,
       });
+    } catch {
+      setLocalError("error");
     } finally {
       setBusy(false);
     }
@@ -44,7 +49,8 @@ export default function Administration({
     return (
       <section className="panel narrow">
         <h2>{t("settings")}</h2>
-        <form onSubmit={settings}>
+        {localError&&<p role="alert" className="toast">{t(localError)}</p>}
+        <form onSubmit={e=>void settings(e).catch(()=>{})}>
           <Field label={t("factoryName")}>
             <input
               name="name"
@@ -83,7 +89,7 @@ export default function Administration({
             disabled={!can("settings", "edit")}
             onClick={async () =>
               setJoinCode(
-                String(await command("get_join_code", { factory: factory.id })),
+                String(await safeCommand("get_join_code", { factory: factory.id })),
               )
             }
           >
@@ -95,7 +101,7 @@ export default function Administration({
               if (confirm(t("confirmRegenerate")))
                 setJoinCode(
                   String(
-                    await command("get_join_code", {
+                    await safeCommand("get_join_code", {
                       factory: factory.id,
                       regenerate: true,
                     }),
@@ -154,7 +160,7 @@ export default function Administration({
                           onSubmit={async (e) => {
                             e.preventDefault();
                             const form = new FormData(e.currentTarget);
-                            await command("manage_member", {
+                            await safeCommand("manage_member", {
                               factory: factory.id,
                               id: member.id,
                               role: form.get("role"),
@@ -180,7 +186,7 @@ export default function Administration({
                             type="button"
                             onClick={() => {
                               if (confirm(t("reject") + "?"))
-                                void command("manage_member", {
+                                void safeCommand("manage_member", {
                                   factory: factory.id,
                                   id: member.id,
                                   role: member.role_id,
@@ -252,6 +258,7 @@ export default function Administration({
                       "factory",
                       "lines",
                       "centers",
+                      "machine_status",
                       "orders",
                       "downtime",
                       "reports",
@@ -277,7 +284,7 @@ export default function Administration({
                               <input
                                 aria-label={t(m) + " " + t(a)}
                                 type="checkbox"
-                                disabled={!s.membership?.is_owner}
+                                disabled={!can("roles", "edit")}
                                 checked={selected.includes(key)}
                                 onChange={(e) =>
                                   setSelected(
@@ -297,9 +304,9 @@ export default function Administration({
               </div>
               <button
                 className="primary"
-                disabled={!s.membership?.is_owner}
+                disabled={!can("roles", "edit")}
                 onClick={() =>
-                  void command("set_permissions", {
+                  void safeCommand("set_permissions", {
                     factory: factory.id,
                     role,
                     permissions: selected.map((x) => {
@@ -326,13 +333,13 @@ export default function Administration({
           onSubmit={async (e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget);
-            await command("set_support", {
+            await safeCommand("set_support", {
               factory: factory.id,
               user_id: f.get("user_id"),
               role: f.get("role"),
               mode: f.get("mode"),
               expires_at: f.get("expires_at")
-                ? new Date(String(f.get("expires_at"))).toISOString()
+                ? localDateTimeToUtc(String(f.get("expires_at")),zone)
                 : null,
             });
           }}
@@ -358,8 +365,8 @@ export default function Administration({
               ))}
             </select>
           </Field>
-          <Field label={t("expires") + " (UTC)"}>
-            <input name="expires_at" type="text" pattern=".*Z$" />
+          <Field label={t("expires") + ` (${zone})`}>
+            <input name="expires_at" type="datetime-local" />
           </Field>
           <button className="primary" disabled={!s.membership?.is_owner}>
             {t("save")}

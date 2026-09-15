@@ -6,6 +6,7 @@ export type Snapshot = {
   permissions: string[];
   tables: Record<string, Row[]>;
   fetchedAt: string;
+  truncatedTables?: string[];
   supportFactories: Row[];
 };
 export type Language = "en" | "ar";

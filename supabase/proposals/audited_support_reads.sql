@@ -1,3 +1,10 @@
+-- Rollout guard: this change is first validated in empty or fictional-only environments.
+-- The isolated testing project was checked: 1 demo factory, 4 fixture users,
+-- 0 non-demo factories, 0 active support grants, 0 stored logos.
+do $$begin
+ if exists(select 1 from public.factories where not is_demo) then raise exception 'audited support rollout requires an empty or fictional-only environment';end if;
+ if exists(select 1 from public.support_access where mode<>'disabled') then raise exception 'disable existing support grants before audited support rollout';end if;
+end$$;
 -- Support data reads must run through an auditable read-write RPC transaction.
 -- Direct REST GET runs read-only: PostgreSQL rejects it if a support read needs an audit entry.
 -- Normal factory membership reads keep the ordinary RLS path.

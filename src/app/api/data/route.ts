@@ -5,101 +5,18 @@ import {
   verifyOrigin,
   safeError,
 } from "@/services/authorization";
-const modules = [
-  "dashboard",
-  "factory",
-  "lines",
-  "centers",
-  "orders",
-  "downtime",
-  "reports",
-  "employees",
-  "roles",
-  "settings",
-  "support",
-  "audit",
-];
-const tables = [
-  "areas",
-  "production_lines",
-  "work_centers",
-  "products",
-  "production_orders",
-  "downtime_reasons",
-  "status_events",
-  "downtime_events",
-  "memberships",
-  "roles",
-  "role_permissions",
-  "support_access",
-  "audit_logs",
-  "machine_statuses",
-  "oee_observations",
-];
 export async function GET(req: NextRequest) {
   try {
     const { db, user } = await authenticatedClient();
-    const { data: membership, error } = await db
-      .from("memberships")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (error) throw error;
-    const { data: supportFactories } = await db
-      .from("support_access")
-      .select("*")
-      .eq("user_id", user.id);
-    const selected = req.nextUrl.searchParams.get("factory");
-    const factoryId =
-      membership?.status === "approved" ? membership.factory_id : selected;
-    const base = {
-      user: { id: user.id, email: user.email },
-      membership,
-      permissions: [],
-      factory: null,
-      tables: {},
-      supportFactories: supportFactories || [],
-      fetchedAt: new Date().toISOString(),
-    };
-    if (!factoryId) return NextResponse.json(base);
-    await authorize(factoryId, "factory", "view");
-    const { data: factory, error: factoryError } = await db
-      .from("factories")
-      .select("*")
-      .eq("id", factoryId)
-      .single();
-    if (factoryError) throw factoryError;
-    const { data: checks, error: permissionError } = await db.rpc(
-      "access_matrix",
-      { factory: factoryId },
-    );
-    if (permissionError) throw permissionError;
-    const result = await Promise.all(
-      tables.map(async (table) => {
-        let query = db.from(table).select("*");
-        if (table !== "machine_statuses")
-          query = query.eq("factory_id", factoryId);
-        if (["audit_logs", "status_events"].includes(table))
-          query = query.order("created_at", { ascending: false });
-        const { data, error } = await query.limit(1000);
-        if (error) throw error;
-        return [table, data || []];
-      }),
-    );
-    return NextResponse.json({
-      ...base,
-      factory,
-      permissions: checks || [],
-      tables: Object.fromEntries(result),
-    });
-  } catch (e) {
-    return NextResponse.json(safeError(e), {
-      status: e instanceof Error && e.message === "unauthorized" ? 401 : 403,
-    });
-  }
+    const {data,error} = await db.rpc("factory_snapshot", {factory:req.nextUrl.searchParams.get("factory") || null});
+    if(error) throw error;
+    return NextResponse.json({...data,user:{id:user.id,email:user.email}});
+  } catch(e) { return NextResponse.json(safeError(e),{status:e instanceof Error && e.message === "unauthorized" ? 401 : 403}); }
 }
 const rpcModules: Record<string, [string, string]> = {
-  change_status: ["centers", "edit"],
+  set_daily_target: ["orders", "edit"],
+  record_output: ["orders", "edit"],
+  record_access: ["reports", "export"],
   manage_member: ["employees", "approve"],
   get_join_code: ["settings", "edit"],
   update_settings: ["settings", "edit"],
@@ -112,7 +29,8 @@ export async function POST(req: NextRequest) {
     if (Number(req.headers.get("content-length") || 0) > 100000)
       throw new Error("invalid_input");
     const { command, args } = await req.json();
-    const { db } = await authenticatedClient();
+    const context = await authenticatedClient();
+    const {db}=context;
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
     if (command === "save_record") {
@@ -122,18 +40,23 @@ export async function POST(req: NextRequest) {
           "lines",
           "centers",
           "orders",
+          "products",
           "downtime",
           "roles",
         ].includes(args.resource)
       )
         throw new Error("invalid_resource");
-      await authorize(args.factory, args.resource, args.id ? "edit" : "create");
+      await authorize(args.factory, args.resource === "products" ? "orders" : args.resource, args.id ? "edit" : "create",context);
+    } else if (command === "change_status") {
+      const {data: allowed} = await db.rpc("can_access",{factory:args.factory,module:"machine_status",action:"edit"});
+      if(!allowed) await authorize(args.factory,"centers","edit",context);
     } else if (rpcModules[command]) {
       const [module, action] = rpcModules[command];
-      await authorize(args.factory, module, action);
-    } else if (!["create_factory", "join_factory"].includes(command))
+      await authorize(args.factory, module, action,context);
+    } else if (!["create_factory", "request_membership"].includes(command))
       throw new Error("invalid_command");
     const { data, error } = await db.rpc(command, args);
+    if (data?.error) return NextResponse.json({error: "joinError"}, {status:400});
     if (error) {
       console.warn("factory_command_failed", { command, code: error.code });
       return NextResponse.json(

@@ -5,7 +5,7 @@ import {
   downtimeMinutes,
   pareto,
   reportPeriod,
-  csvCell,
+  statusUtilization,
   calculateOee,
 } from "@/utils/manufacturing.mjs";
 import type { Row } from "@/types";
@@ -14,6 +14,7 @@ export default function Reports({
   ...props
 }: FeatureProps & { view: string }) {
   const { snapshot: s, t, lang, can } = props;
+  const [search,setSearch]=useState(""),[exporting,setExporting]=useState(false),[exportError,setExportError]=useState("");
   const [period, setPeriod] = useState("today"),
     [area, setArea] = useState("all"),
     [line, setLine] = useState("all"),
@@ -23,6 +24,7 @@ export default function Reports({
     [to, setTo] = useState(""),
     [report, setReport] = useState("downtime");
   const zone = String(s.factory?.timezone);
+  const invalidRange=period==="custom"&&(!from||!to||to<from);
   let range;
   try {
     range = reportPeriod(period, zone, new Date(), from, to);
@@ -33,12 +35,12 @@ export default function Reports({
     (c) =>
       (area === "all" || c.area_id === area) &&
       (line === "all" || c.line_id === line) &&
-      (machine === "all" || c.id === machine),
+      (machine === "all" || c.id === machine) && (localName(c,lang)+" "+c.code).toLowerCase().includes(search.toLowerCase()),
   );
   const events = (s.tables.downtime_events || []).filter(
     (e) =>
       centers.some((c) => c.id === e.work_center_id) &&
-      (reason === "all" || e.reason_id === reason) &&
+      !invalidRange && (reason === "all" || e.reason_id === reason || e.sub_reason_id === reason) &&
       downtimeMinutes(e, range.from, range.to) > 0,
   );
   const minutes = (e: Row) => downtimeMinutes(e, range.from, range.to);
@@ -49,40 +51,12 @@ export default function Reports({
     () => 1,
     (e: Row) => String(e.reason_id),
   )[0];
-  function exportCsv() {
-    const header = [
-      "work_center",
-      "reason",
-      "started_at",
-      "ended_at",
-      "minutes",
-    ];
-    const rows = events.map((e) => [
-      localName(
-        centers.find((c) => c.id === e.work_center_id),
-        lang,
-      ),
-      localName(
-        s.tables.downtime_reasons?.find((r) => r.id === e.reason_id),
-        lang,
-      ),
-      e.started_at,
-      e.ended_at,
-      minutes(e).toFixed(2),
-    ]);
-    const blob = new Blob(
-      [
-        "\uFEFF" +
-          [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n"),
-      ],
-      { type: "text/csv;charset=utf-8" },
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "downtime-report.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  async function exportCsv() {
+    setExporting(true);setExportError("");
+    try{const r=await fetch("/api/export",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({factory:s.factory?.id,period,from,to,area,line,machine,reason,lang})});
+    if(!r.ok){setExportError((await r.json()).error||"error");return;}
+    const url=URL.createObjectURL(await r.blob()),link=document.createElement("a");link.href=url;link.download="downtime-report.csv";link.click();URL.revokeObjectURL(url);
+    }catch{setExportError("error")}finally{setExporting(false)}
   }
   const breakdown = (
     key: string,
@@ -106,11 +80,15 @@ export default function Reports({
       )}
     </section>
   );
-  const observations = s.tables.oee_observations || [];
+  const observations = (s.tables.oee_observations || []).filter(o=>centers.some(c=>c.id===o.work_center_id)&&String(o.started_at)>=range.from&&String(o.ended_at)<=range.to);
+  const output=(s.tables.production_entries||[]).filter(e=>!invalidRange&&centers.some(c=>c.id===e.work_center_id)&&String(e.created_at)>=range.from&&String(e.created_at)<range.to);
+  const activity=(s.tables.status_events||[]).filter(e=>!invalidRange&&centers.some(c=>c.id===e.work_center_id)&&String(e.created_at)>=range.from&&String(e.created_at)<range.to);
+  const orders=(s.tables.production_orders||[]).filter(o=>!invalidRange&&(line==="all"||o.line_id===line)&&((area==="all"&&machine==="all")||centers.some(c=>c.order_id===o.id)||output.some(e=>e.order_id===o.id))&&(!o.start_time||String(o.start_time)<range.to)&&(!o.expected_finish||String(o.expected_finish)>=range.from||output.some(e=>e.order_id===o.id)));
+
   return (
     <>
       <section className="panel report-controls">
-        <div className="filters">
+        <div className="filters"><Field label={t("search")}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("centers")}/></Field>
           <Field label={t("period")}>
             <select value={period} onChange={(e) => setPeriod(e.target.value)}>
               {["today", "yesterday", "week", "month", "custom"].map((x) => (
@@ -163,9 +141,11 @@ export default function Reports({
           ))}
         </div>
         {can("reports", "export") && (
-          <button onClick={exportCsv}>{t("export")}</button>
+          <button disabled={exporting||invalidRange} onClick={()=>void exportCsv()}>{t(exporting?"loading":"exportDowntime")}</button>
         )}
       </section>
+      {invalidRange && <p className="toast" role="alert">{t("invalidPeriod")}</p>}
+      {exportError && <p className="toast" role="alert">{t(exportError)}</p>}
       {view === "reports" && (
         <div className="tabs report-tabs">
           {[
@@ -280,6 +260,7 @@ export default function Reports({
               ),
           )}
           <section className="panel">
+            <h2>{t("utilization")}</h2><p className="muted">{t("utilizationHelp")}</p>{centers.map(c=>{const u=statusUtilization(s.tables.status_events||[],c.id,range.from,range.to);return <div className="attention-row" key={String(c.id)}><strong>{localName(c,lang)}</strong><span>{u?u.percent.toFixed(1)+"%":t("insufficient")}</span><span>{t("observed")}: {u?Math.round(u.observedMinutes):0} {t("minutes")}</span>{u&&u.coverage<0.99&&<small>{t("partialHistory")}</small>}</div>})}
             <h2>{t("oee")}</h2>
             {observations.length ? (
               observations.map((o) => {
@@ -306,10 +287,12 @@ export default function Reports({
           </section>
         </>
       )}
+      {report === "dailySummary" && <section className="panel"><h2>{t("periodOutput")}</h2><div className="summary-strip"><span>{t("produced_quantity")}: <b>{output.reduce((n,e)=>n+Number(e.produced),0)}</b></span><span>{t("rejected_quantity")}: <b>{output.reduce((n,e)=>n+Number(e.rejected),0)}</b></span><span>{t("activeOrders")}: <b>{orders.filter(o=>o.status==="active").length}</b></span></div></section>}
       {report === "productionStatus" ? (
         <section className="panel">
           <h2>{t("productionStatus")}</h2>
-          {s.tables.production_orders?.map((o) => (
+          {!orders.length && <Empty t={t}/>}
+          {orders.map((o) => (
             <div className="attention-row" key={String(o.id)}>
               <strong>{String(o.code)}</strong>
               <span>{t(String(o.status))}</span>
@@ -318,7 +301,7 @@ export default function Reports({
                 value={Number(o.produced_quantity)}
               />
               <span>
-                {String(o.produced_quantity)} / {String(o.target_quantity)}
+                {String(o.produced_quantity)} / {String(o.target_quantity)} · {t("periodOutput")}: {output.filter(e=>e.order_id===o.id).reduce((n,e)=>n+Number(e.produced),0)}
               </span>
             </div>
           ))}
@@ -326,13 +309,8 @@ export default function Reports({
       ) : report === "operatorActivity" ? (
         <section className="panel">
           <h2>{t("operatorActivity")}</h2>
-          {s.tables.status_events
-            ?.filter(
-              (e) =>
-                Date.parse(String(e.created_at)) >= Date.parse(range.from) &&
-                Date.parse(String(e.created_at)) < Date.parse(range.to),
-            )
-            .map((e) => (
+          {!activity.length && <Empty t={t}/>}
+          {activity            .map((e) => (
               <div className="attention-row" key={String(e.id)}>
                 <strong>
                   {String(
