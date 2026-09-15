@@ -112,7 +112,7 @@ small {
   unicode-bidi: isolate;
 }
 .eyebrow {
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.11em;
   color: var(--muted);
@@ -173,13 +173,13 @@ small {
   overflow: hidden;
   text-overflow: ellipsis;
   color: #a6bbc8;
-  font-size: 0.73rem;
+  font-size: 0.75rem;
   font-weight: 400;
   margin-top: 6px;
 }
 .nav-section-label {
   padding: 12px 12px 9px;
-  font-size: 0.67rem;
+  font-size: 0.75rem;
   letter-spacing: 0.1em;
   color: #8da5b4;
 }
@@ -236,7 +236,7 @@ small {
   margin: 12px 0;
 }
 .future small {
-  font-size: 0.67rem;
+  font-size: 0.75rem;
 }
 .sidebar-footer {
   margin-top: auto;
@@ -296,7 +296,7 @@ small {
   gap: 16px;
 }
 .updated {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--muted);
   text-align: end;
 }
@@ -426,7 +426,7 @@ small {
   background: #e8eef2;
   border-radius: 4px;
   padding: 2px 5px;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 .status-tabs button.selected {
   background: #dcefeb;
@@ -452,7 +452,7 @@ small {
   margin: 0;
 }
 .line-heading > span {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 .machine-flow {
@@ -500,7 +500,7 @@ small {
   line-height: 1;
 }
 .machine-top .code {
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   color: #657b87;
 }
 .machine-card h4 {
@@ -518,12 +518,12 @@ small {
   background: #edf1f4;
   color: #526978;
   white-space: normal;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.1;
 }
 .badge > span {
-  font-size: 0.55rem;
+  font-size: 0.75rem;
 }
 .status-running {
   background: #e4f3eb;
@@ -566,7 +566,7 @@ small {
   border-top-color: #95a3ad;
 }
 .machine-product {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   color: #637a85;
   margin: 12px 0 13px;
   line-height: 1.4;
@@ -577,7 +577,7 @@ small {
   border-top: 1px solid #e7eeef;
   padding: 10px 0;
   width: 100%;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   color: #6a7f88;
 }
 .stop-note {
@@ -650,7 +650,7 @@ td pre {
   max-width: 300px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 .cell-note {
   display: block;
@@ -814,7 +814,7 @@ td pre {
 }
 .pareto-row small {
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 .bar-track {
   background: #eaf0f3;
@@ -1178,7 +1178,7 @@ hr {
     padding: 0.4rem 0.6rem;
   }
   .breadcrumb {
-    font-size: 0.67rem;
+    font-size: 0.75rem;
     max-width: 200px;
     white-space: nowrap;
     overflow: hidden;
@@ -1223,7 +1223,7 @@ hr {
     gap: 1px;
   }
   .status-tabs button {
-    font-size: 0.72rem;
+    font-size: 0.75rem;
   }
   .machine-flow {
     grid-template-columns: 1fr 1fr;
@@ -1240,7 +1240,7 @@ hr {
     font-size: 0.9rem;
   }
   .machine-top .code {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
   }
   .attention-row {
     flex-wrap: wrap;
