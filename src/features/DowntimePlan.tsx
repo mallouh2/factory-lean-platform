@@ -31,7 +31,7 @@ export default function DowntimePlan({
               notes: f.get("notes"),
               responsible: f.get("responsible") || null,
               alternative: f.get("alternative") || null,
-              transferred: f.get("transferred") === "on",
+              transferred: false,
             });
           } catch {
           } finally {
@@ -80,14 +80,7 @@ export default function DowntimePlan({
               ))}
           </select>
         </Field>
-        <label className="check">
-          <input
-            name="transferred"
-            type="checkbox"
-            defaultChecked={Boolean(event.transferred)}
-          />
-          {t("transferred")}
-        </label>
+
         <Field label={t("notes")}>
           <textarea
             name="notes"

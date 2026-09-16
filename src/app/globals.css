@@ -1435,3 +1435,145 @@ hr {
   font-weight: 700;
   margin-bottom: 14px;
 }
+/* Logical spacing preserves Arabic direction without mirroring machine status meaning. */
+.platform-page {
+  max-width: 1280px;
+  margin: 70px auto;
+  padding: 24px;
+}
+.factory-grid,
+.builder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 18px;
+  margin-block: 24px;
+}
+.builder-line {
+  background: #f1f5f9;
+  border: 2px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 16px;
+  min-width: 0;
+}
+.builder-machine {
+  display: grid;
+  gap: 10px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 16px;
+  margin-block: 14px;
+  cursor: grab;
+}
+.builder-machine:active {
+  cursor: grabbing;
+}
+.builder-machine select {
+  max-width: 100%;
+}
+.builder-machine .row-actions button {
+  min-width: 48px;
+  min-height: 44px;
+}
+.flow-state {
+  display: grid;
+  padding: 8px;
+  border-radius: 8px;
+  margin-block: 8px;
+}
+.flow-blocked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.flow-transferred,
+.flow-bufferActive {
+  background: #e0f2fe;
+  color: #075985;
+}
+.impact-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) 1fr;
+  gap: 32px;
+  align-items: center;
+  margin-block: 28px;
+}
+.donut {
+  width: 240px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  max-width: 100%;
+  margin: auto;
+}
+.donut span {
+  background: white;
+  border-radius: 50%;
+  width: 65%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 20px;
+  font-weight: 700;
+}
+.impact-ranking {
+  padding-inline-start: 24px;
+}
+.impact-ranking button {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  text-align: start;
+  width: 100%;
+  margin-block: 8px;
+  padding: 16px;
+}
+.chart-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.permission-productionGroup {
+  background: #e0f2fe !important;
+  color: #075985;
+}
+.permission-administration {
+  background: #f3e8ff !important;
+  color: #6b21a8;
+}
+.table-wrap td small {
+  display: block;
+}
+.platform-page .code {
+  overflow-wrap: anywhere;
+}
+details.panel > summary {
+  font-weight: 700;
+  padding: 12px;
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .impact-layout {
+    grid-template-columns: 1fr;
+  }
+  .platform-page {
+    padding: 16px;
+  }
+  .builder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.drag-handle {
+  touch-action: none;
+  cursor: grab;
+  text-align: start;
+  min-height: 44px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+}
+.drag-handle:active {
+  cursor: grabbing;
+  background: #e0f2fe;
+}

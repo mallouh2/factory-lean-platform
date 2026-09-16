@@ -20,7 +20,7 @@ Dependencies are selected only when necessary: Next.js supplies routing, server 
 
 ## Tenant and permission boundary
 
-One membership account belongs to one factory in Phase 1. Every operational row has a factory ID. Composite foreign keys prevent references across factories. Roles belong to a factory and map module/action permissions through role permissions. Ownership is an explicit membership property; support engineers get no implicit factory access. Support grants bind a specific support user to a factory-scoped role, with disabled, temporary (expiry required), or permanent access. Permission evaluation queries current database rows rather than trusting stale JWT role metadata.
+One membership account belongs to one factory in Phase 1. Every operational row has a factory ID. Composite foreign keys prevent references across factories. Roles belong to a factory and provide optional module/action templates. Final authorization reads `user_permissions`; changing a role or title never silently changes a person’s access. Existing grants were migrated once. Ownership is an explicit membership property; support engineers get no implicit factory access. Support grants bind a specific support user to a snapshot of a factory-scoped template, with disabled, temporary (expiry required), or permanent access. Permission evaluation queries current database rows rather than trusting stale JWT role metadata.
 
 The private schema contains guarded privileged commands and authorization lookups. Exposed RPC wrappers use invoker security. Important writes require these commands; event and audit history are append-only for application users. Transactions lock a work center before closing downtime and appending a status event. Reporting clips downtime intervals to the requested time range and never fabricates OEE inputs.
 
@@ -35,3 +35,7 @@ Work centers can form parent/child production cells, with alternative centers an
 A scoped snapshot RPC retrieves RLS-filtered data in one round trip. Reports distinguish running/observed utilization from OEE and exclude unobserved history. CSV export is authorized and logged on the server. Future material balances derive from inventory transactions; BOM versions, cost estimates, procurement records and Lean improvement actions remain separate relational modules.
 
 The current snapshot cap is 5,000 rows/table and is disclosed in the UI. Do not treat capped totals as complete production-history reports. Advanced permission scopes, comprehensive support raw-read auditing and scale hardening belong to the deferred security/production review.
+
+## Phase 1 flow and platform administration
+
+See [the improvement architecture and verification report](phase-one-improvements.md) for explicit platform access windows, individual permissions, machine impact scopes, buffers, immutable transfers and routing/product-stage foundations. Platform administration is a separate private registry; it does not weaken tenant isolation for ordinary users.

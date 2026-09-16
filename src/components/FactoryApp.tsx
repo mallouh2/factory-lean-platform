@@ -9,13 +9,15 @@ import Dashboard from "@/features/Dashboard";
 import CenterDetails from "@/features/CenterDetails";
 import Configuration from "@/features/Configuration";
 import Reports from "@/features/Reports";
+import LineBuilder from "@/features/LineBuilder";
+import PlatformDashboard from "@/features/PlatformDashboard";
+import PersonPermissions from "@/features/PersonPermissions";
+import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
 const primary = [
   "dashboard",
-  "factory",
   "lines",
-  "centers",
   "orders",
   "products",
   "downtime",
@@ -51,6 +53,7 @@ const icons: Record<string, string> = {
 };
 export default function FactoryApp() {
   const [lang, setLang] = useState<Language>("en"),
+    [dirtyLayout, setDirtyLayout] = useState(false),
     [view, setView] = useState("dashboard"),
     [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [loading, setLoading] = useState(true),
@@ -138,10 +141,16 @@ export default function FactoryApp() {
   }
   const props = snapshot ? { snapshot, t, lang, command, can } : null;
   const navigate = (x: string) => {
+    if (dirtyLayout && !confirm(t("discardChanges"))) return;
     setView(x);
     setMobile(false);
     setNotice("");
   };
+  async function openFactory(id: string) {
+    await command("open_platform_factory", { factory: id });
+    setSupportFactory(id);
+    setView("dashboard");
+  }
   async function signout() {
     if (!confirm(t("logoutConfirm"))) return;
     await fetch("/api/auth", {
@@ -150,6 +159,7 @@ export default function FactoryApp() {
       body: JSON.stringify({ action: "signout" }),
     });
     setSnapshot(null);
+    setSupportFactory("");
   }
   return (
     <>
@@ -203,7 +213,12 @@ export default function FactoryApp() {
                 ))}
             </section>
           )}
-          {props && <Onboarding {...props} />}
+          {props &&
+            (snapshot.platformAdmin ? (
+              <PlatformDashboard {...props} onOpen={openFactory} />
+            ) : (
+              <Onboarding {...props} />
+            ))}
         </>
       ) : (
         <div className="app-shell">
@@ -237,6 +252,17 @@ export default function FactoryApp() {
                 <small>{String(snapshot.factory.name)}</small>
               </span>
             </a>
+            {snapshot.platformAdmin && (
+              <button
+                onClick={() => {
+                  if(dirtyLayout&&!confirm(t("discardChanges")))return;
+                  setSupportFactory("");
+                  setView("dashboard");
+                }}
+              >
+                {t("platformDashboard")}
+              </button>
+            )}
             <div className="nav-section-label">{t("operations")}</div>
             <nav aria-label={t("operations")}>
               {primary.map(
@@ -374,13 +400,23 @@ export default function FactoryApp() {
                     />
                   ) : view === "downtime" ? (
                     <>
-                      <Reports {...props} view={view} />
+                      <DowntimeAnalysis {...props} />
                       {can("downtime", "create") && (
                         <Configuration {...props} view="downtime" />
                       )}
                     </>
                   ) : view === "reports" ? (
                     <Reports {...props} view={view} />
+                  ) : view === "lines" ? (
+                    <LineBuilder {...props} onDirtyChange={setDirtyLayout} />
+                  ) : view === "roles" ? (
+                    <>
+                      <PersonPermissions {...props} />
+                      <details className="panel">
+                        <summary>{t("permissionTemplates")}</summary>
+                        <Administration {...props} view="roles" />
+                      </details>
+                    </>
                   ) : primary.includes(view) ? (
                     <Configuration key={view} {...props} view={view} />
                   ) : (

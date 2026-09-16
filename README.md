@@ -101,7 +101,7 @@ The first command creates an ignored credential file, with generated passwords f
 6. Open Production orders to set a daily target or add an order; use Products to manage product data.
 7. Open Work centers to configure a manual station/cell, parent, operator, capabilities and alternatives.
 8. Open Reports; compare dates and locations, switch through all six reports and export downtime CSV.
-9. Use Factory settings to view/regenerate the join code. Approve a requesting employee and assign a role.
+9. Use Factory settings to view/regenerate the join code. Approve a requesting employee, then assign individual permissions; a role is an optional template.
 10. Switch to Arabic and check the reversed layout. Resize to tablet/mobile to use the navigation drawer.
 
 OEE shows **Insufficient data** until valid observations exist. Production quantities are total output, including rejects; good output is total minus rejects. Daily targets are explicit dated records, not an assumed sum of lifetime order targets.
@@ -127,7 +127,7 @@ Next.js/React provide the UI/server, Supabase JS/SSR provide provider-supported 
 
 ## Roles and permissions
 
-Permissions live in database tables, not role-name checks in components. The reusable `can(module, action)` presentation check and server/database authorization use the same matrix. Actions are View, Create, Edit, Delete, Approve and Export. Owners retain factory control; delegated managers cannot grant permissions they do not hold.
+Final permissions live in `user_permissions`, not job-title checks. Role permission tables are optional templates; applying one copies grants to the selected person. The reusable `can(module, action)` presentation check and server/database authorization use the same matrix. Actions are View, Create, Edit, Delete, Approve and Export. Owners retain factory control; delegated managers cannot grant permissions they do not hold.
 
 Operator status controls use the `machine_status` module, separately from engineering/configuration edits. Employee approval, role changes, support grants and configuration changes are auditable. Support grants refer to a verified account by email, bind a factory-scoped role, and may be disabled, temporary or permanent. Temporary access requires expiry. Direct support API-read auditing is reserved for the later security review; application snapshot reads and exports are already audited.
 
@@ -180,3 +180,7 @@ The registered trial origin is `https://nova-factory-lean.mrabumallouh12.chatgpt
 Additional pinned development dependencies are required only to adapt the existing Next.js routes to Workers: Vinext/Vite, Cloudflare's Vite plugin/Wrangler, and matching React build plugins. No product UI or business logic was replaced. The adapter preserves Next's generated route declarations after building.
 
 The owner has deferred the expanded security/encryption review until all planned phases are complete. Existing authentication, authorization, RLS and history protections remain enabled. Phase 2 waits for hands-on Phase 1 feedback.
+
+## Phase 1 improvements (September 2026)
+
+The existing development ADMIN now opens an explicitly audited **Platform dashboard**. Factory admins remain scoped to their own factory. **Lines & Machines** provides drag/drop, touch move controls, alternatives and configurable whole-line/downstream/no-impact stoppages. Employee authorization now uses individual grants; roles are optional templates. Downtime uses impact ranking, a donut and readable durations. See [workflow, architecture, test checklist and limitations](docs/phase-one-improvements.md). Apply all documented migrations in order on a new installation; consult [migration mapping](docs/database-migrations.md) before touching an existing project.

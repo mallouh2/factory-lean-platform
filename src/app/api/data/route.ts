@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  layout_conflict: "layoutConflict",
   description_required: "reasonDescriptionRequired",
   invalid_restart_time: "restartTimeInvalid",
   invalid_order: "activeOrderRequired",
@@ -32,6 +33,9 @@ const commandErrors: Record<string, string> = {
   owner_required: "permissionError",
 };
 const rpcModules: Record<string, [string, string]> = {
+  set_user_permissions: ["roles", "edit"],
+  save_line_layout: ["lines", "edit"],
+  transfer_production: ["centers", "edit"],
   configure_center_links: ["centers", "edit"],
   set_support_by_email: ["support", "edit"],
   set_daily_target: ["orders", "edit"],
@@ -88,7 +92,13 @@ export async function POST(req: NextRequest) {
     } else if (rpcModules[command]) {
       const [module, action] = rpcModules[command];
       await authorize(args.factory, module, action, context);
-    } else if (!["create_factory", "request_membership"].includes(command))
+    } else if (
+      ![
+        "create_factory",
+        "request_membership",
+        "open_platform_factory",
+      ].includes(command)
+    )
       throw new Error("invalid_command");
     const { data, error } = await db.rpc(command, args);
     if (data?.error)

@@ -1,3 +1,5 @@
+import ProductionTransfers from "./ProductionTransfers";
+import { formatDuration } from "@/utils/production-flow.mjs";
 import DowntimePlan from "./DowntimePlan";
 import { downtimeMinutes, localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import { useState } from "react";
@@ -47,7 +49,7 @@ export default function CenterDetails({
           : null,
         responsible: f.get("responsible") || null,
         alternative: f.get("alternative") || null,
-        transferred: f.get("transferred") === "on",
+        transferred: false,
       });
       onClose();
     } catch {
@@ -110,14 +112,14 @@ export default function CenterDetails({
           </h3>
           <p>
             {t("duration")}:{" "}
-            {Math.floor(
+            {formatDuration(
               downtimeMinutes(
                 downtime,
                 downtime.started_at,
                 new Date().toISOString(),
               ),
-            )}{" "}
-            {t("minutes")}
+              lang,
+            )}
           </p>
           <p>
             {t("started")}: {formatTime(downtime.started_at, lang, zone)}
@@ -164,14 +166,7 @@ export default function CenterDetails({
         <form onSubmit={submit}>
           <h3>{t("operatorView")}</h3>
           <div className="operator-actions">
-            {[
-              "running",
-              "stopped",
-              "setup",
-              "maintenance",
-              "idle",
-              "offline",
-            ].map((x) => (
+            {["running", "stopped", "setup", "idle", "offline"].map((x) => (
               <button
                 type="button"
                 className={status === x ? "selected" : ""}
@@ -239,10 +234,6 @@ export default function CenterDetails({
                     ))}
                 </select>
               </Field>
-              <label className="check">
-                <input name="transferred" type="checkbox" />
-                {t("transferred")}
-              </label>
             </>
           )}
           <Field label={t("describeReason")}>
@@ -251,7 +242,7 @@ export default function CenterDetails({
               maxLength={2000}
               required={Boolean(
                 down &&
-                  reasons.find((x) => x.id === reason)?.requires_description,
+                reasons.find((x) => x.id === reason)?.requires_description,
               )}
               minLength={
                 down &&
@@ -317,6 +308,7 @@ export default function CenterDetails({
           </button>
         </form>
       )}
+      <ProductionTransfers {...props} center={current} />
       <h3>{t("history")}</h3>
       <ol className="timeline">
         {history.map((e) => (

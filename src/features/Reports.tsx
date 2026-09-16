@@ -1,3 +1,4 @@
+import { formatDuration } from "@/utils/production-flow.mjs";
 import { useState } from "react";
 import { Empty, Field, localName, formatTime } from "@/components/ui";
 import type { FeatureProps } from "./types";
@@ -113,9 +114,7 @@ export default function Reports({
             <div className="bar-track">
               <div style={{ width: `${r.percent}%` }} />
             </div>
-            <strong>
-              {Math.round(r.minutes)} {t("minutes")}
-            </strong>
+            <strong>{formatDuration(r.minutes, lang)}</strong>
           </div>
         ),
       )}
@@ -267,15 +266,12 @@ export default function Reports({
       <div className="report-kpis">
         <div className="panel">
           <span>{t("totalDowntime")}</span>
-          <strong>
-            {Math.round(total)} <small>{t("minutes")}</small>
-          </strong>
+          <strong>{formatDuration(total, lang)}</strong>
         </div>
         <div className="panel">
           <span>{t("averageEvent")}</span>
           <strong>
-            {events.length ? Math.round(total / events.length) : 0}{" "}
-            <small>{t("minutes")}</small>
+            {formatDuration(events.length ? total / events.length : 0, lang)}
           </strong>
         </div>
         <div className="panel">
@@ -401,8 +397,8 @@ export default function Reports({
                     {u ? u.percent.toFixed(1) + "%" : t("insufficient")}
                   </span>
                   <span>
-                    {t("observed")}: {u ? Math.round(u.observedMinutes) : 0}{" "}
-                    {t("minutes")}
+                    {t("observed")}:{" "}
+                    {formatDuration(u ? u.observedMinutes : 0, lang)}
                   </span>
                   {u && u.coverage < 0.99 && (
                     <small>{t("partialHistory")}</small>
@@ -528,9 +524,7 @@ export default function Reports({
                     )}
                   </td>
                   <td>{formatTime(e.started_at, lang, zone)}</td>
-                  <td>
-                    {Math.round(minutes(e))} {t("minutes")}
-                  </td>
+                  <td>{formatDuration(minutes(e), lang)}</td>
                 </tr>
               ))}
             </tbody>

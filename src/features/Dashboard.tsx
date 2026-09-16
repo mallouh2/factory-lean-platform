@@ -1,3 +1,4 @@
+import { formatDuration, evaluateFlow } from "@/utils/production-flow.mjs";
 import { useState } from "react";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
@@ -23,6 +24,11 @@ export default function Dashboard(
   const period = reportPeriod(
     "today",
     String(s.factory?.timezone || "Asia/Qatar"),
+  );
+  const flow = evaluateFlow(
+    centers,
+    stops,
+    s.tables.production_transfers || [],
   );
   const duration = stops.reduce(
     (sum, e) => sum + downtimeMinutes(e, period.from, period.to),
@@ -60,8 +66,8 @@ export default function Dashboard(
       color: "red",
     },
     {
-      label: "todayDowntime",
-      value: `${Math.round(duration)} ${t("minutes")}`,
+      label: "blockedFlows",
+      value: Object.values(flow).filter((x) => x.state === "blocked").length,
       action: () => onNavigate("downtime"),
       color: "orange",
     },
@@ -155,28 +161,22 @@ export default function Dashboard(
           </div>
         </header>
         <div className="status-tabs">
-          {[
-            "all",
-            "running",
-            "stopped",
-            "setup",
-            "idle",
-            "maintenance",
-            "offline",
-          ].map((x) => (
-            <button
-              className={filter === x ? "selected" : ""}
-              onClick={() => setFilter(x)}
-              key={x}
-            >
-              {t(x)}
-              <span>
-                {x === "all"
-                  ? centers.length
-                  : centers.filter((c) => c.status === x).length}
-              </span>
-            </button>
-          ))}
+          {["all", "running", "stopped", "setup", "idle", "offline"].map(
+            (x) => (
+              <button
+                className={filter === x ? "selected" : ""}
+                onClick={() => setFilter(x)}
+                key={x}
+              >
+                {t(x)}
+                <span>
+                  {x === "all"
+                    ? centers.length
+                    : centers.filter((c) => c.status === x).length}
+                </span>
+              </button>
+            ),
+          )}
         </div>
         {!visible.length && <Empty t={t} />}
         <div className="lines-floor">
@@ -227,6 +227,22 @@ export default function Dashboard(
                         </div>
                         <h4>{localName(center, lang)}</h4>
                         <Badge status={String(center.status)} t={t} />
+                        {flow[String(center.id)]?.state !== "clear" && (
+                          <div
+                            className={`flow-state flow-${flow[String(center.id)].state}`}
+                          >
+                            <strong>{t(flow[String(center.id)].state)}</strong>
+                            <small>
+                              {localName(
+                                centers.find(
+                                  (c) =>
+                                    c.id === flow[String(center.id)].source,
+                                ),
+                                lang,
+                              )}
+                            </small>
+                          </div>
+                        )}
                         <p className="machine-product">
                           {product ? localName(product, lang) : t("unassigned")}
                         </p>
@@ -234,12 +250,12 @@ export default function Dashboard(
                           <div className="stop-note">
                             <strong>{localName(reason, lang)}</strong>
                             <span>
-                              {Math.floor(
+                              {formatDuration(
                                 (Date.now() -
                                   Date.parse(String(stop.started_at))) /
                                   60000,
-                              )}{" "}
-                              {t("minutes")}
+                                lang,
+                              )}
                             </span>
                           </div>
                         ) : (
@@ -286,10 +302,10 @@ export default function Dashboard(
                   )}
                 </span>
                 <span className="muted">
-                  {Math.floor(
+                  {formatDuration(
                     (Date.now() - Date.parse(String(e.started_at))) / 60000,
-                  )}{" "}
-                  {t("minutes")}
+                    lang,
+                  )}
                 </span>
                 <span aria-hidden="true">↗</span>
               </button>

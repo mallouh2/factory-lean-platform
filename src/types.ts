@@ -7,6 +7,8 @@ export type Snapshot = {
   tables: Record<string, Row[]>;
   fetchedAt: string;
   truncatedTables?: string[];
+  platformAdmin?: boolean;
+  factories?: Row[];
   supportFactories: Row[];
 };
 export type Language = "en" | "ar";

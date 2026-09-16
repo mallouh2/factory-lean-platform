@@ -16,3 +16,6 @@ supabase/.branches/
 
 dist/
 .wrangler/
+
+.next-improvements/
+public/__qa.html

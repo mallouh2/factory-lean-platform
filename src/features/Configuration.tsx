@@ -59,6 +59,7 @@ const config: Record<string, { table: string; fields: string[] }> = {
       "name_ar",
       "code",
       "category",
+      "stage",
       "unit",
       "diameter",
       "length",
@@ -337,12 +338,18 @@ export default function Configuration({
                           </option>
                         ))}
                     </select>
-                  ) : field === "type" || field === "status" ? (
+                  ) : field === "type" ||
+                    field === "status" ||
+                    field === "stage" ? (
                     <select
                       name={field}
                       defaultValue={String(
                         editing[field] ||
-                          (field === "type" ? "machine" : "planned"),
+                          (field === "type"
+                            ? "machine"
+                            : field === "stage"
+                              ? "finished"
+                              : "planned"),
                       )}
                     >
                       {(field === "type"
@@ -355,7 +362,9 @@ export default function Configuration({
                             "production_cell",
                             "other",
                           ]
-                        : ["planned", "active", "completed", "cancelled"]
+                        : field === "stage"
+                          ? ["raw", "wip", "semi_finished", "finished"]
+                          : ["planned", "active", "completed", "cancelled"]
                       ).map((x) => (
                         <option key={x} value={x}>
                           {t(x)}
