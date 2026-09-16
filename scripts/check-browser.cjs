@@ -3,7 +3,7 @@ const fs=require('fs'),{spawn}=require('child_process');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
 fs.mkdirSync('test-results',{recursive:true});
 const browserArgs=JSON.parse(process.env.CHROMIUM_ARGS || '[]');
-const server=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--port','3100','--hostname','127.0.0.1'],{env:{...process.env,...require('node:util').parseEnv(fs.readFileSync('.env.testing','utf8')),BUILD_DIRECTORY:'.next-check',APP_ORIGIN:'http://localhost:3100'},stdio:['ignore','pipe','pipe']});server.stderr.on('data',d=>process.stderr.write(d));
+const server=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--port','3100','--hostname','127.0.0.1'],{env:{...process.env,...require('node:util').parseEnv(fs.readFileSync('.env.testing','utf8')),BUILD_DIRECTORY:process.env.BUILD_DIRECTORY || '.next-check',APP_ORIGIN:'http://localhost:3100'},stdio:['ignore','pipe','pipe']});server.stderr.on('data',d=>process.stderr.write(d));
 let browser; const checks=[],errors=[];
 (async()=>{try{
 for(let i=0;i<80;i++){try{await fetch('http://localhost:3100');break}catch{}await new Promise(r=>setTimeout(r,250))}
@@ -13,7 +13,7 @@ page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost
 const credentials=JSON.parse(fs.readFileSync('.env.testing-users.json'));const user=credentials.owner;
 await page.locator('input[name=email]').fill(user.email);await page.locator('input[name=password]').fill(user.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();
 await page.locator('.machine-card').first().waitFor({timeout:120000});checks.push('Test owner signs in through Supabase; floor renders');
-checks.push(...await require('../tests/feature-flows.cjs')(page.request,browser,credentials,'http://localhost:3100'));await page.reload();await page.locator('.machine-card').first().waitFor({timeout:60000});
+if(process.env.RUN_FEATURE_FLOWS==='1') checks.push(...await require('../tests/feature-flows.cjs')(page.request,browser,credentials,'http://localhost:3100')); await page.reload();await page.locator('.machine-card').first().waitFor({timeout:60000});
 console.log('Machine cards',await page.locator('.machine-card').count());await page.screenshot({path:'test-results/dashboard-en.png',fullPage:true});
 await page.locator('.machine-card').first().click();await page.locator('dialog').waitFor();checks.push('Work center detail dialog opens');await page.getByRole('button',{name:'Close',exact:true}).click();
 const en=JSON.parse(fs.readFileSync('src/locales/en.json'));
@@ -31,5 +31,6 @@ await page.locator('.sidebar nav button').first().click();await page.screenshot(
 await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/dashboard-mobile-ar.png',fullPage:true});
 const overflows=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);if(overflows)throw new Error('Mobile viewport overflows');checks.push('390px Arabic layout has no page overflow');
 await page.locator('.menu-button').click();await page.locator('.sidebar-close').click();checks.push('Mobile navigation opens and closes');
+if(errors.length)throw new Error('Browser page errors: '+errors.length);
 console.log(JSON.stringify({checks,errors},null,2));fs.writeFileSync('test-results/browser-results.json',JSON.stringify({checks,errors},null,2));
 }catch(e){console.error(String(e.message||e).split('\n')[0]);if(browser){const pages=browser.contexts().flatMap(c=>c.pages());if(pages.length)await pages[pages.length-1].screenshot({path:'test-results/browser-error.png',fullPage:true}).catch(()=>{})}process.exitCode=1}finally{if(browser)await browser.close();server.kill('SIGTERM')}})();

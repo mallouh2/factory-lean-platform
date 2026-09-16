@@ -11,3 +11,5 @@ supabase/.temp/
 supabase/.branches/
 
 .next-check/
+
+.next-ui-check/

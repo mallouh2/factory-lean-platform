@@ -1,6 +1,6 @@
 # Phase 1 acceptance checklist
 
-Updated 2026-09-15. Implemented does not imply production acceptance. The user deferred Vercel and the extended security review; neither is represented as complete.
+Updated 2026-09-16. Implemented does not imply production acceptance. The user deferred Vercel and the extended security review; neither is represented as complete.
 
 | Requirement | Current evidence / status |
 | --- | --- |

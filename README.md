@@ -138,10 +138,11 @@ npm test
 npm run typecheck
 npm run build
 node scripts/check-standalone.cjs
+node scripts/check-feature-flows.cjs
 node scripts/check-browser.cjs
 ```
 
-`supabase/tests/tenant_isolation.sql` and `operational_security.sql` are rollback-only checks already exercised during development. Detailed security expansion is now deferred as requested.
+`supabase/tests/tenant_isolation.sql` and `operational_security.sql` are rollback-only checks already exercised during development. Detailed security expansion is now deferred as requested. `supabase/tests/administration_workflow.sql` passed the remaining administration commands in a rollback transaction. The interrupted HTTP run was supplemented with successful focused support/archive checks against standalone Node; see the evidence report.
 
 The browser harness and functional-flow checks run against `.env.testing` and a separate ignored credentials file. They exercise the real application and Supabase, not mocked dashboard data. See [test results](docs/test-results.md) for commands, environment requirements and actual outcomes.
 
