@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     if (
       process.env.APP_ENV === "development" &&
       process.env.VERCEL_ENV !== "production" &&
-      email === "ADMIN"
+      email.toUpperCase() === "ADMIN"
     )
       email = process.env.DEMO_EMAIL || "";
     if (

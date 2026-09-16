@@ -55,6 +55,8 @@ export default function Authentication({
               name="email"
               required
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
               maxLength={254}
             />
           </Field>
