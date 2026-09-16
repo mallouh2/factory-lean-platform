@@ -6,7 +6,12 @@ const original=new Map(files.map(file=>[file,existsSync(file)?readFileSync(file)
 try {
  const result=spawnSync(process.execPath,['node_modules/vite/bin/vite.js','build'],{stdio:'inherit'});
  if(result.status!==0)process.exitCode=result.status || 1;
- else writeFileSync('dist/server/index.js','export { default } from "./index.mjs";\n');
+ else {
+  // Vinext's runtime imports .js entrypoints while Vite emits .mjs bundles.
+  for (const directory of ['dist/server','dist/server/ssr']) {
+   writeFileSync(`${directory}/index.js`, 'export * from "./index.mjs";\nexport { default } from "./index.mjs";\n');
+  }
+ }
 } finally {
  for(const [file,contents] of original){if(contents)writeFileSync(file,contents);else rmSync(file,{force:true});}
 }
