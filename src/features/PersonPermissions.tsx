@@ -106,6 +106,7 @@ export default function PersonPermissions({
         <>
           <Field label={t("applyTemplate")}>
             <select
+              key={person}
               defaultValue=""
               disabled={!can("roles", "edit")}
               onChange={(e) => {

@@ -16,6 +16,8 @@ Checked through the connected Supabase integration on 2026-09-16. The integratio
 | 20260916130000_flow_configuration_integrity | 20260916131024 | 20260916125155 |
 | 20260916133000_transfer_interruption_history | 20260916131043 | 20260916130018 |
 
+| 20260916135000_platform_session_continuity | 20260916131608 | 20260916131516 |
+
 Do not reapply these files to existing projects. New installations apply source files in order. Before adopting CLI push for an existing project, compare schema and migration statements, then reconcile history in a documented maintenance operation. No migration history repair was performed here.
 
 `supabase/proposals/audited_support_reads.sql` is **not applied** and is not part of setup. Its broad policy rollout was rejected by automatic review. The user subsequently deferred detailed security work until feature completion.

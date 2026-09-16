@@ -61,7 +61,7 @@ Automated suite: 18 unit tests. SQL fixtures roll back completely. HTTP checks a
 - Buffers are time coverage estimates, not live inventory measurements. Lost production is estimated from configured rate, not a sensor measurement.
 - An alternative must be idle and free (or assigned the same order) to accept a transfer. Actual running states remain explicit; returning the original does not silently stop the alternative.
 - Factory data snapshots retain the existing 5,000-row warning limit; large-scale report pagination is a later capacity task.
-- The platform access window expires after 30 minutes; reopen the factory if needed. The development admin account must not be deployed as a production bootstrap account.
+- The platform access window lasts 30 minutes and is renewed, with an audit event, when the authenticated app reads the explicitly selected factory. The development admin account must not be deployed as a production bootstrap account.
 - Database advisor: private control tables intentionally have RLS without client policies. Leaked-password screening is disabled in the test project; its review is deferred. [Supabase guidance](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
 
 Before Phase 2, agree on routing branches, real buffer quantity tracking, factory-specific impact weights, and the desired production hand-back workflow after an original machine resumes.
