@@ -13,3 +13,6 @@ supabase/.branches/
 .next-check/
 
 .next-ui-check/
+
+dist/
+.wrangler/

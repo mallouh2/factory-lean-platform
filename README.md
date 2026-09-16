@@ -170,3 +170,13 @@ The Docker recipe is provided; a Docker daemon is not available in this workspac
 - PDF/Excel, inventory operations, procurement workflows, planning Gantt, advanced Lean tools, AI recommendations and HR/Hall of Fame are deliberately not exposed as finished features.
 
 Phase 2 should build transaction-based inventory, versioned BOM/standard-vs-actual costing, finite-capacity planning, maintenance/quality workflows and verified Lean corrective actions. Keep costing separate from accounting.
+
+## Private hosted trial
+
+The optional Sites adapter deploys this same source and Supabase-backed application to a private Cloudflare Worker. `npm run build:sites` builds the adapter; the existing `npm run build` / `npm start` Node workflow remains unchanged. GitHub remains the source of truth; Sites receives a deployment mirror of the same commit.
+
+The registered trial origin is `https://nova-factory-lean.sandy-cream-0608.chatgpt.site`. Its runtime uses the fictional development factory, server-only Supabase configuration and the existing development ADMIN alias. It is a private demo, not the production factory environment. Publication success is confirmed by the hosting service before handing the URL to the owner.
+
+Additional pinned development dependencies are required only to adapt the existing Next.js routes to Workers: Vinext/Vite, Cloudflare's Vite plugin/Wrangler, and matching React build plugins. No product UI or business logic was replaced. The adapter preserves Next's generated route declarations after building.
+
+The owner has deferred the expanded security/encryption review until all planned phases are complete. Existing authentication, authorization, RLS and history protections remain enabled. Phase 2 waits for hands-on Phase 1 feedback.
