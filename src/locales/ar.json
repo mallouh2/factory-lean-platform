@@ -269,6 +269,7 @@
   "addMachine": "إضافة / تعديل آلة",
   "areasOptional": "المناطق (اختياري)",
   "layoutConflict": "تغير ترتيب الخط. حدّث الصفحة ثم أعد المحاولة.",
+  "useTransferCommand": "استخدم أمر «تحويل الإنتاج» لتسجيل تحويل الإنتاج.",
   "platformAdmin": "مدير المنصة",
   "platformDashboard": "لوحة إدارة المنصة",
   "users": "المستخدمون",

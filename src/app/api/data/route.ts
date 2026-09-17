@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
 }
 const commandErrors: Record<string, string> = {
   layout_conflict: "layoutConflict",
+  use_transfer_command: "useTransferCommand",
   description_required: "reasonDescriptionRequired",
   invalid_restart_time: "restartTimeInvalid",
   invalid_order: "activeOrderRequired",
@@ -32,20 +33,27 @@ const commandErrors: Record<string, string> = {
   cannot_grant_higher_permissions: "permissionError",
   owner_required: "permissionError",
 };
-const rpcModules: Record<string, [string, string]> = {
-  set_user_permissions: ["roles", "edit"],
-  save_line_layout: ["lines", "edit"],
-  transfer_production: ["centers", "edit"],
-  configure_center_links: ["centers", "edit"],
-  set_support_by_email: ["support", "edit"],
-  set_daily_target: ["orders", "edit"],
-  record_output: ["orders", "edit"],
-  record_access: ["reports", "export"],
-  manage_member: ["employees", "approve"],
-  get_join_code: ["settings", "edit"],
-  update_settings: ["settings", "edit"],
-  set_permissions: ["roles", "edit"],
-  set_support: ["support", "edit"],
+/** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
+const rpcModules: Record<string, [string, string][]> = {
+  set_user_permissions: [["roles", "edit"]],
+  save_line_layout: [
+    ["lines", "edit"],
+    ["centers", "edit"],
+  ],
+  transfer_production: [
+    ["centers", "edit"],
+    ["orders", "edit"],
+  ],
+  configure_center_links: [["centers", "edit"]],
+  set_support_by_email: [["support", "edit"]],
+  set_daily_target: [["orders", "edit"]],
+  record_output: [["orders", "edit"]],
+  record_access: [["reports", "export"]],
+  manage_member: [["employees", "approve"]],
+  get_join_code: [["settings", "edit"]],
+  update_settings: [["settings", "edit"]],
+  set_permissions: [["roles", "edit"]],
+  set_support: [["support", "edit"]],
 };
 export async function POST(req: NextRequest) {
   try {
@@ -90,8 +98,8 @@ export async function POST(req: NextRequest) {
           context,
         );
     } else if (rpcModules[command]) {
-      const [module, action] = rpcModules[command];
-      await authorize(args.factory, module, action, context);
+      for (const [module, action] of rpcModules[command])
+        await authorize(args.factory, module, action, context);
     } else if (
       ![
         "create_factory",

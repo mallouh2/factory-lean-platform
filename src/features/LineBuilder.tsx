@@ -11,7 +11,8 @@ export default function LineBuilder(
   const [draft, setDraft] = useState<Row[] | null>(null),
     [version, setVersion] = useState(0),
     [busy, setBusy] = useState(false),
-    [selected, setSelected] = useState("");
+    [selected, setSelected] = useState(""),
+    [panels, setPanels] = useState({ line: false, machine: false, areas: false });
   useEffect(() => {
     props.onDirtyChange?.(!!draft);
     const warn = (e: BeforeUnloadEvent) => {
@@ -32,9 +33,29 @@ export default function LineBuilder(
   const editable = can("lines", "edit") && can("centers", "edit");
   function change(next: Row[]) {
     if (!editable) return;
-    if (!draft) setVersion(Number(s.factory?.structure_version));
+    if (!draft) {
+      setVersion(Number(s.factory?.structure_version));
+      // Record forms edit saved state; creating while drafting would bump the
+      // structure version and invalidate the pending arrangement.
+      setPanels({ line: false, machine: false, areas: false });
+    }
     setDraft(next);
   }
+  function openPanel(key: "line" | "machine" | "areas") {
+    if (draft) {
+      if (!confirm(t("discardChanges"))) return;
+      setDraft(null);
+    }
+    setPanels((p) => ({ ...p, [key]: true }));
+  }
+  const guardSummary =
+    (key: "line" | "machine" | "areas") =>
+    (e: React.MouseEvent<HTMLElement>) => {
+      if (draft) {
+        e.preventDefault();
+        openPanel(key);
+      }
+    };
   function move(id: string, line: string, index: number) {
     const item = centers.find((c) => c.id === id);
     if (!item) return;
@@ -104,6 +125,22 @@ export default function LineBuilder(
           </div>
         </header>
         {draft && <p role="status">{t("unsavedLayout")}</p>}
+        <div className="row-actions">
+          {can("lines", "create") && (
+            <button disabled={busy} onClick={() => openPanel("line")}>
+              + {t("createLine")}
+            </button>
+          )}
+          {can("centers", "create") && (
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => openPanel("machine")}
+            >
+              + {t("addMachine")}
+            </button>
+          )}
+        </div>
         <div className="builder-grid">
           {[{ id: "", name: t("availableMachines") }, ...lines].map((line) => {
             const group = centers
@@ -336,22 +373,36 @@ export default function LineBuilder(
           })}
         </div>
       </section>
-      {!draft && (
-        <>
-          <details className="panel">
-            <summary>{t("createLine")}</summary>
-            <Configuration {...props} view="lines" />
-          </details>
-          <details className="panel">
-            <summary>{t("addMachine")}</summary>
-            <Configuration {...props} view="centers" />
-          </details>
-          <details className="panel">
-            <summary>{t("areasOptional")}</summary>
-            <Configuration {...props} view="factory" />
-          </details>
-        </>
-      )}
+      <details
+        className="panel"
+        open={panels.line}
+        onToggle={(e) =>
+          setPanels((p) => ({ ...p, line: e.currentTarget.open }))
+        }
+      >
+        <summary onClick={guardSummary("line")}>{t("createLine")}</summary>
+        <Configuration {...props} view="lines" />
+      </details>
+      <details
+        className="panel"
+        open={panels.machine}
+        onToggle={(e) =>
+          setPanels((p) => ({ ...p, machine: e.currentTarget.open }))
+        }
+      >
+        <summary onClick={guardSummary("machine")}>{t("addMachine")}</summary>
+        <Configuration {...props} view="centers" />
+      </details>
+      <details
+        className="panel"
+        open={panels.areas}
+        onToggle={(e) =>
+          setPanels((p) => ({ ...p, areas: e.currentTarget.open }))
+        }
+      >
+        <summary onClick={guardSummary("areas")}>{t("areasOptional")}</summary>
+        <Configuration {...props} view="factory" />
+      </details>
     </>
   );
 }

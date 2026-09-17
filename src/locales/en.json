@@ -269,6 +269,7 @@
   "addMachine": "Add / edit machine",
   "areasOptional": "Areas (optional)",
   "layoutConflict": "The arrangement changed. Refresh and try again.",
+  "useTransferCommand": "Use the Transfer production command to record a production transfer.",
   "platformAdmin": "Platform administrator",
   "platformDashboard": "Platform dashboard",
   "users": "Users",

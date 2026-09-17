@@ -3,18 +3,14 @@ export function formatDuration(minutes, locale = "en") {
   const total = Math.max(0, Math.floor(Number(minutes) || 0));
   const hours = Math.floor(total / 60),
     rest = total % 60;
-  const unit = (value, name) =>
-    new Intl.NumberFormat(locale, {
-      style: "unit",
-      unit: name,
-      unitDisplay: "long",
-    }).format(value);
-  return [
-    hours ? unit(hours, "hour") : "",
-    rest || !hours ? unit(rest, "minute") : "",
-  ]
-    .filter(Boolean)
-    .join(locale === "ar" ? " و" : " ");
+  if (locale === "ar") {
+    // CLDR now defaults the ar locale to Latin digits; request Arabic-Indic explicitly.
+    const digit = (value) => value.toLocaleString("ar-u-nu-arab");
+    if (!hours) return `${digit(total)} د`;
+    return `${digit(hours)} س ${digit(rest).padStart(2, "٠")} د`;
+  }
+  if (!hours) return `${total} min`;
+  return `${hours}h ${String(rest).padStart(2, "0")}m`;
 }
 /** A sequence describes downstream dependency, never a replacement for the machine's actual state. */
 export function evaluateFlow(centers, stops, transfers, now = Date.now()) {

@@ -13,15 +13,27 @@ select set_config('test.order',public.save_record(current_setting('test.factory'
 select set_config('test.original',public.save_record(current_setting('test.factory')::uuid,'centers',null,jsonb_build_object('name','Original machine','code','ORIG','order_id',current_setting('test.order'),'production_speed',120))::text,true);
 select set_config('test.alternative',public.save_record(current_setting('test.factory')::uuid,'centers',null,'{"name":"Alternative machine","code":"ALT"}')::text,true);
 select set_config('test.reason',(select id::text from public.downtime_reasons where factory_id=current_setting('test.factory')::uuid and name='Mechanical Failure'),true);
+select set_config('test.version_before',(select structure_version::text from public.factories where id=current_setting('test.factory')::uuid),true);
 select public.save_line_layout(current_setting('test.factory')::uuid,(select structure_version from public.factories where id=current_setting('test.factory')::uuid),jsonb_build_array(jsonb_build_object('id',current_setting('test.original'),'line_id',current_setting('test.line'),'position',0,'dependency_mode','blocking','impact_scope','whole_line','buffer_minutes',0),jsonb_build_object('id',current_setting('test.alternative'),'line_id',null,'position',0,'dependency_mode','independent','impact_scope','none','buffer_minutes',0)));
+do $$begin
+ if (select structure_version from public.factories where id=current_setting('test.factory')::uuid)<=current_setting('test.version_before')::int then raise exception 'Layout version did not advance';end if;
+ if not exists(select 1 from public.work_centers where id=current_setting('test.original')::uuid and line_id::text=current_setting('test.line') and position=0 and dependency_mode='blocking' and impact_scope='whole_line') then raise exception 'Saved layout not applied';end if;
+ if not exists(select 1 from public.work_centers where id=current_setting('test.alternative')::uuid and line_id is null and dependency_mode='independent') then raise exception 'Lineless machine not independent';end if;
+end$$;
 select public.configure_center_links(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,array[current_setting('test.alternative')::uuid],'[]');
 select public.change_status(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,'running');
 select public.change_status(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,'stopped',current_setting('test.reason')::uuid,notes=>'Pump failure');
 select public.transfer_production(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,current_setting('test.alternative')::uuid,'Use spare cooling machine');
 do $$begin
+ if not exists(select 1 from public.work_centers where id=current_setting('test.original')::uuid and status='stopped') then raise exception 'Original not physically stopped';end if;
+ if not exists(select 1 from public.production_transfers where original_id=current_setting('test.original')::uuid and alternative_id=current_setting('test.alternative')::uuid and ended_at is null and original_returned_at is null) then raise exception 'Transfer not open';end if;
+ if not exists(select 1 from public.downtime_events where work_center_id=current_setting('test.original')::uuid and ended_at is null and transferred and alternative_id=current_setting('test.alternative')::uuid and notes='Pump failure') then raise exception 'Downtime annotation missing or history rewritten';end if;
+end$$;
+do $$begin
  if (select status from public.work_centers where id=current_setting('test.alternative')::uuid)<>'running' then raise exception 'Alternative not running';end if;
  if not exists(select 1 from public.downtime_events where work_center_id=current_setting('test.original')::uuid and impact_scope_at_start='whole_line' and blocking_at_start and order_id=current_setting('test.order')::uuid) then raise exception 'Context not preserved';end if;
- begin perform public.save_line_layout(current_setting('test.factory')::uuid,0,'[]');raise exception 'Stale layout accepted';exception when others then if sqlerrm<>'layout_conflict' then raise;end if;end;
+ begin perform public.save_line_layout(current_setting('test.factory')::uuid,0,jsonb_build_array(jsonb_build_object('id',current_setting('test.original'),'line_id',null,'position',4,'dependency_mode','independent','impact_scope','none','buffer_minutes',0),jsonb_build_object('id',current_setting('test.alternative'),'line_id',null,'position',5,'dependency_mode','independent','impact_scope','none','buffer_minutes',0)));raise exception 'Stale layout accepted';exception when others then if sqlerrm<>'layout_conflict' then raise;end if;end;
+ if not exists(select 1 from public.work_centers where id=current_setting('test.original')::uuid and line_id::text=current_setting('test.line') and position=0 and impact_scope='whole_line') then raise exception 'Stale layout overwrote the saved arrangement';end if;
  begin perform public.change_status(current_setting('test.factory')::uuid,current_setting('test.alternative')::uuid,'maintenance',current_setting('test.reason')::uuid);raise exception 'Maintenance state accepted';exception when others then if sqlerrm<>'maintenance_is_stop_reason' then raise;end if;end;
 end$$;
 select public.change_status(current_setting('test.factory')::uuid,current_setting('test.alternative')::uuid,'stopped',current_setting('test.reason')::uuid,notes=>'Alternative interrupted');
@@ -68,4 +80,4 @@ do $$begin
  if exists(select 1 from public.factories where id=current_setting('test.platform_factory')::uuid) then raise exception 'Factory admin read foreign factory';end if;
 end$$;
 rollback;
-select 'PASS: factory, line, machine layout, scope, transfer, return, audit, person permissions, platform creation and tenant isolation' as result;
+select 'PASS: factory, line, machine layout versioning, scope, transfer, interruption, return, audit, person permissions, platform creation and tenant isolation' as result;
