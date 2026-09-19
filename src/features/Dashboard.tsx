@@ -3,11 +3,7 @@ import { useState } from "react";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 import { Badge, Empty, localName } from "@/components/ui";
-import {
-  downtimeMinutes,
-  reportPeriod,
-  formatLocalInput,
-} from "@/utils/manufacturing.mjs";
+import { reportPeriod } from "@/utils/manufacturing.mjs";
 export default function Dashboard(
   props: FeatureProps & {
     onCenter: (row: Row) => void;
@@ -30,55 +26,70 @@ export default function Dashboard(
     stops,
     s.tables.production_transfers || [],
   );
-  const duration = stops.reduce(
-    (sum, e) => sum + downtimeMinutes(e, period.from, period.to),
-    0,
+  const active = orders.filter((o) => o.status === "active");
+  // "Today" always means the factory's own calendar day, DST included.
+  const entries = (s.tables.production_entries || []).filter(
+    (e) =>
+      String(e.created_at) >= period.from &&
+      String(e.created_at) < period.to,
   );
-  const active = orders.filter((o) => o.status === "active"),
-    total = (s.tables.production_entries || [])
+  const total = entries.reduce((n, e) => n + Number(e.produced), 0),
+    delayed = active.filter(
+      (x) =>
+        x.expected_finish &&
+        Date.parse(String(x.expected_finish)) < Date.now(),
+    ).length;
+  const lines = (s.tables.production_lines || []).filter((x) => !x.archived);
+  const lineSummary = (lineId: string) => {
+    const orderIds = new Set(
+      orders
+        .filter((o) => String(o.line_id) === String(lineId))
+        .map((o) => String(o.id)),
+    );
+    const centerIds = new Set(
+      centers
+        .filter((c) => String(c.line_id) === String(lineId))
+        .map((c) => String(c.id)),
+    );
+    const output = entries
       .filter(
         (e) =>
-          String(e.created_at) >= period.from &&
-          String(e.created_at) < period.to,
+          orderIds.has(String(e.order_id)) ||
+          centerIds.has(String(e.work_center_id)),
       )
-      .reduce((n, e) => n + Number(e.produced), 0),
-    target = (s.tables.daily_targets || [])
-      .filter(
-        (e) =>
-          e.day ===
-          formatLocalInput(
-            new Date().toISOString(),
-            String(s.factory?.timezone),
-          ).slice(0, 10),
-      )
-      .reduce((n, e) => n + Number(e.target), 0);
+      .reduce((n, e) => n + Number(e.produced), 0);
+    const order = active.find((o) => String(o.line_id) === String(lineId));
+    const product = s.tables.products?.find(
+      (p) => p.id === order?.product_id,
+    );
+    return { order, product, output };
+  };
   const kpis = [
     {
-      label: "runningMachines",
-      value: `${centers.filter((x) => x.status === "running").length} / ${centers.length}`,
-      action: () => setFilter("running"),
+      label: "productionLines",
+      value: lines.length,
+      action: () => onNavigate("lines"),
+      color: "blue",
+    },
+    {
+      label: "activeOrders",
+      value: active.length,
+      action: () => onNavigate("orders"),
       color: "green",
     },
     {
-      label: "stoppedMachines",
-      value: centers.filter((x) => x.status === "stopped").length,
-      action: () => setFilter("stopped"),
+      label: "delayedOrders",
+      value: delayed,
+      action: () => onNavigate("orders"),
       color: "red",
     },
     {
-      label: "blockedFlows",
-      value: Object.values(flow).filter((x) => x.state === "blocked").length,
-      action: () => onNavigate("downtime"),
+      label: "todayProduction",
+      value: total.toLocaleString(lang),
+      action: () => onNavigate("orders"),
       color: "orange",
     },
-    {
-      label: "achievement",
-      value: target ? `${Math.round((total / target) * 100)}%` : "—",
-      action: () => onNavigate("orders"),
-      color: "blue",
-    },
   ];
-  const lines = (s.tables.production_lines || []).filter((x) => !x.archived);
   const groups = [...lines, { id: "independent", name: t("independent") }];
   const visible = centers.filter(
     (x) =>
@@ -104,34 +115,6 @@ export default function Dashboard(
             <small aria-hidden="true">↗</small>
           </button>
         ))}
-      </div>
-      <div
-        className="summary-strip"
-        role="group"
-        aria-label={t("productionStatus")}
-      >
-        <button className="summary-link" onClick={() => onNavigate("orders")}>
-          {t("activeOrders")} <b>{active.length}</b>
-        </button>
-        <button className="summary-link" onClick={() => onNavigate("orders")}>
-          {t("delayedOrders")}{" "}
-          <b>
-            {
-              active.filter(
-                (x) =>
-                  x.expected_finish &&
-                  Date.parse(String(x.expected_finish)) < Date.now(),
-              ).length
-            }
-          </b>
-        </button>
-        <button className="summary-link" onClick={() => onNavigate("orders")}>
-          {t("todayProduction")} <b>{total.toLocaleString(lang)}</b>
-        </button>
-        <button className="summary-link" onClick={() => onNavigate("orders")}>
-          {t("productionTarget")}{" "}
-          <b>{target ? target.toLocaleString(lang) : t("notAvailable")}</b>
-        </button>
       </div>
       <section className="panel floor-panel">
         <header className="section-head">
@@ -189,6 +172,8 @@ export default function Dashboard(
               )
               .sort((a, b) => Number(a.position) - Number(b.position));
             if (!machines.length) return null;
+            const summary =
+              group.id === "independent" ? null : lineSummary(String(group.id));
             return (
               <section className="line-floor" key={String(group.id)}>
                 <div className="line-heading">
@@ -197,6 +182,26 @@ export default function Dashboard(
                     {machines.length} {t("centers")}
                   </span>
                 </div>
+                {summary && (
+                  <p className="line-detail">
+                    <bdi dir="ltr">
+                      {summary.product || summary.order
+                        ? `${
+                            summary.product
+                              ? localName(summary.product, lang)
+                              : t("unassigned")
+                          } · ${
+                            summary.order ? String(summary.order.code) : "—"
+                          }`
+                        : t("unassigned")}
+                    </bdi>
+                    {" · "}
+                    {t("todayProduction")}:{" "}
+                    <bdi dir="ltr">
+                      {summary.output.toLocaleString(lang)}
+                    </bdi>
+                  </p>
+                )}
                 <div className="machine-flow">
                   {machines.map((center) => {
                     const order = orders.find((o) => o.id === center.order_id),

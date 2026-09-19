@@ -125,22 +125,6 @@ export default function LineBuilder(
           </div>
         </header>
         {draft && <p role="status">{t("unsavedLayout")}</p>}
-        <div className="row-actions">
-          {can("lines", "create") && (
-            <button disabled={busy} onClick={() => openPanel("line")}>
-              + {t("createLine")}
-            </button>
-          )}
-          {can("centers", "create") && (
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={() => openPanel("machine")}
-            >
-              + {t("addMachine")}
-            </button>
-          )}
-        </div>
         <div className="builder-grid">
           {[{ id: "", name: t("availableMachines") }, ...lines].map((line) => {
             const group = centers

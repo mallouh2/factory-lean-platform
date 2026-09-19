@@ -1,14 +1,52 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Field } from "@/components/ui";
 import type { FeatureProps } from "./types";
+/** Shared with the landing join form; cleared only after request_membership succeeds. */
+const JOIN_CODE_KEY = "factory-join-code";
+/** One automatic join attempt per code per browser session, surviving remounts. */
+const JOIN_ATTEMPT_KEY = "factory-join-attempt";
 export default function Onboarding({ snapshot, t, command }: FeatureProps) {
   const [tab, setTab] = useState("createFactory");
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const autoJoinInFlight = useRef(false);
+  const stashedCode =
+    typeof window === "undefined"
+      ? ""
+      : window.localStorage.getItem(JOIN_CODE_KEY) || "";
+  useEffect(() => {
+    if (autoJoinInFlight.current || snapshot.membership || !stashedCode)
+      return;
+    if (window.sessionStorage.getItem(JOIN_ATTEMPT_KEY) === stashedCode)
+      return;
+    autoJoinInFlight.current = true;
+    window.sessionStorage.setItem(JOIN_ATTEMPT_KEY, stashedCode);
+    const display = String(snapshot.user.email || "").split("@")[0] || "member";
+    command("request_membership", {
+      code: stashedCode,
+      display_name: display,
+    })
+      .then(() => {
+        window.localStorage.removeItem(JOIN_CODE_KEY);
+        window.sessionStorage.removeItem(JOIN_ATTEMPT_KEY);
+      })
+      .catch((error) => {
+        autoJoinInFlight.current = false;
+        setTab("joinFactory");
+        setNotice(error instanceof Error ? error.message : "error");
+      });
+  }, [snapshot.membership, snapshot.user.email, stashedCode, command]);
   if (snapshot.membership)
     return (
       <section className="onboarding panel">
         <h1>{t(String(snapshot.membership.status))}</h1>
-        <p>{t("pendingHelp")}</p>
+        <p>
+          {t(
+            snapshot.membership.status === "rejected"
+              ? "rejectedHelp"
+              : "pendingHelp",
+          )}
+        </p>
       </section>
     );
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -18,33 +56,35 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
     const logo = data.get("logo");
     data.delete("logo");
     const form = Object.fromEntries(data);
+    // Browser-detected zone first; the established project default only when detection fails.
+    const timezone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Qatar";
     try {
       const factoryId = await command(
         tab === "createFactory" ? "create_factory" : "request_membership",
-        form,
+        tab === "createFactory" ? { ...form, timezone } : form,
       );
-      if (
-        tab === "createFactory" &&
-        factoryId &&
-        logo instanceof File &&
-        logo.size
-      ) {
-        const upload = new FormData();
-        upload.set("factory", String(factoryId));
-        upload.set("file", logo);
-        const response = await fetch("/api/logo", {
-          method: "POST",
-          body: upload,
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error("logoError");
-        await command("update_settings", {
-          factory: factoryId,
-          name: form.name,
-          timezone: form.timezone,
-          logo: result.path,
-        });
+      if (tab === "createFactory" && factoryId) {
+        window.localStorage.removeItem(JOIN_CODE_KEY);
+        if (logo instanceof File && logo.size) {
+          const upload = new FormData();
+          upload.set("factory", String(factoryId));
+          upload.set("file", logo);
+          const response = await fetch("/api/logo", {
+            method: "POST",
+            body: upload,
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error("logoError");
+          await command("update_settings", {
+            factory: factoryId,
+            name: form.name,
+            timezone,
+            logo: result.path,
+          });
+        }
       }
+      if (tab === "joinFactory") window.localStorage.removeItem(JOIN_CODE_KEY);
     } catch (error) {
       window.dispatchEvent(
         new CustomEvent("factory-error", {
@@ -81,18 +121,17 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
                 accept="image/png,image/jpeg,image/webp"
               />
             </Field>
-            <Field label={t("timezone")}>
-              <select name="timezone" defaultValue="Asia/Qatar">
-                {Intl.supportedValuesOf("timeZone").map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-            </Field>
           </>
         ) : (
           <>
             <Field label={t("joinCode")}>
-              <input name="code" required maxLength={20} dir="ltr" />
+              <input
+                name="code"
+                required
+                maxLength={20}
+                dir="ltr"
+                defaultValue={stashedCode}
+              />
             </Field>
             <Field label={t("displayName")}>
               <input
@@ -102,6 +141,11 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
                 required
               />
             </Field>
+            {notice && (
+              <p role="status" className="notice">
+                {t(notice)}
+              </p>
+            )}
           </>
         )}
         <button className="primary" disabled={busy}>

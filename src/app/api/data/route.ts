@@ -33,6 +33,12 @@ const commandErrors: Record<string, string> = {
   cannot_grant_higher_permissions: "permissionError",
   owner_required: "permissionError",
 };
+/** request_membership reports failures as JSONB values instead of raising; map them to specific client keys. */
+const joinErrors: Record<string, string> = {
+  invalid_join_code: "invalidJoinCode",
+  rate_limited: "rateLimited",
+  already_joined: "alreadyJoined",
+};
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
   set_user_permissions: [["roles", "edit"]],
@@ -110,7 +116,15 @@ export async function POST(req: NextRequest) {
       throw new Error("invalid_command");
     const { data, error } = await db.rpc(command, args);
     if (data?.error)
-      return NextResponse.json({ error: "joinError" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            command === "request_membership"
+              ? joinErrors[data.error] || "joinError"
+              : "joinError",
+        },
+        { status: 400 },
+      );
     if (error) {
       console.warn("factory_command_failed", { command, code: error.code });
       return NextResponse.json(

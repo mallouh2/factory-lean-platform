@@ -1,5 +1,6 @@
 import CenterCapabilities from "./CenterCapabilities";
 import {
+  autoCode,
   formatLocalInput,
   localDateTimeToUtc,
 } from "@/utils/manufacturing.mjs";
@@ -7,18 +8,21 @@ import { useState } from "react";
 import { Dialog, Empty, Field, Badge, localName } from "@/components/ui";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
-const config: Record<string, { table: string; fields: string[] }> = {
+const config: Record<string, {
+  table: string;
+  fields: string[];
+  createFields?: string[];
+}> = {
   factory: { table: "areas", fields: ["name", "name_ar"] },
   lines: {
     table: "production_lines",
-    fields: ["name", "name_ar", "code", "area_id"],
+    fields: ["name", "name_ar", "area_id"],
   },
   centers: {
     table: "work_centers",
     fields: [
       "name",
       "name_ar",
-      "code",
       "type",
       "area_id",
       "line_id",
@@ -35,6 +39,8 @@ const config: Record<string, { table: string; fields: string[] }> = {
       "description",
       "notes",
     ],
+    // A new machine is master data only; operational values belong to later workflows.
+    createFields: ["name", "name_ar", "type", "area_id", "line_id", "description"],
   },
   orders: {
     table: "production_orders",
@@ -119,9 +125,11 @@ export default function Configuration({
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
+    const creating = !editing?.id;
+    const activeFields = creating ? c.createFields || c.fields : c.fields;
     const f = new FormData(e.currentTarget),
       payload: Record<string, unknown> = {};
-    for (const field of c.fields) {
+    for (const field of activeFields) {
       const value = String(f.get(field) || "");
       payload[field] =
         field === "requires_description"
@@ -138,6 +146,8 @@ export default function Configuration({
                   : null
                 : value;
     }
+    if (creating && (view === "lines" || view === "centers"))
+      payload.code = autoCode(view === "lines" ? "LINE" : "WC");
     try {
       await command("save_record", {
         factory: s.factory?.id,
@@ -305,7 +315,8 @@ export default function Configuration({
         >
           <form onSubmit={save}>
             <div className="form-grid">
-              {c.fields.map((field) => (
+              {(editing.id ? c.fields : c.createFields || c.fields).map(
+                (field) => (
                 <Field
                   key={field}
                   label={

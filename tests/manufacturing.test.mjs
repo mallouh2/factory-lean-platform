@@ -9,6 +9,7 @@ import {
   localDateTimeToUtc,
   formatLocalInput,
   statusUtilization,
+  autoCode,
 } from "../src/utils/manufacturing.mjs";
 import fs from "node:fs";
 test("overnight downtime clips to selected day", () =>
@@ -114,6 +115,16 @@ test("nonexistent DST local time is rejected", () =>
     () => localDateTimeToUtc("2026-03-08T02:30", "America/New_York"),
     /invalidDate/,
   ));
+test("auto codes stay unique, uppercase and within the database length limit", () => {
+  const seen = new Set();
+  for (let i = 0; i < 500; i++) {
+    const code = autoCode(i % 2 ? "LINE" : "WC");
+    assert.match(code, /^(LINE|WC)-[0-9A-Z]{8,20}$/);
+    assert.ok(code.length <= 40);
+    seen.add(code);
+  }
+  assert.equal(seen.size, 500);
+});
 test("utilization excludes unknown time before first event", () => {
   const result = statusUtilization(
     [

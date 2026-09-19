@@ -13,6 +13,14 @@ export function downtimeMinutes(event, from, to, now = Date.now()) {
     ? Math.max(0, end - start) / 60000
     : 0;
 }
+/** Internal record identifier so users never invent codes; database uniqueness remains the guard. */
+export function autoCode(prefix) {
+  const salt = Math.floor(Math.random() * 36 ** 6)
+    .toString(36)
+    .toUpperCase()
+    .padStart(6, "0");
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}${salt}`;
+}
 export function calculateOee(observation) {
   if (!observation) return null;
   const {
