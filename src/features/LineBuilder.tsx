@@ -377,7 +377,7 @@ export default function LineBuilder(
         className="panel"
         open={panels.line}
         onToggle={(e) =>
-          setPanels((p) => ({ ...p, line: e.currentTarget.open }))
+          setPanels((p) => ({ ...p, line: e.currentTarget?.open ?? p.line }))
         }
       >
         <summary onClick={guardSummary("line")}>{t("createLine")}</summary>
@@ -387,7 +387,10 @@ export default function LineBuilder(
         className="panel"
         open={panels.machine}
         onToggle={(e) =>
-          setPanels((p) => ({ ...p, machine: e.currentTarget.open }))
+          setPanels((p) => ({
+            ...p,
+            machine: e.currentTarget?.open ?? p.machine,
+          }))
         }
       >
         <summary onClick={guardSummary("machine")}>{t("addMachine")}</summary>
@@ -397,7 +400,10 @@ export default function LineBuilder(
         className="panel"
         open={panels.areas}
         onToggle={(e) =>
-          setPanels((p) => ({ ...p, areas: e.currentTarget.open }))
+          setPanels((p) => ({
+            ...p,
+            areas: e.currentTarget?.open ?? p.areas,
+          }))
         }
       >
         <summary onClick={guardSummary("areas")}>{t("areasOptional")}</summary>
