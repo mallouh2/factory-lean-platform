@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 import { localName, Badge, Field } from "@/components/ui";
-import Configuration from "./Configuration";
+import LineConfigPanels from "./LineConfigPanels";
 import CenterCapabilities from "./CenterCapabilities";
 export default function LineBuilder(
-  props: FeatureProps & { onDirtyChange?: (dirty: boolean) => void },
+  props: FeatureProps & {
+    onDirtyChange?: (dirty: boolean) => void;
+    onSwitchVersion?: () => void;
+  },
 ) {
   const { snapshot: s, t, lang, command, can } = props;
   const [draft, setDraft] = useState<Row[] | null>(null),
@@ -41,21 +44,6 @@ export default function LineBuilder(
     }
     setDraft(next);
   }
-  function openPanel(key: "line" | "machine" | "areas") {
-    if (draft) {
-      if (!confirm(t("discardChanges"))) return;
-      setDraft(null);
-    }
-    setPanels((p) => ({ ...p, [key]: true }));
-  }
-  const guardSummary =
-    (key: "line" | "machine" | "areas") =>
-    (e: React.MouseEvent<HTMLElement>) => {
-      if (draft) {
-        e.preventDefault();
-        openPanel(key);
-      }
-    };
   function move(id: string, line: string, index: number) {
     const item = centers.find((c) => c.id === id);
     if (!item) return;
@@ -107,6 +95,16 @@ export default function LineBuilder(
             <p>{t("builderHelp")}</p>
           </div>
           <div className="row-actions">
+            {props.onSwitchVersion && (
+              <button
+                onClick={() => {
+                  if (draft && !confirm(t("discardChanges"))) return;
+                  props.onSwitchVersion?.();
+                }}
+              >
+                {t("v2Preview")}
+              </button>
+            )}
             <button
               disabled={!draft || busy}
               onClick={() => {
@@ -357,42 +355,13 @@ export default function LineBuilder(
           })}
         </div>
       </section>
-      <details
-        className="panel"
-        open={panels.line}
-        onToggle={(e) =>
-          setPanels((p) => ({ ...p, line: e.currentTarget?.open ?? p.line }))
-        }
-      >
-        <summary onClick={guardSummary("line")}>{t("createLine")}</summary>
-        <Configuration {...props} view="lines" />
-      </details>
-      <details
-        className="panel"
-        open={panels.machine}
-        onToggle={(e) =>
-          setPanels((p) => ({
-            ...p,
-            machine: e.currentTarget?.open ?? p.machine,
-          }))
-        }
-      >
-        <summary onClick={guardSummary("machine")}>{t("addMachine")}</summary>
-        <Configuration {...props} view="centers" />
-      </details>
-      <details
-        className="panel"
-        open={panels.areas}
-        onToggle={(e) =>
-          setPanels((p) => ({
-            ...p,
-            areas: e.currentTarget?.open ?? p.areas,
-          }))
-        }
-      >
-        <summary onClick={guardSummary("areas")}>{t("areasOptional")}</summary>
-        <Configuration {...props} view="factory" />
-      </details>
+      <LineConfigPanels
+        {...props}
+        draft={!!draft}
+        panels={panels}
+        setPanels={setPanels}
+        onDiscardDraft={() => setDraft(null)}
+      />
     </>
   );
 }

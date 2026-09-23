@@ -10,6 +10,7 @@ import CenterDetails from "@/features/CenterDetails";
 import Configuration from "@/features/Configuration";
 import Reports from "@/features/Reports";
 import LineBuilder from "@/features/LineBuilder";
+import FactoryFloorV2 from "@/features/FactoryFloorV2";
 import PlatformDashboard from "@/features/PlatformDashboard";
 import PersonPermissions from "@/features/PersonPermissions";
 import DowntimeAnalysis from "@/features/DowntimeAnalysis";
@@ -60,7 +61,12 @@ export default function FactoryApp() {
     [notice, setNotice] = useState(""),
     [mobile, setMobile] = useState(false),
     [supportFactory, setSupportFactory] = useState(""),
-    [center, setCenter] = useState<Row | null>(null);
+    [center, setCenter] = useState<Row | null>(null),
+    [floorV2, setFloorV2] = useState(
+      () =>
+        typeof window === "undefined" ||
+        localStorage.getItem("factory-floor-v2") !== "0",
+    );
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
   const can = (module: string, action = "view") =>
@@ -113,6 +119,9 @@ export default function FactoryApp() {
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
     localStorage.setItem("factory-language", lang);
   }, [lang]);
+  useEffect(() => {
+    localStorage.setItem("factory-floor-v2", floorV2 ? "1" : "0");
+  }, [floorV2]);
   async function command(command: string, args: Record<string, unknown>) {
     setNotice("");
     try {
@@ -408,7 +417,19 @@ export default function FactoryApp() {
                   ) : view === "reports" ? (
                     <Reports {...props} view={view} />
                   ) : view === "lines" ? (
-                    <LineBuilder {...props} onDirtyChange={setDirtyLayout} />
+                    floorV2 ? (
+                      <FactoryFloorV2
+                        {...props}
+                        onEditLayout={() => setFloorV2(false)}
+                        onRefresh={() => void load()}
+                      />
+                    ) : (
+                      <LineBuilder
+                        {...props}
+                        onDirtyChange={setDirtyLayout}
+                        onSwitchVersion={() => setFloorV2(true)}
+                      />
+                    )
                   ) : view === "roles" ? (
                     <>
                       <PersonPermissions {...props} />

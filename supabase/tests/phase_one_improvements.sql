@@ -7,11 +7,12 @@ insert into auth.users(id,email,email_confirmed_at) values
 select set_config('request.jwt.claim.sub','42000000-0000-4000-8000-000000000001',true);
 set local role authenticated;
 select set_config('test.factory',public.create_factory('Improvement acceptance','Asia/Qatar','Testing')::text,true);
+select set_config('test.category',(select id::text from public.work_center_categories where factory_id=current_setting('test.factory')::uuid and name='Generic Work Center'),true);
 select set_config('test.line',public.save_record(current_setting('test.factory')::uuid,'lines',null,'{"name":"Test line","code":"TEST"}')::text,true);
 select set_config('test.product',public.save_record(current_setting('test.factory')::uuid,'products',null,'{"name":"Intermediate test","code":"TEST-P","stage":"semi_finished"}')::text,true);
 select set_config('test.order',public.save_record(current_setting('test.factory')::uuid,'orders',null,jsonb_build_object('code','TEST-O','product_id',current_setting('test.product'),'target_quantity',100,'status','active'))::text,true);
-select set_config('test.original',public.save_record(current_setting('test.factory')::uuid,'centers',null,jsonb_build_object('name','Original machine','code','ORIG','order_id',current_setting('test.order'),'production_speed',120))::text,true);
-select set_config('test.alternative',public.save_record(current_setting('test.factory')::uuid,'centers',null,'{"name":"Alternative machine","code":"ALT"}')::text,true);
+select set_config('test.original',public.save_record(current_setting('test.factory')::uuid,'centers',null,jsonb_build_object('name','Original machine','code','ORIG','order_id',current_setting('test.order'),'category_id',current_setting('test.category'),'production_speed',120))::text,true);
+select set_config('test.alternative',public.save_record(current_setting('test.factory')::uuid,'centers',null,jsonb_build_object('name','Alternative machine','code','ALT','category_id',current_setting('test.category')))::text,true);
 select set_config('test.reason',(select id::text from public.downtime_reasons where factory_id=current_setting('test.factory')::uuid and name='Mechanical Failure'),true);
 select set_config('test.version_before',(select structure_version::text from public.factories where id=current_setting('test.factory')::uuid),true);
 select public.save_line_layout(current_setting('test.factory')::uuid,(select structure_version from public.factories where id=current_setting('test.factory')::uuid),jsonb_build_array(jsonb_build_object('id',current_setting('test.original'),'line_id',current_setting('test.line'),'position',0,'dependency_mode','blocking','impact_scope','whole_line','buffer_minutes',0),jsonb_build_object('id',current_setting('test.alternative'),'line_id',null,'position',0,'dependency_mode','independent','impact_scope','none','buffer_minutes',0)));
@@ -20,7 +21,7 @@ do $$begin
  if not exists(select 1 from public.work_centers where id=current_setting('test.original')::uuid and line_id::text=current_setting('test.line') and position=0 and dependency_mode='blocking' and impact_scope='whole_line') then raise exception 'Saved layout not applied';end if;
  if not exists(select 1 from public.work_centers where id=current_setting('test.alternative')::uuid and line_id is null and dependency_mode='independent') then raise exception 'Lineless machine not independent';end if;
 end$$;
-select public.configure_center_links(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,array[current_setting('test.alternative')::uuid],'[]');
+select public.configure_center_alternatives(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,array[current_setting('test.alternative')::uuid]);
 select public.change_status(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,'running');
 select public.change_status(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,'stopped',current_setting('test.reason')::uuid,notes=>'Pump failure');
 select public.transfer_production(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,current_setting('test.alternative')::uuid,'Use spare cooling machine');
@@ -37,7 +38,7 @@ do $$begin
  begin perform public.change_status(current_setting('test.factory')::uuid,current_setting('test.alternative')::uuid,'maintenance',current_setting('test.reason')::uuid);raise exception 'Maintenance state accepted';exception when others then if sqlerrm<>'maintenance_is_stop_reason' then raise;end if;end;
 end$$;
 select public.change_status(current_setting('test.factory')::uuid,current_setting('test.alternative')::uuid,'stopped',current_setting('test.reason')::uuid,notes=>'Alternative interrupted');
-do $$begin if not exists(select 1 from public.production_transfers where original_id=current_setting('test.original')::uuid and ended_at is not null and original_returned_at is null) then raise exception 'Alternative interruption not recorded';end if;end$$;
+do $$begin if not exists(select 1 from public.production_transfers where original_id=current_setting('test.original')::uuid and ended_at is null and original_returned_at is null) then raise exception 'Alternative interruption closed transfer';end if;end$$;
 select public.change_status(current_setting('test.factory')::uuid,current_setting('test.original')::uuid,'running');
 do $$begin
  if not exists(select 1 from public.production_transfers where original_id=current_setting('test.original')::uuid and original_returned_at is not null and ended_at is not null) then raise exception 'Transfer history not closed';end if;

@@ -10,7 +10,9 @@ import {
   formatLocalInput,
   statusUtilization,
   autoCode,
+  lineTodayOutput,
 } from "../src/utils/manufacturing.mjs";
+import { machineIconCategory } from "../src/utils/machine-icons.mjs";
 import fs from "node:fs";
 test("overnight downtime clips to selected day", () =>
   assert.equal(
@@ -125,6 +127,36 @@ test("auto codes stay unique, uppercase and within the database length limit", (
   }
   assert.equal(seen.size, 500);
 });
+test("line output respects the passed factory-zone window, not local dates", () => {
+  const entries = [
+    { created_at: "2026-09-15T20:30Z", produced: 10, order_id: "o1", work_center_id: "w1" },
+    { created_at: "2026-09-15T21:30Z", produced: 7, order_id: "o1", work_center_id: "w1" },
+    { created_at: "2026-09-14T10:00Z", produced: 99, order_id: "o1", work_center_id: "w1" },
+    { created_at: "2026-09-15T22:00Z", produced: 40, order_id: "oX", work_center_id: "wX" },
+  ];
+  const orders = [{ id: "o1", line_id: "L1" }];
+  const centers = [{ id: "w1", line_id: "L1" }];
+  // Asia/Qatar day 2026-09-15 = 2026-09-14T21:00Z .. 2026-09-15T21:00Z
+  const q = reportPeriod("today", "Asia/Qatar", new Date("2026-09-15T12:00Z"));
+  assert.equal(lineTodayOutput(entries, orders, centers, "L1", q.from, q.to), 10);
+  // non-string ids and empty inputs must not throw
+  assert.equal(lineTodayOutput([], [], [], "L1", q.from, q.to), 0);
+});
+
+test("machine icon classification prefers type and never misreads ambiguous names", () => {
+  assert.equal(machineIconCategory("packing_station", "Anything"), "packing");
+  assert.equal(machineIconCategory("inspection_station", "Extruder 9"), "inspection");
+  assert.equal(machineIconCategory("production_cell", "Mixer"), "cell");
+  assert.equal(machineIconCategory("other", "Printer"), "generic");
+  assert.equal(machineIconCategory("machine", "Material Mixer"), "mixer");
+  assert.equal(machineIconCategory("machine", "Extruder 2"), "extruder");
+  assert.equal(machineIconCategory("machine", "Printer Area Cooling"), "cooling");
+  assert.equal(machineIconCategory("machine", "ماكينة البثق ١"), "extruder");
+  assert.equal(machineIconCategory("machine", "Unknown Device"), "generic");
+  assert.equal(machineIconCategory("", ""), "generic");
+  assert.equal(machineIconCategory(null, "Cutter"), "cutter");
+});
+
 test("utilization excludes unknown time before first event", () => {
   const result = statusUtilization(
     [

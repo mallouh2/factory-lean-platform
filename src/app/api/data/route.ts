@@ -32,6 +32,10 @@ const commandErrors: Record<string, string> = {
   support_account_not_found: "supportNotFound",
   cannot_grant_higher_permissions: "permissionError",
   owner_required: "permissionError",
+  invalid_category: "invalidCategory",
+  category_in_use: "categoryInUse",
+  category_alternative_conflict: "categoryAlternativeConflict",
+  incompatible_alternative: "incompatibleAlternative",
 };
 /** request_membership reports failures as JSONB values instead of raising; map them to specific client keys. */
 const joinErrors: Record<string, string> = {
@@ -50,7 +54,8 @@ const rpcModules: Record<string, [string, string][]> = {
     ["centers", "edit"],
     ["orders", "edit"],
   ],
-  configure_center_links: [["centers", "edit"]],
+  configure_center_alternatives: [["centers", "edit"]],
+  configure_center_capabilities: [["centers", "edit"]],
   set_support_by_email: [["support", "edit"]],
   set_daily_target: [["orders", "edit"]],
   record_output: [["orders", "edit"]],
@@ -77,6 +82,7 @@ export async function POST(req: NextRequest) {
           "factory",
           "lines",
           "centers",
+          "work_center_categories",
           "orders",
           "products",
           "downtime",
@@ -86,7 +92,11 @@ export async function POST(req: NextRequest) {
         throw new Error("invalid_resource");
       await authorize(
         args.factory,
-        args.resource === "products" ? "orders" : args.resource,
+        args.resource === "products"
+          ? "orders"
+          : args.resource === "work_center_categories"
+            ? "centers"
+            : args.resource,
         args.id ? "edit" : "create",
         context,
       );

@@ -1,23 +1,21 @@
-# Existing database migration mapping
+# Database migration history
 
-Checked through the connected Supabase integration on 2026-09-16. The integration records execution timestamps; file names retain their original source versions. Every applied change has a committed SQL file.
+On 2026-09-23, the existing Development and Testing migration-history versions
+were aligned with the source filenames in `supabase/migrations/`. This was a
+history-only repair: the already-applied SQL was not run again.
 
-| Source migration | Development recorded version | Testing recorded version |
-|---|---|---|
-| 20260915100155_phase_one_foundation | 20260915121813 | 20260915155830 |
-| 20260915121815_phase_one_operations | 20260915122019 | 20260915155843 |
-| 20260915122053_phase_one_completion | 20260915122442 | 20260915155859 |
-| 20260915140100_operation_controls | 20260915160127 | 20260915160143 |
-| 20260915162000_operational_integrity | 20260915161617 | 20260915161601 |
-| 20260915165000_work_center_configuration | 20260915162936 | 20260915162915 |
+Testing also records `20260919120000_work_center_categories`, whose schema was
+already live, and `20260923075311_separate_alternatives_and_preserve_open_transfers`.
+The latter's recorded version had been `20260923075609`; its SQL and live
+functions were checked before the history repair. Testing now has one recorded
+version for each local migration, in the same order.
 
-| 20260916120000_personal_access_and_production_flow | 20260916130933 | 20260916124218 |
-| 20260916123000_configurable_stop_impact_scope | 20260916131006 | 20260916124830 |
-| 20260916130000_flow_configuration_integrity | 20260916131024 | 20260916125155 |
-| 20260916133000_transfer_interruption_history | 20260916131043 | 20260916130018 |
+Development is aligned through `20260916135000_platform_session_continuity`.
+The category and separate-configuration migrations remain pending there. A
+future migration push can apply those source files in order.
 
-| 20260916135000_platform_session_continuity | 20260916131608 | 20260916131516 |
+For fresh databases, apply the source migrations in filename order.
 
-Do not reapply these files to existing projects. New installations apply source files in order. Before adopting CLI push for an existing project, compare schema and migration statements, then reconcile history in a documented maintenance operation. No migration history repair was performed here.
-
-`supabase/proposals/audited_support_reads.sql` is **not applied** and is not part of setup. Its broad policy rollout was rejected by automatic review. The user subsequently deferred detailed security work until feature completion.
+`supabase/proposals/audited_support_reads.sql` is **not applied** and is not part
+of setup. Its broad policy rollout was rejected by automatic review. The user
+subsequently deferred detailed security work until feature completion.

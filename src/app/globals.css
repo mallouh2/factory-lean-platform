@@ -1577,3 +1577,798 @@ details.panel > summary {
   cursor: grabbing;
   background: #e0f2fe;
 }
+
+/* ============================================================
+   Factory Floor V2 â€” visual prototype (scoped ff2-* classes)
+   Calm, premium, industrial: neutral background, white surfaces,
+   near-black text, generous radii, subtle borders/shadows only.
+   ============================================================ */
+.ff2 {
+  --ff2-bg: #f5f5f7;
+  --ff2-text: #1d1d1f;
+  --ff2-muted: #6e6e73;
+  --ff2-surface: #ffffff;
+  --ff2-border: rgba(0, 0, 0, 0.08);
+  --ff2-green: #2f9e63;
+  --ff2-red: #d64545;
+  --ff2-orange: #d98324;
+  --ff2-blue: #3b7dd8;
+  --ff2-gray: #8a8a8f;
+  --ff2-radius-card: 16px;
+  --ff2-radius-node: 18px;
+  --ff2-radius-large: 20px;
+  --ff2-radius-drawer: 24px;
+  --ff2-hover: 180ms;
+  --ff2-ui: 220ms;
+  --ff2-drawer: 280ms;
+  display: grid;
+  gap: 1.1rem;
+  color: var(--ff2-text);
+}
+.ff2-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.ff2-head h2 {
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.ff2-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+.ff2-filters {
+  display: flex;
+  gap: 0.35rem;
+  background: var(--ff2-surface);
+  border: 1px solid var(--ff2-border);
+  border-radius: 999px;
+  padding: 0.25rem;
+}
+.ff2-filters button {
+  min-height: 34px;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 0.25rem 0.85rem;
+  color: var(--ff2-muted);
+  font-size: 0.9rem;
+  transition: background var(--ff2-ui), color var(--ff2-ui);
+}
+.ff2-filters button span {
+  opacity: 0.55;
+  font-size: 0.8rem;
+  margin-inline-start: 0.25rem;
+}
+.ff2-filters button.selected {
+  background: var(--ff2-text);
+  color: #fff;
+}
+.ff2-add {
+  position: relative;
+}
+.ff2-add-btn {
+  background: var(--ff2-text);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0 1.05rem;
+  min-height: 38px;
+  font-weight: 600;
+}
+.ff2-add-btn:hover {
+  background: #3a3a3c;
+}
+.ff2-add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  min-width: 220px;
+  background: var(--ff2-surface);
+  border: 1px solid var(--ff2-border);
+  border-radius: var(--ff2-radius-card);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  padding: 0.35rem;
+  z-index: 30;
+  display: grid;
+  gap: 0.25rem;
+}
+.ff2-add-menu button {
+  text-align: start;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+}
+.ff2-add-menu button:hover {
+  background: var(--ff2-bg);
+}
+/* ---------- line card ---------- */
+.ff2-card {
+  background: var(--ff2-surface);
+  border: 1px solid var(--ff2-border);
+  border-radius: var(--ff2-radius-large);
+  padding: 1.1rem 1.25rem 0.95rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.ff2-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+.ff2-card-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+.ff2-card-sub {
+  color: var(--ff2-muted);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+.ff2-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4rem;
+  color: var(--ff2-muted);
+  font-size: 0.85rem;
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--ff2-border);
+  padding-top: 0.7rem;
+}
+/* ---------- flow row (sequence direction is fixed LTR) ---------- */
+.ff2-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+}
+.ff2-flow-item {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+/* ---------- machine node ---------- */
+.ff2-node {
+  width: 164px;
+  min-height: 150px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.3rem;
+  padding: 0.8rem 0.6rem 0.7rem;
+  background: var(--ff2-surface);
+  border: 1px solid var(--ff2-border);
+  border-radius: var(--ff2-radius-node);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition:
+    transform var(--ff2-hover) ease,
+    box-shadow var(--ff2-hover) ease,
+    opacity var(--ff2-ui) ease,
+    filter var(--ff2-ui) ease;
+}
+.ff2-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+}
+.ff2-node .ff2-icon {
+  width: 44px;
+  height: 44px;
+  color: var(--ff2-muted);
+  transition: transform var(--ff2-hover) ease;
+}
+.ff2-node:hover .ff2-icon {
+  transform: scale(1.02);
+}
+.ff2-node-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  text-align: center;
+  line-height: 1.25;
+}
+.ff2-node-duration {
+  font-size: 0.78rem;
+  color: var(--ff2-red);
+  font-variant-numeric: tabular-nums;
+}
+.ff2-node-source {
+  font-size: 0.75rem;
+  color: var(--ff2-orange);
+  text-align: center;
+}
+.ff2-dim {
+  opacity: 0.42;
+  filter: saturate(0.4);
+}
+.ff2-dim:hover {
+  opacity: 0.75;
+}
+/* ---------- status chips (never color alone: label + dot) ---------- */
+.ff2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  background: #f2f2f4;
+  color: var(--ff2-muted);
+}
+.ff2-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ff2-chip-running {
+  color: var(--ff2-green);
+  background: rgba(47, 158, 99, 0.1);
+}
+.ff2-chip-stopped {
+  color: var(--ff2-red);
+  background: rgba(214, 69, 69, 0.1);
+}
+.ff2-chip-affected,
+.ff2-chip-bufferActive {
+  color: var(--ff2-orange);
+  background: rgba(217, 131, 36, 0.12);
+}
+.ff2-chip-alternative {
+  color: var(--ff2-blue);
+  background: rgba(59, 125, 216, 0.1);
+}
+.ff2-chip-setup {
+  color: #8a6d3b;
+  background: rgba(200, 160, 90, 0.12);
+}
+.ff2-chip-idle,
+.ff2-chip-offline {
+  color: var(--ff2-gray);
+  background: #f2f2f4;
+}
+.ff2-chip-runningViaAlternative {
+  color: var(--ff2-blue);
+  background: rgba(59, 125, 216, 0.1);
+}
+/* node status accents */
+.ff2-node.ff2-running .ff2-icon {
+  color: var(--ff2-green);
+}
+.ff2-node.ff2-stopped .ff2-icon {
+  color: var(--ff2-red);
+}
+.ff2-node.ff2-affected .ff2-icon,
+.ff2-node.ff2-bufferActive .ff2-icon {
+  color: var(--ff2-orange);
+}
+.ff2-node.ff2-alternative .ff2-icon {
+  color: var(--ff2-blue);
+}
+/* ---------- connector ---------- */
+.ff2-connector {
+  position: relative;
+  display: block;
+  width: clamp(28px, 4vw, 64px);
+  height: 2px;
+  background: var(--ff2-border);
+  margin: 0 4px;
+  flex: none;
+}
+.ff2-connector-arrow {
+  position: absolute;
+  inset-inline-end: -1px;
+  top: -3.5px;
+  width: 0;
+  height: 0;
+  border-top: 4.5px solid transparent;
+  border-bottom: 4.5px solid transparent;
+  border-inline-start: 6px solid var(--ff2-border);
+}
+.ff2-connector-dot {
+  position: absolute;
+  top: -2.5px;
+  inset-inline-start: -6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ff2-green);
+  opacity: 0;
+}
+.ff2-flowing .ff2-connector-arrow {
+  border-inline-start-color: rgba(47, 158, 99, 0.55);
+}
+.ff2-flowing .ff2-connector-dot {
+  opacity: 1;
+  animation: ff2-dot 2s linear infinite;
+}
+@keyframes ff2-dot {
+  from {
+    inset-inline-start: -6px;
+  }
+  to {
+    inset-inline-start: calc(100% - 2px);
+  }
+}
+/* No RTL arrow overrides: the flow row is pinned LTR so arrows always point
+   downstream along the real machine sequence, in every language. */
+/* ---------- functional machine animations (running only) ---------- */
+.ff2-icon .ff2-part {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.ff2-icon.ff2-running.ff2-icon-cooling .ff2-part {
+  animation: ff2-rotate 2.6s linear infinite;
+}
+.ff2-icon.ff2-running.ff2-icon-mixer .ff2-part {
+  animation: ff2-rotate 2.2s linear infinite;
+}
+.ff2-icon.ff2-running.ff2-icon-extruder .ff2-part {
+  animation: ff2-slide-x 1.6s ease-in-out infinite alternate;
+}
+.ff2-icon.ff2-running.ff2-icon-printer .ff2-part {
+  animation: ff2-print 1.8s ease-in-out infinite alternate;
+}
+.ff2-icon.ff2-running.ff2-icon-cutter .ff2-part {
+  animation: ff2-cut 1.4s ease-in-out infinite alternate;
+}
+.ff2-icon.ff2-running.ff2-icon-conveyor .ff2-part {
+  animation: ff2-belt 1.2s linear infinite;
+}
+.ff2-icon.ff2-running.ff2-icon-packing .ff2-part {
+  animation: ff2-lift 1.9s ease-in-out infinite alternate;
+}
+.ff2-icon.ff2-running.ff2-icon-generic .ff2-part {
+  animation: ff2-pulse 2.4s ease-in-out infinite;
+}
+@keyframes ff2-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ff2-slide-x {
+  from {
+    transform: translateX(-1.4px);
+  }
+  to {
+    transform: translateX(1.4px);
+  }
+}
+@keyframes ff2-print {
+  from {
+    transform: translateX(-2.4px);
+  }
+  to {
+    transform: translateX(2.4px);
+  }
+}
+@keyframes ff2-cut {
+  from {
+    transform: translateY(-1.6px);
+  }
+  to {
+    transform: translateY(0.6px);
+  }
+}
+@keyframes ff2-belt {
+  to {
+    stroke-dashoffset: -5.2;
+  }
+}
+@keyframes ff2-lift {
+  from {
+    transform: translateY(1.2px);
+  }
+  to {
+    transform: translateY(-1.2px);
+  }
+}
+@keyframes ff2-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+/* ---------- drawer ---------- */
+.ff2-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+  animation: ff2-fade 280ms ease;
+}
+.ff2-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: min(460px, 94vw);
+  background: var(--ff2-surface);
+  border-start-start-radius: var(--ff2-radius-drawer);
+  border-end-start-radius: var(--ff2-radius-drawer);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.16);
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  animation: ff2-drawer-in 280ms cubic-bezier(0.32, 0.72, 0.35, 1);
+}
+[dir="rtl"] .ff2-drawer {
+  box-shadow: 18px 0 48px rgba(0, 0, 0, 0.16);
+}
+@keyframes ff2-drawer-in {
+  from {
+    transform: translateX(30px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes ff2-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.ff2-drawer-head {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  padding: 1.1rem 1.2rem 0.8rem;
+  border-bottom: 1px solid var(--ff2-border);
+}
+.ff2-drawer-head .ff2-icon {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+.ff2-drawer-head h3 {
+  margin: 0;
+}
+.ff2-drawer-close {
+  margin-inline-start: auto;
+  border: none;
+  background: transparent;
+  font-size: 1.2rem;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+}
+.ff2-tabs {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.7rem 1.2rem 0;
+}
+.ff2-tabs button {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  color: var(--ff2-muted);
+  min-height: 34px;
+  padding: 0 0.9rem;
+}
+.ff2-tabs button.selected {
+  background: var(--ff2-bg);
+  color: var(--ff2-text);
+  font-weight: 600;
+}
+.ff2-drawer-body {
+  padding: 1rem 1.2rem;
+  overflow-y: auto;
+  flex: 1;
+}
+.ff2-dl {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.8rem 1rem;
+  margin: 0;
+}
+.ff2-dl div {
+  background: var(--ff2-bg);
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem;
+}
+.ff2-dl dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ff2-muted);
+}
+.ff2-dl dd {
+  margin: 0.2rem 0 0;
+  font-weight: 600;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+.ff2-downtime {
+  display: grid;
+  gap: 0.35rem;
+  background: rgba(214, 69, 69, 0.06);
+  border: 1px solid rgba(214, 69, 69, 0.15);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+.ff2-downtime p {
+  margin: 0;
+  color: var(--ff2-muted);
+  font-size: 0.88rem;
+}
+.ff2-muted {
+  color: var(--ff2-muted);
+  font-size: 0.88rem;
+}
+.ff2-drawer-foot {
+  padding: 0.9rem 1.2rem;
+  border-top: 1px solid var(--ff2-border);
+}
+/* ---------- responsive ---------- */
+@media (max-width: 720px) {
+  .ff2-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ff2-filters {
+    overflow-x: auto;
+  }
+  .ff2-node {
+    width: 156px;
+  }
+  .ff2-drawer {
+    top: auto;
+    inset-inline: 0;
+    width: 100%;
+    max-height: 86vh;
+    border-radius: var(--ff2-radius-drawer) var(--ff2-radius-drawer) 0 0;
+    border-start-start-radius: var(--ff2-radius-drawer);
+    border-end-start-radius: 0;
+    animation: ff2-sheet 280ms cubic-bezier(0.32, 0.72, 0.35, 1);
+  }
+}
+@keyframes ff2-sheet {
+  from {
+    transform: translateY(40px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .ff2-node,
+  .ff2-node .ff2-icon,
+  .ff2-filters button,
+  .ff2-drawer,
+  .ff2-drawer-backdrop {
+    transition: none !important;
+    animation: none !important;
+  }
+  .ff2-icon .ff2-part,
+  .ff2-connector-dot {
+    animation: none !important;
+  }
+  .ff2-flowing .ff2-connector-dot {
+    opacity: 0.9;
+    inset-inline-start: 35%;
+  }
+}
+
+
+/* ---------- Production Flow drawer tab ---------- */
+.ff2-flowtab h4 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ff2-muted);
+}
+.ff2-flowtab h4:first-child {
+  margin-top: 0;
+}
+.ff2-options {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+.ff2-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--ff2-bg);
+  border-radius: 12px;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  transition: background var(--ff2-ui) ease;
+}
+.ff2-option:hover {
+  background: #ececf0;
+}
+.ff2-option.selected {
+  background: #1d1d1f0d;
+  box-shadow: inset 0 0 0 1.5px var(--ff2-text);
+}
+.ff2-option.readonly {
+  cursor: default;
+}
+.ff2-option input[type="radio"] {
+  accent-color: var(--ff2-text);
+  width: 18px;
+  min-height: 18px;
+}
+.ff2-current-effect {
+  background: var(--ff2-bg);
+  border-radius: 12px;
+  padding: 0.55rem 0.8rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.88rem;
+}
+.ff2-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.8rem;
+}
+.ff2-note p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.ff2-note-red {
+  background: rgba(214, 69, 69, 0.06);
+  border: 1px solid rgba(214, 69, 69, 0.15);
+}
+.ff2-note-blue {
+  background: rgba(59, 125, 216, 0.08);
+  border: 1px solid rgba(59, 125, 216, 0.18);
+}
+.ff2-alt-list {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.ff2-alt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: var(--ff2-bg);
+  border-radius: 12px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.9rem;
+}
+.ff2-alt .ff2-alt-state {
+  color: var(--ff2-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.ff2-alt-state:first-letter {
+  color: var(--ff2-text);
+}
+.ff2-row-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.4rem 0 0.7rem;
+}
+.ff2-transfer {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.3rem 0 0.7rem;
+}
+.ff2-transfer textarea {
+  min-height: 64px;
+}
+.ff2-alt-edit .ff2-check {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--ff2-bg);
+  border-radius: 12px;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+}
+.ff2-alt-edit .ff2-check input {
+  width: 18px;
+  min-height: 18px;
+  accent-color: var(--ff2-text);
+}
+.ff2-mini-sections {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.ff2-mini {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  text-align: start;
+  background: var(--ff2-bg);
+  border: none;
+  border-radius: 12px;
+  padding: 0.6rem 0.85rem;
+}
+.ff2-mini span {
+  color: var(--ff2-muted);
+  font-size: 0.8rem;
+}
+.ff2-mini strong {
+  font-size: 0.9rem;
+  text-align: end;
+}
+
+
+/* ---------- Category-aware additions ---------- */
+/* Fan/paddle rotation: spin around the real 12,12 hub, never the bbox. */
+.ff2-icon .ff2-part.ff2-rotate {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+/* Branch glyphs for the active-alternative reroute */
+.ff2-branch-reroute,
+.ff2-branch-return {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ff2-blue);
+  font-size: 1.1rem;
+  padding: 0 0.15rem;
+  flex: none;
+}
+.ff2-branch-reroute {
+  animation: ff2-branch-in 500ms ease;
+}
+@keyframes ff2-branch-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Open transfer without effective flow (route blocked elsewhere or the
+   alternative itself stopped): the branch stays visible but neutral — no
+   success color, no animation. The chip text carries the state. */
+.ff2-branch-reroute.ff2-branch-off,
+.ff2-branch-return.ff2-branch-off {
+  color: var(--ff2-muted);
+  animation: none;
+}
+/* Borrowed machine placeholder on its home line */
+.ff2-node.ff2-borrowed {
+  border-style: dashed;
+  opacity: 0.65;
+}
+.ff2-node.ff2-borrowed .ff2-icon {
+  color: var(--ff2-muted);
+}
+.ff2-node.ff2-alternative .ff2-icon {
+  color: var(--ff2-blue);
+}
+/* Alternatives editor: category-filtered list */
+.ff2-alt-edit .ff2-check {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--ff2-bg);
+  border-radius: 12px;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+}
+

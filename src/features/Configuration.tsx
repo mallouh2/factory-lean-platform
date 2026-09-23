@@ -5,7 +5,16 @@ import {
   localDateTimeToUtc,
 } from "@/utils/manufacturing.mjs";
 import { useState } from "react";
-import { Dialog, Empty, Field, Badge, localName } from "@/components/ui";
+import {
+  Dialog,
+  Empty,
+  Field,
+  Badge,
+  localName,
+} from "@/components/ui";
+import MachineIcon, {
+  CATEGORY_ICON_KEYS,
+} from "@/components/MachineIcon";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 const config: Record<string, {
@@ -14,6 +23,10 @@ const config: Record<string, {
   createFields?: string[];
 }> = {
   factory: { table: "areas", fields: ["name", "name_ar"] },
+  work_center_categories: {
+    table: "work_center_categories",
+    fields: ["name", "name_ar", "icon_key"],
+  },
   lines: {
     table: "production_lines",
     fields: ["name", "name_ar", "area_id"],
@@ -23,6 +36,7 @@ const config: Record<string, {
     fields: [
       "name",
       "name_ar",
+      "category_id",
       "type",
       "area_id",
       "line_id",
@@ -40,7 +54,15 @@ const config: Record<string, {
       "notes",
     ],
     // A new machine is master data only; operational values belong to later workflows.
-    createFields: ["name", "name_ar", "type", "area_id", "line_id", "description"],
+    createFields: [
+      "name",
+      "name_ar",
+      "category_id",
+      "type",
+      "area_id",
+      "line_id",
+      "description",
+    ],
   },
   orders: {
     table: "production_orders",
@@ -78,6 +100,7 @@ const config: Record<string, {
 };
 const relations: Record<string, string> = {
   area_id: "areas",
+  category_id: "work_center_categories",
   line_id: "production_lines",
   order_id: "production_orders",
   operator_id: "memberships",
@@ -108,7 +131,12 @@ export default function Configuration({
     [busy, setBusy] = useState(false),
     [targetOrder, setTargetOrder] = useState<Row | null>(null);
   const c = config[view];
-  const permissionModule = view === "products" ? "orders" : view;
+  const permissionModule =
+    view === "products" || view === "work_center_categories"
+      ? view === "work_center_categories"
+        ? "centers"
+        : "orders"
+      : view;
   const zone = String(s.factory?.timezone || "UTC");
   const relatedTable = (field: string) =>
     field === "parent_id" && view === "centers"
@@ -122,6 +150,11 @@ export default function Configuration({
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
+  const categories = s.tables.work_center_categories || [];
+  const categoryIcon = (id: unknown) => {
+    const cat = categories.find((k) => String(k.id) === String(id));
+    return cat ? String(cat.icon_key) : "generic";
+  };
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -209,7 +242,22 @@ export default function Configuration({
                         : localName(row, lang)}
                     </strong>
                     {view === "centers" && (
-                      <small className="cell-note">{t(String(row.type))}</small>
+                      <small className="cell-note">
+                        {
+                          categories.find(
+                            (k) => String(k.id) === String(row.category_id),
+                          )?.name
+                        }
+                      </small>
+                    )}
+                    {view === "work_center_categories" && (
+                      <small className="cell-note">
+                        <MachineIcon
+                          center={row}
+                          running={false}
+                          categoryIconKey={String(row.icon_key || "generic")}
+                        />
+                      </small>
                     )}
                   </td>
                   <td className="code">{String(row.code || "—")}</td>
@@ -246,7 +294,7 @@ export default function Configuration({
                           {t("edit")}
                         </button>
                       )}
-                      {["factory", "lines", "centers"].includes(view) &&
+                      {["factory", "lines", "centers", "work_center_categories"].includes(view) &&
                         can(permissionModule, "delete") && (
                           <button
                             onClick={() => void archive(row).catch(() => {})}
@@ -327,6 +375,22 @@ export default function Configuration({
                   }
                 >
                   {relations[field] ? (
+                    field === "category_id" ? (
+                      <select
+                        name={field}
+                        defaultValue={String(editing[field] || "")}
+                        required
+                      >
+                        <option value="">{t("chooseCategory")}</option>
+                        {(s.tables.work_center_categories || [])
+                          .filter((x) => !x.archived)
+                          .map((x) => (
+                            <option key={String(x.id)} value={String(x.id)}>
+                              {String(x.icon_key)} · {localName(x, lang)}
+                            </option>
+                          ))}
+                      </select>
+                    ) : (
                     <select
                       name={field}
                       defaultValue={String(editing[field] || "")}
@@ -348,6 +412,18 @@ export default function Configuration({
                               : localName(x, lang)}
                           </option>
                         ))}
+                    </select>
+                    )
+                  ) : field === "icon_key" ? (
+                    <select
+                      name={field}
+                      defaultValue={String(editing[field] || "generic")}
+                    >
+                      {CATEGORY_ICON_KEYS.map((x) => (
+                        <option key={x} value={x}>
+                          {String(x)}
+                        </option>
+                      ))}
                     </select>
                   ) : field === "type" ||
                     field === "status" ||

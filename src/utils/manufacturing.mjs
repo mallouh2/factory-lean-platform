@@ -21,6 +21,33 @@ export function autoCode(prefix) {
     .padStart(6, "0");
   return `${prefix}-${Date.now().toString(36).toUpperCase()}${salt}`;
 }
+/**
+ * Today's produced quantity for one production line. Pure: the caller passes the
+ * already-resolved reporting window (from reportPeriod) so "today" always means
+ * the factory's own calendar day; entries match via order→line with a
+ * work-center→line fallback.
+ */
+export function lineTodayOutput(entries, orders, centers, lineId, from, to) {
+  const orderIds = new Set(
+    (orders || [])
+      .filter((o) => String(o.line_id) === String(lineId))
+      .map((o) => String(o.id)),
+  );
+  const centerIds = new Set(
+    (centers || [])
+      .filter((c) => String(c.line_id) === String(lineId))
+      .map((c) => String(c.id)),
+  );
+  return (entries || [])
+    .filter(
+      (e) =>
+        String(e.created_at) >= from &&
+        String(e.created_at) < to &&
+        (orderIds.has(String(e.order_id)) ||
+          centerIds.has(String(e.work_center_id))),
+    )
+    .reduce((sum, e) => sum + Number(e.produced || 0), 0);
+}
 export function calculateOee(observation) {
   if (!observation) return null;
   const {

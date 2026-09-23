@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 import { Badge, Empty, localName } from "@/components/ui";
-import { reportPeriod } from "@/utils/manufacturing.mjs";
+import { reportPeriod, lineTodayOutput } from "@/utils/manufacturing.mjs";
 export default function Dashboard(
   props: FeatureProps & {
     onCenter: (row: Row) => void;
@@ -41,23 +41,14 @@ export default function Dashboard(
     ).length;
   const lines = (s.tables.production_lines || []).filter((x) => !x.archived);
   const lineSummary = (lineId: string) => {
-    const orderIds = new Set(
-      orders
-        .filter((o) => String(o.line_id) === String(lineId))
-        .map((o) => String(o.id)),
+    const output = lineTodayOutput(
+      entries,
+      orders,
+      centers,
+      String(lineId),
+      period.from,
+      period.to,
     );
-    const centerIds = new Set(
-      centers
-        .filter((c) => String(c.line_id) === String(lineId))
-        .map((c) => String(c.id)),
-    );
-    const output = entries
-      .filter(
-        (e) =>
-          orderIds.has(String(e.order_id)) ||
-          centerIds.has(String(e.work_center_id)),
-      )
-      .reduce((n, e) => n + Number(e.produced), 0);
     const order = active.find((o) => String(o.line_id) === String(lineId));
     const product = s.tables.products?.find(
       (p) => p.id === order?.product_id,
