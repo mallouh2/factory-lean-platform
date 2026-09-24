@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { evaluateFlow, formatDuration } from "@/utils/production-flow.mjs";
 import {
   downtimeMinutes,
@@ -6,12 +6,7 @@ import {
   reportPeriod,
 } from "@/utils/manufacturing.mjs";
 import MachineIcon from "@/components/MachineIcon";
-import FlowConnector from "@/components/FlowConnector";
-import LineConfigPanels, {
-  type PanelKey,
-  type PanelsState,
-} from "./LineConfigPanels";
-import CenterDetails from "./CenterDetails";
+import FactoryRoute from "@/components/FactoryRoute";
 import { localName } from "@/components/ui";
 import {
   machineVisualStates,
@@ -19,19 +14,17 @@ import {
   lineVisualStatus,
   connectorFlowing,
   impactChoice,
-  applyImpactChoice,
-  previewStopImpact,
-  alternativeAvailability,
   transferBranches,
   borrowingLineOf,
   categoryIconKey,
-  sameCategory,
   liveTransferPicker,
+  lineOperationalStatus,
+  lineFlowActive,
 } from "@/utils/floor-visual.mjs";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 /**
- * Factory Floor V2 — visual prototype. Renders the SAME snapshot through the
+ * Factory Floor V2. Renders the SAME snapshot through the
  * SAME logic as V1: physical status comes from work_centers.status, computed
  * production-flow impact from evaluateFlow, alternative routes from open
  * production transfers. This component visualizes; it never recomputes.
@@ -55,33 +48,34 @@ const stateLabelKey: Record<VisualState, string> = {
   bufferActive: "bufferActive",
   alternative: "alternativeActive",
 };
+const pauseReasons = ["borrow_machine", "planned_stop", "cleaning", "changeover", "no_production", "other"];
 export default function FactoryFloorV2(
   props: FeatureProps & {
-    onEditLayout: () => void;
-    onRefresh?: () => void;
+    onManage: (machineId?: string) => void;
   },
 ) {
   const { snapshot: s, t, lang, can } = props;
   const [filter, setFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [tab, setTab] = useState<
-    "overview" | "flow" | "downtime" | "configuration"
-  >("overview");
-  const [panels, setPanels] = useState<PanelsState>({
-    line: false,
-    machine: false,
-    areas: false,
-  });
-  const [requestOpen, setRequestOpen] = useState<PanelKey | null>(null);
-  const [pendingChoice, setPendingChoice] = useState<string | null>(null);
-  const [editingAlts, setEditingAlts] = useState(false);
-  const [altDraft, setAltDraft] = useState<string[]>([]);
+  const [selectedContextPaused, setSelectedContextPaused] = useState(false);
+  const [selectedFromHomePlaceholder, setSelectedFromHomePlaceholder] = useState(false);
+  const [pauseLineId, setPauseLineId] = useState<string | null>(null);
+  const [pauseReason, setPauseReason] = useState("borrow_machine");
+  const [pauseBusy, setPauseBusy] = useState(false);
+  const [pauseNotice, setPauseNotice] = useState("");
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const [transferReason, setTransferReason] = useState("");
   const [flowNotice, setFlowNotice] = useState("");
   const [flowBusy, setFlowBusy] = useState(false);
+  const [quickAction, setQuickAction] = useState<"stop" | "output" | null>(null);
+  const [stopReason, setStopReason] = useState("");
+  const [stopNotes, setStopNotes] = useState("");
+  const [outputProduced, setOutputProduced] = useState("");
+  const [outputRejected, setOutputRejected] = useState("0");
+  const outputRequestId = useRef<string>("");
+  const drawerRef = useRef<HTMLElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLButtonElement>(null);
   const centers = (s.tables.work_centers || []).filter((c) => !c.archived);
   const lines = (s.tables.production_lines || []).filter((l) => !l.archived);
   const orders = s.tables.production_orders || [];
@@ -134,16 +128,48 @@ export default function FactoryFloorV2(
     );
   const selected = centers.find((c) => String(c.id) === selectedId) || null;
   useEffect(() => {
-    if (!selected) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (detailsOpen) setDetailsOpen(false);
-        else setSelectedId(null);
-      }
+    if (!selectedId) return;
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    drawerCloseRef.current?.focus();
+    const containFocus = (event: FocusEvent) => {
+      if (!drawer.contains(event.target as Node)) drawerCloseRef.current?.focus();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [selected, detailsOpen]);
+    document.addEventListener("focusin", containFocus);
+    return () => document.removeEventListener("focusin", containFocus);
+  }, [selectedId]);
+
+  function closeDrawer() {
+    setSelectedId(null);
+    const opener = openerRef.current;
+    requestAnimationFrame(() => {
+      if (opener?.isConnected) opener.focus();
+    });
+  }
+
+  function onDrawerKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDrawer();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      drawerRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]):not([tabindex="-1"]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]',
+      ) || [],
+    ).filter((element) => element.getClientRects().length > 0);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
   const filters = [
     ["all", centers.length],
     [
@@ -169,35 +195,36 @@ export default function FactoryFloorV2(
     c: Row,
     dimmed: boolean,
     branch?: { labelKey?: string; note?: string },
+    paused = false,
   ) {
-    const state = stateOf(c);
+    const state = (paused ? String(c.status || "idle") : stateOf(c)) as VisualState;
     const stop = openStopOf(c);
     const source = state === "affected" ? sourceOf(c) : null;
     return (
       <button
         className={`ff2-node ff2-${state}${dimmed ? " ff2-dim" : ""}`}
-        onClick={() => {
+        onClick={(event) => {
+          openerRef.current = event.currentTarget;
           setSelectedId(String(c.id));
-          setDetailsOpen(false);
-          setTab(state === "stopped" ? "flow" : "overview");
-          setPendingChoice(null);
-          setEditingAlts(false);
+          setSelectedContextPaused(paused);
+          setSelectedFromHomePlaceholder(false);
           setTransferTarget(null);
           setTransferReason("");
           setFlowNotice("");
+          setQuickAction(null);
         }}
         key={String(c.id)}
       >
         <MachineIcon
           center={c}
-          running={state === "running" || state === "alternative"}
+          running={!paused && (state === "running" || state === "alternative")}
           categoryIconKey={
             categoryIconKey(c, s.tables.work_center_categories) || undefined
           }
         />
-        <span className="ff2-node-name">{localName(c, lang)}</span>
-        <span className={`ff2-chip ff2-chip-${state}`}>
-          {t(branch?.labelKey || stateLabelKey[state])}
+        <span className="ff2-node-name" dir="auto">{localName(c, lang)}</span>
+        <span className={`ff2-chip ff2-chip-${state}`} dir="auto">
+          {t(paused ? stateLabelKey[state] : branch?.labelKey || stateLabelKey[state])}
         </span>
         {state === "stopped" && stop && (
           <span className="ff2-node-duration">
@@ -208,9 +235,9 @@ export default function FactoryFloorV2(
           </span>
         )}
         {branch?.note ? (
-          <span className="ff2-node-source">{t(branch.note)}</span>
+          <span className="ff2-node-source" dir="auto">{t(branch.note)}</span>
         ) : source ? (
-          <span className="ff2-node-source">
+          <span className="ff2-node-source" dir="auto">
             {t("affectedBy")} {localName(source, lang)}
           </span>
         ) : null}
@@ -230,6 +257,25 @@ export default function FactoryFloorV2(
     lineBranches(lineId).map((b) => b.alternative);
   const isBorrowedElsewhere = (c: Row) =>
     Boolean(borrowingLineOf(c, allBranches, lines));
+  async function changeLinePause(line: Row, paused: boolean) {
+    setPauseBusy(true);
+    setPauseNotice("");
+    try {
+      await props.command("set_line_pause", {
+        factory: s.factory?.id,
+        line: line.id,
+        paused,
+        reason: paused ? pauseReason : null,
+      });
+      setPauseLineId(null);
+      setPauseNotice("");
+    } catch (error) {
+      setPauseLineId(String(line.id));
+      setPauseNotice(error instanceof Error ? error.message : "error");
+    } finally {
+      setPauseBusy(false);
+    }
+  }
   function lineCard(line: Row | null) {
     const lineId = line ? String(line.id) : "";
     const borrowed = borrowedInto(lineId);
@@ -239,7 +285,7 @@ export default function FactoryFloorV2(
       )
       .filter((c) => !borrowed.some((b) => String(b.id) === String(c.id)))
       .sort((a, b) => Number(a.position) - Number(b.position));
-    if (!homeMachines.length && !borrowed.length) return null;
+    if (!line && !homeMachines.length) return null;
     const machines = homeMachines;
     const borrowedAwayIds = machines
       .filter(isBorrowedElsewhere)
@@ -247,12 +293,14 @@ export default function FactoryFloorV2(
     const relevant = machines.filter(matchesFilter);
     // Filtering keeps the complete path: the line only disappears when nothing matches.
     if (filter !== "all" && !relevant.length && !borrowed.length) return null;
-    const status = lineVisualStatus(
+    const pausedAt = line?.paused_at || null;
+    const status = lineOperationalStatus(lineVisualStatus(
       machines.map((m) => String(m.id)),
       visual,
       allBranches,
       borrowedAwayIds,
-    );
+      flow,
+    ), pausedAt);
     const activeOrder = line
       ? orders.find(
           (o) => o.status === "active" && o.line_id === line.id,
@@ -282,7 +330,7 @@ export default function FactoryFloorV2(
           )
         : null;
     return (
-      <section className="ff2-card" key={String(line ? line.id : "independent")}>
+      <section className={`ff2-card${pausedAt ? " ff2-paused" : ""}`} key={String(line ? line.id : "independent")}>
         <header className="ff2-card-head">
           <div>
             <h3>{line ? localName(line, lang) : t("independent")}</h3>
@@ -293,39 +341,46 @@ export default function FactoryFloorV2(
               </p>
             )}
           </div>
-          {status && (
-            <span className={`ff2-chip ff2-chip-line ff2-chip-${status}`}>
-              {t(status)}
-            </span>
-          )}
+          <div className="ff2-card-controls">
+            {status && <span className={`ff2-chip ff2-chip-line ff2-chip-${status}`}>{t(status)}</span>}
+            {line && can("centers", "edit") && (
+              <button className="ff2-line-action" disabled={pauseBusy} onClick={() => {
+                setPauseNotice("");
+                if (pausedAt) void changeLinePause(line, false);
+                else setPauseLineId(pauseLineId === lineId ? null : lineId);
+              }}>{t(pausedAt ? "resumeLine" : "pauseLine")}</button>
+            )}
+          </div>
         </header>
-        <div className="ff2-flow" dir="ltr">
-          {machines.map((c, i) => {
-            const branch = borrowed.find(
-              (b) => String(b.id) === String(c.id),
-            );
-            return (
-              <span className="ff2-flow-item" key={String(c.id)}>
-                {i > 0 && (
-                  <FlowConnector
-                    active={connectorFlowing(
-                      machines[i - 1], c, visual, flow, borrowedAwayIds,
-                    )}
-                  />
-                )}
-                {branch ? (
-                  <>
-                    {node(c, filter !== "all" && !matchesFilter(c))}
-                  </>
-                ) : isBorrowedElsewhere(c) ? (
+        {pausedAt && <p className="ff2-pause-reason">{t("pauseReason")}: {t(String(line?.pause_reason || "other"))}</p>}
+        {pauseLineId === lineId && !pausedAt && (
+          <div className="ff2-pause-form">
+            <p className="ff2-pause-help">{t("pauseLineConsequence")}</p>
+            <label>{t("pauseReason")}
+              <select value={pauseReason} onChange={(e) => setPauseReason(e.target.value)}>
+                {pauseReasons.map((reason) => <option key={reason} value={reason}>{t(reason)}</option>)}
+              </select>
+            </label>
+            <button className="primary" disabled={pauseBusy} onClick={() => void changeLinePause(line as Row, true)}>{t("pauseLine")}</button>
+            <button onClick={() => setPauseLineId(null)}>{t("cancel")}</button>
+          </div>
+        )}
+        {pauseNotice && pauseLineId === lineId && <p role="status" className="ff2-muted">{t(pauseNotice)}</p>}
+        <FactoryRoute machines={machines} continuationLabel={t("routeContinues")}
+          connectorActive={(a, b) => lineFlowActive(connectorFlowing(a, b, visual, flow, borrowedAwayIds), pausedAt)}
+          renderMachine={(c, i) => {
+            const branchHere = lineBranches(lineId).find((b) => String(b.original.id) === String(c.id));
+            return <>
+              {isBorrowedElsewhere(c) ? (
                   <button
                     className="ff2-node ff2-borrowed"
-                    onClick={() => {
+                    onClick={(event) => {
+                      openerRef.current = event.currentTarget;
                       setSelectedId(String(c.id));
-                      setDetailsOpen(false);
-                      setTab("overview");
-                      setPendingChoice(null);
-                      setEditingAlts(false);
+                      setSelectedContextPaused(Boolean(pausedAt));
+                      setSelectedFromHomePlaceholder(true);
+                      setQuickAction(null);
+                      setTransferTarget(null);
                       setFlowNotice("");
                     }}
                   >
@@ -337,8 +392,8 @@ export default function FactoryFloorV2(
                         undefined
                       }
                     />
-                    <span className="ff2-node-name">{localName(c, lang)}</span>
-                    <span className="ff2-node-source">
+                    <span className="ff2-node-name" dir="auto">{localName(c, lang)}</span>
+                    <span className="ff2-node-source" dir="auto">
                       {t("temporarilyAssignedTo")}{" "}
                       {(() => {
                         const bl = borrowingLineOf(c, allBranches, lines);
@@ -346,67 +401,19 @@ export default function FactoryFloorV2(
                       })()}
                     </span>
                   </button>
-                ) : (
-                  node(c, filter !== "all" && !matchesFilter(c))
-                )}
-                {/* Transfer branch: the borrowed machine renders right after
-                    its stopped original while the transfer row is open. Only an
-                    effectively flowing branch (evaluateFlow credits the
-                    transfer AND the restored route is clear) gets the active
-                    blue reroute; blocked routes and stopped alternatives stay
-                    visible with their truthful, non-success presentation. */}
-                {(() => {
-                  const branchHere = lineBranches(lineId).find(
-                    (b) => String(b.original.id) === String(c.id),
-                  );
-                  if (!branchHere) return null;
-                  const alt = branchHere.alternative as Row;
-                  const nextMachine = machines[i + 1];
-                  const dim = filter !== "all" && !matchesFilter(alt);
-                  if (branchHere.state === "flowing")
-                    return (
-                      <>
-                        <span className="ff2-branch-reroute" aria-hidden="true">
-                          ⤵
-                        </span>
-                        {node(alt, dim)}
-                        {nextMachine && (
-                          <span className="ff2-branch-return" aria-hidden="true">
-                            ⤴
-                          </span>
-                        )}
-                      </>
-                    );
-                  return (
-                    <>
-                      <span
-                        className="ff2-branch-reroute ff2-branch-off"
-                        aria-hidden="true"
-                      >
-                        ⤵
-                      </span>
-                      {node(alt, dim, {
-                        labelKey:
-                          branchHere.state === "routeBlocked"
-                            ? "flowBlocked"
-                            : undefined,
-                        note: "alternativeAssigned",
-                      })}
-                      {nextMachine && (
-                        <span
-                          className="ff2-branch-return ff2-branch-off"
-                          aria-hidden="true"
-                        >
-                          ⤴
-                        </span>
-                      )}
-                    </>
-                  );
-                })()}
-              </span>
-            );
-          })}
-        </div>
+              ) : node(c, filter !== "all" && !matchesFilter(c), undefined, Boolean(pausedAt))}
+              {branchHere && <div className={`ff2-branch${lineFlowActive(branchHere.state === "flowing", pausedAt) ? "" : " ff2-branch-muted"}`}>
+                <span className={`ff2-branch-reroute${lineFlowActive(branchHere.state === "flowing", pausedAt) ? "" : " ff2-branch-off"}`} aria-hidden="true">⤵</span>
+                {node(branchHere.alternative as Row, filter !== "all" && !matchesFilter(branchHere.alternative as Row),
+                  lineFlowActive(branchHere.state === "flowing", pausedAt) ? undefined : {
+                    labelKey: branchHere.state === "routeBlocked" ? "flowBlocked" : undefined,
+                    note: "alternativeAssigned",
+                  }, Boolean(pausedAt))}
+                {machines[i + 1] && <span className={`ff2-branch-return${lineFlowActive(branchHere.state === "flowing", pausedAt) ? "" : " ff2-branch-off"}`} aria-hidden="true">⤴</span>}
+              </div>}
+            </>;
+          }} />
+        {!machines.length && <p className="ff2-empty">{t("noMachinesOnLine")}</p>}
         <footer className="ff2-card-foot">
           <span>
             {t("todayProduction")}:{" "}
@@ -439,12 +446,8 @@ export default function FactoryFloorV2(
     : undefined;
   const selectedStop = selected ? openStopOf(selected) : undefined;
   // ---- Production Flow derivations (all from existing snapshot + flow logic)
-  const flowOf = (id: string) => flow[id]?.state;
   // "active" availability means effectively carrying production — an open
   // transfer with a blocked route or a stopped alternative does not count.
-  const flowingAltIds = allBranches
-    .filter((b) => b.state === "flowing")
-    .map((b) => String(b.alternative.id));
   const selectedAlternatives = selected
     ? (s.tables.work_center_alternatives || [])
         .filter((x) => x.work_center_id === selected.id)
@@ -460,34 +463,6 @@ export default function FactoryFloorV2(
         String(selected.impact_scope || ""),
       )
     : null;
-  const effectiveChoice = pendingChoice ?? selectedChoice;
-  const previewApply =
-    selected && effectiveChoice
-      ? applyImpactChoice(effectiveChoice, {
-          dependency_mode: String(selected.dependency_mode || ""),
-        })
-      : null;
-  const preview =
-    selected && previewApply
-      ? previewStopImpact(
-          centers,
-          stops,
-          transfers,
-          String(selected.id),
-          previewApply.dependency_mode,
-          previewApply.impact_scope,
-        )
-      : null;
-  const previewNames = (preview?.affectedIds || [])
-    .map((id) => centers.find((c) => String(c.id) === id))
-    .filter((x): x is Row => !!x)
-    .map((c) => localName(c, lang));
-  const impactEditable =
-    !!selected &&
-    selected.line_id &&
-    selected.dependency_mode !== "independent" &&
-    can("lines", "edit") &&
-    can("centers", "edit");
   const actualAffected = selected
     ? centers.filter(
         (c) =>
@@ -521,20 +496,6 @@ export default function FactoryFloorV2(
   const actingOriginal = actingFor
     ? centers.find((c) => c.id === actingFor.original_id)
     : undefined;
-  const actingActive =
-    !!actingFor && flowOf(String(actingFor.original_id)) === "transferred";
-  const availabilityRows = selected
-    ? selectedAlternatives.map((alt) => ({
-        alt,
-        availability: alternativeAvailability(alt, flowingAltIds, selected.order_id),
-      }))
-    : [];
-  // Same-category machines ELIGIBLE to be configured (relationship stays explicit).
-  const sameCategoryMachines = selected
-    ? centers.filter(
-        (c) => String(c.id) !== String(selected.id) && sameCategory(selected, c),
-      )
-    : [];
   // LIVE picker mirrors transfer_production's rules on BOTH sides.
   const livePicker = selected
     ? liveTransferPicker(
@@ -543,69 +504,42 @@ export default function FactoryFloorV2(
         selectedAlternatives.map((a) => String(a.id)),
         transfers,
         orders,
+        lines,
       )
     : { blockedReason: null as string | null, candidates: [] as Row[] };
   const transferCandidates = livePicker.blockedReason
     ? []
     : livePicker.candidates;
-  const canEditAlts = !!selected && can("centers", "edit");
   const canTransfer =
     !!selected && can("centers", "edit") && can("orders", "edit");
   const canReturn = can("centers", "edit") || can("machine_status", "edit");
-  async function saveImpact() {
-    if (!selected || !pendingChoice || !previewApply) return;
-    setFlowBusy(true);
-    setFlowNotice("");
-    try {
-      const layout = centers.map((c) => ({
-        id: String(c.id),
-        line_id: c.line_id ? String(c.line_id) : null,
-        position: Number(c.position),
-        dependency_mode:
-          String(c.id) === String(selected.id)
-            ? previewApply.dependency_mode
-            : String(c.dependency_mode),
-        buffer_minutes: Number(c.buffer_minutes),
-        impact_scope:
-          String(c.id) === String(selected.id)
-            ? previewApply.impact_scope
-            : String(c.impact_scope),
-      }));
-      await props.command("save_line_layout", {
-        factory: s.factory?.id,
-        version: Number(s.factory?.structure_version),
-        layout,
-      });
-      setPendingChoice(null);
-      setFlowNotice("saved");
-    } catch (error) {
-      const key = error instanceof Error ? error.message : "error";
-      setFlowNotice(key);
-      // Never overwrite or auto-retry a stale layout: surface the conflict and
-      // refresh so the next attempt uses the latest structure version.
-      if (key === "layoutConflict") props.onRefresh?.();
-    } finally {
-      setFlowBusy(false);
-    }
-  }
-  async function saveAlternatives() {
-    if (!selected) return;
-    setFlowBusy(true);
-    setFlowNotice("");
-    try {
-      await props.command("configure_center_alternatives", {
-        factory: s.factory?.id,
-        work_center: selected.id,
-        alternatives: altDraft,
-      });
-      setEditingAlts(false);
-      setFlowNotice("saved");
-    } catch (error) {
-      setFlowNotice(error instanceof Error ? error.message : "error");
-    } finally {
-      setFlowBusy(false);
-    }
-  }
+  const canChangeStatus = canReturn;
+  const selectedDisplayState = selectedContextPaused
+    ? (String(selected?.status || "idle") as VisualState)
+    : selectedState;
+  const borrowedBy = selected ? borrowingLineOf(selected, allBranches, lines) : undefined;
+  const issueSource = selected && selectedState === "affected" ? sourceOf(selected) : undefined;
+  const stopReasonRow = selectedStop
+    ? s.tables.downtime_reasons?.find((r) => r.id === selectedStop.reason_id)
+    : undefined;
+  const homeAffected = selected && flow[String(selected.id)]?.homeState === "blocked";
+  const hasActiveProduction = selectedOrder?.status === "active";
+  const canRecordOutput =
+    !selectedFromHomePlaceholder && hasActiveProduction && can("orders", "edit") &&
+    !(borrowedBy ? borrowedBy.paused_at : selectedLine?.paused_at) &&
+    (selectedDisplayState === "running" || selectedDisplayState === "alternative");
+  const canStopHere = !selectedFromHomePlaceholder && canChangeStatus &&
+    (selectedDisplayState === "running" || selectedDisplayState === "alternative");
+  const canReturnHere = selected?.status === "stopped" && transferActive && canReturn;
+  const canRestartHere = selected?.status === "stopped" && !transferActive && canChangeStatus &&
+    !selectedFromHomePlaceholder && !(actingFor ? borrowedBy?.paused_at : selectedLine?.paused_at);
+  const canStartHere = selected?.status === "idle" &&
+    !(actingFor ? borrowedBy?.paused_at : selectedLine?.paused_at) &&
+    !selectedFromHomePlaceholder && canChangeStatus;
+  const canTransferHere = selected?.status === "stopped" && !transferActive && canTransfer &&
+    !selectedLine?.paused_at && !livePicker.blockedReason && transferCandidates.length > 0;
+  const showQuickActions = canStopHere || canRecordOutput || canReturnHere || canRestartHere ||
+    canStartHere || canTransferHere || Boolean(activeAltRow && transferActive) || Boolean(actingOriginal);
   async function runTransfer() {
     if (!selected || !transferTarget) return;
     setFlowBusy(true);
@@ -650,40 +584,67 @@ export default function FactoryFloorV2(
       setFlowBusy(false);
     }
   }
-  const config: [string, string][] = selected
-    ? [
-        ["type", t(String(selected.type || "machine"))],
-        [
-          "area_id",
-          localName(
-            s.tables.areas?.find((a) => a.id === selected.area_id),
-            lang,
-          ) || "—",
-        ],
-        [
-          "line",
-          selectedLine ? localName(selectedLine, lang) : t("independent"),
-        ],
-        ["code", String(selected.code || "—")],
-        [
-          "operator",
-          String(
-            s.tables.memberships?.find((m) => m.id === selected.operator_id)
-              ?.display_name || "—",
-          ),
-        ],
-        ["production_speed", String(selected.production_speed || "—")],
-        [
-          "default_cycle_time",
-          String(selected.default_cycle_time || "—"),
-        ],
-        [
-          "current_cycle_time",
-          String(selected.current_cycle_time || "—"),
-        ],
-        ["planned_capacity", String(selected.planned_capacity || "—")],
-      ]
-    : [];
+  async function startMachine() {
+    if (!selected) return;
+    setFlowBusy(true);
+    setFlowNotice("");
+    try {
+      await props.command("change_status", {
+        factory: s.factory?.id, work_center: selected.id, status: "running",
+        reason: null, sub_reason: null, notes: "", expected_restart: null,
+        responsible: null, alternative: null, transferred: false,
+      });
+      setFlowNotice("saved");
+    } catch (error) {
+      setFlowNotice(error instanceof Error ? error.message : "error");
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+  async function stopMachine(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected || !stopReason) return;
+    setFlowBusy(true);
+    setFlowNotice("");
+    try {
+      await props.command("change_status", {
+        factory: s.factory?.id, work_center: selected.id, status: "stopped",
+        reason: stopReason, sub_reason: null, notes: stopNotes,
+        expected_restart: null, responsible: null, alternative: null,
+        transferred: false,
+      });
+      setQuickAction(null);
+      setStopReason("");
+      setStopNotes("");
+      setFlowNotice("saved");
+    } catch (error) {
+      setFlowNotice(error instanceof Error ? error.message : "error");
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+  async function recordOutput(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected || !selectedOrder || !outputRequestId.current) return;
+    setFlowBusy(true);
+    setFlowNotice("");
+    try {
+      await props.command("record_output", {
+        factory: s.factory?.id, work_center: selected.id,
+        production_order: selectedOrder.id, request_id: outputRequestId.current,
+        produced: Number(outputProduced), rejected: Number(outputRejected), notes: "",
+      });
+      setQuickAction(null);
+      setOutputProduced("");
+      setOutputRejected("0");
+      outputRequestId.current = "";
+      setFlowNotice("saved");
+    } catch (error) {
+      setFlowNotice(error instanceof Error ? error.message : "error");
+    } finally {
+      setFlowBusy(false);
+    }
+  }
   return (
     <section className="ff2">
       <header className="ff2-head">
@@ -701,71 +662,31 @@ export default function FactoryFloorV2(
               </button>
             ))}
           </div>
-          {(can("lines", "create") || can("centers", "create")) && (
-            <div className="ff2-add">
-              <button
-                className="ff2-add-btn"
-                aria-expanded={addOpen}
-                onClick={() => setAddOpen(!addOpen)}
-              >
-                + {t("add")}
-              </button>
-              {addOpen && (
-                <div className="ff2-add-menu">
-                  {can("lines", "create") && (
-                    <button
-                      onClick={() => {
-                        setRequestOpen("line");
-                        setAddOpen(false);
-                      }}
-                    >
-                      {t("createLine")}
-                    </button>
-                  )}
-                  {can("centers", "create") && (
-                    <button
-                      onClick={() => {
-                        setRequestOpen("machine");
-                        setAddOpen(false);
-                      }}
-                    >
-                      {t("addMachine")}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          <button onClick={props.onEditLayout}>{t("editLayout")}</button>
+          {(can("lines", "edit") || can("centers", "edit") || can("lines", "create") || can("centers", "create")) &&
+            <button className="ff2-manage" onClick={() => props.onManage()}>{t("manageLinesMachines")}</button>}
         </div>
       </header>
       {lines.map(lineCard)}
       {lineCard(null)}
-      <LineConfigPanels
-        {...props}
-        draft={false}
-        panels={panels}
-        setPanels={setPanels}
-        onDiscardDraft={() => undefined}
-        requestOpen={requestOpen}
-        onRequestHandled={() => setRequestOpen(null)}
-      />
       {selected && (
         <>
           <div
             className="ff2-drawer-backdrop"
-            onClick={() => setSelectedId(null)}
+            onClick={closeDrawer}
             aria-hidden="true"
           />
           <aside
+            ref={drawerRef}
             className="ff2-drawer"
             role="dialog"
+            aria-modal="true"
             aria-label={localName(selected, lang)}
+            onKeyDown={onDrawerKeyDown}
           >
             <header className="ff2-drawer-head">
               <MachineIcon
                 center={selected}
-                running={selectedState === "running" || selectedState === "alternative"}
+                running={!selectedContextPaused && (selectedDisplayState === "running" || selectedDisplayState === "alternative")}
                 categoryIconKey={
                   categoryIconKey(selected, s.tables.work_center_categories) ||
                   undefined
@@ -774,9 +695,9 @@ export default function FactoryFloorV2(
               <div>
                 <h3>{localName(selected, lang)}</h3>
                 <p className="ff2-card-sub">
-                  {selectedState && (
-                    <span className={`ff2-chip ff2-chip-${selectedState}`}>
-                      {t(stateLabelKey[selectedState])}
+                  {selectedDisplayState && (
+                    <span className={`ff2-chip ff2-chip-${selectedDisplayState}`}>
+                      {t(stateLabelKey[selectedDisplayState])}
                     </span>
                   )}{" "}
                   {selectedLine
@@ -785,568 +706,221 @@ export default function FactoryFloorV2(
                 </p>
               </div>
               <button
+                ref={drawerCloseRef}
                 className="ff2-drawer-close"
                 aria-label={t("close")}
-                onClick={() => setSelectedId(null)}
+                onClick={closeDrawer}
               >
                 ×
               </button>
             </header>
-            <div className="ff2-tabs" role="tablist">
-              {(
-                ["overview", "flow", "downtime", "configuration"] as const
-              ).map((x) => (
-                <button
-                  key={x}
-                  role="tab"
-                  aria-selected={tab === x}
-                  className={tab === x ? "selected" : ""}
-                  onClick={() => setTab(x)}
-                >
-                  {t(x === "flow" ? "productionFlow" : x)}
-                </button>
-              ))}
-            </div>
             <div className="ff2-drawer-body">
-              {tab === "overview" && (
-                <>
-                  <dl className="ff2-dl">
-                    <div>
-                      <dt>{t("product")}</dt>
-                      <dd>
-                        {selectedProduct
-                          ? localName(selectedProduct, lang)
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t("code")}</dt>
-                      <dd>{selectedOrder ? String(selectedOrder.code) : "—"}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("todayProduction")}</dt>
-                      <dd>
-                        <bdi dir="ltr">
-                          {machineOutput(selected).toLocaleString(lang)}
-                        </bdi>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t("duration")}</dt>
-                      <dd>
-                        {selectedStop
-                          ? formatDuration(
-                              (Date.now() -
-                                Date.parse(String(selectedStop.started_at))) /
-                                60000,
-                              lang,
-                            )
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t("category")}</dt>
-                      <dd>
-                        {(() => {
-                          const cat = (
-                            s.tables.work_center_categories || []
-                          ).find(
-                            (k) =>
-                              String(k.id) === String(selected.category_id),
-                          );
-                          return cat ? localName(cat, lang) : "—";
-                        })()}
-                      </dd>
-                    </div>
-                    {selectedState === "affected" && sourceOf(selected) && (
-                      <div>
-                        <dt>{t("affected")}</dt>
-                        <dd>
-                          {t("affectedBy")}{" "}
-                          {localName(sourceOf(selected) as Row, lang)}
-                        </dd>
-                      </div>
-                    )}
-                  </dl>
-                  <div className="ff2-mini-sections">
-                    <button
-                      className="ff2-mini"
-                      onClick={() => {
-                        setTab("flow");
-                        setPendingChoice(null);
-                      }}
-                    >
-                      <span>{t("productionImpact")}</span>
-                      <strong>
-                        {selectedState === "stopped" &&
-                        actualAffected.length
-                          ? `${actualAffected.length} ${t("machinesAffected")}`
-                          : effectiveChoice === "whole_line"
-                            ? t("entireLine")
-                            : effectiveChoice === "downstream"
-                              ? t("impactDownstreamShort")
-                              : t("impactNoneShort")}
-                      </strong>
-                    </button>
-                    <button
-                      className="ff2-mini"
-                      onClick={() => {
-                        setTab("flow");
-                        setEditingAlts(false);
-                      }}
-                    >
-                      <span>{t("alternativeMachines")}</span>
-                      <strong>
-                        {transferCandidates.length
-                          ? `${t("alternativeAvailable")}: ${localName(
-                              transferCandidates[0].alt,
-                              lang,
-                            )}`
-                          : `${selectedAlternatives.length} ${t("configuredCount")}`}
-                      </strong>
-                    </button>
-                  </div>
-                </>
+              {borrowedBy && (
+                <p className="ff2-drawer-context" dir="auto">
+                  {t("borrowedByLine")} {localName(borrowedBy, lang)}
+                </p>
               )}
-              {tab === "flow" && (
-                <div className="ff2-flowtab">
-                  {actingFor && (
-                    <div className="ff2-note ff2-note-blue">
-                      <strong>
-                        {t("actingAsAlternative")}{" "}
-                        {actingOriginal
-                          ? localName(actingOriginal, lang)
-                          : "—"}
-                      </strong>
-                      {actingOriginal && (
-                        <button
-                          onClick={() => {
-                            setSelectedId(String(actingOriginal.id));
-                            setPendingChoice(null);
-                            setEditingAlts(false);
-                            setFlowNotice("");
-                          }}
-                        >
-                          {t("viewOriginal")}
-                        </button>
+              {selectedLine?.paused_at && (
+                <p className="ff2-drawer-context" dir="auto">
+                  {t("homeLinePaused")}
+                </p>
+              )}
+
+              {hasActiveProduction && (
+                <section className="ff2-operational-section" aria-labelledby="ff2-production-now">
+                  <h4 id="ff2-production-now">{t("productionNow")}</h4>
+                  <div className="ff2-production-now">
+                    <strong dir="auto">{selectedProduct ? localName(selectedProduct, lang) : String(selectedOrder?.code || "")}</strong>
+                    {selectedProduct && selectedOrder?.code && (
+                      <span>{t("productionOrder")} <bdi dir="ltr">{String(selectedOrder.code)}</bdi></span>
+                    )}
+                    {Number.isFinite(Number(selectedOrder?.target_quantity)) && Number(selectedOrder?.target_quantity) > 0 &&
+                      Number.isFinite(Number(selectedOrder?.produced_quantity)) && (
+                        <span>{t("orderProgressNow")} <bdi dir="ltr">
+                          {Number(selectedOrder?.produced_quantity).toLocaleString(lang)} / {Number(selectedOrder?.target_quantity).toLocaleString(lang)}
+                        </bdi></span>
                       )}
-                    </div>
+                  </div>
+                </section>
+              )}
+
+              {(selectedDisplayState === "stopped" || selectedDisplayState === "affected") && (
+                <section className="ff2-operational-section" aria-labelledby="ff2-current-issue">
+                  <h4 id="ff2-current-issue">{t("currentIssue")}</h4>
+                  <div className="ff2-issue-card">
+                    {selectedDisplayState === "stopped" && (
+                      <>
+                        <strong dir="auto">{stopReasonRow ? localName(stopReasonRow, lang) : t("stopped")}</strong>
+                        {selectedStop?.started_at && (
+                          <span>{t("duration")}: {formatDuration(
+                            (Date.now() - Date.parse(String(selectedStop.started_at))) / 60000, lang,
+                          )}</span>
+                        )}
+                        {transferActive && activeAltRow ? (
+                          <span dir="auto">
+                            {t("transferredTo")} {localName(activeAltRow, lang)} · {t(
+                              ownBranchState === "flowing" ? "alternativeActive" :
+                              ownBranchState === "routeBlocked" ? "flowBlocked" : "alternativeAssigned",
+                            )}
+                          </span>
+                        ) : actualAffected.length ? (
+                          <span>{t("impact")}: {actualAffected.map((c) => localName(c, lang)).join(" · ")}</span>
+                        ) : null}
+                      </>
+                    )}
+                    {selectedDisplayState === "affected" && issueSource && (
+                      <>
+                        <strong dir="auto">{t("affectedBy")} {localName(issueSource, lang)}</strong>
+                        {(() => {
+                          const cause = openStopOf(issueSource);
+                          const reason = cause && s.tables.downtime_reasons?.find((r) => r.id === cause.reason_id);
+                          return reason ? <span dir="auto">{localName(reason, lang)}</span> : null;
+                        })()}
+                      </>
+                    )}
+                    {selectedDisplayState === "affected" && !issueSource && !homeAffected && (
+                      <strong>{t("flowBlocked")}</strong>
+                    )}
+                    {selectedDisplayState === "affected" && borrowedBy && homeAffected && (
+                      <strong>{t("homeLineAffected")}</strong>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              <section className="ff2-operational-section" aria-labelledby="ff2-flow-summary">
+                <h4 id="ff2-flow-summary">{t("flowSummary")}</h4>
+                <p className="ff2-flow-summary" dir="auto">
+                  {borrowedBy ? (
+                    <>{t("borrowedByLine")} {localName(borrowedBy, lang)}{homeAffected ? ` · ${t("homeLineAffected")}` : ""}</>
+                  ) : transferActive && activeAltRow ? (
+                    <>{t("transferredTo")} {localName(activeAltRow, lang)} · {t(
+                      ownBranchState === "flowing" ? "alternativeActive" :
+                      ownBranchState === "routeBlocked" ? "flowBlocked" : "alternativeAssigned",
+                    )}</>
+                  ) : (
+                    <>{t("ifThisMachineStops")}: {t(
+                      selectedChoice === "whole_line" ? "impactWholeLine" :
+                      selectedChoice === "downstream" ? "impactDownstream" : "productionCanContinue",
+                    )}</>
                   )}
-                  {selected.status === "stopped" && (
-                    <div className="ff2-note ff2-note-red">
-                      <strong>{t("productionFlowInterrupted")}</strong>
-                      {transferActive ? (
-                        <p>
-                          {t("transferredTo")}{" "}
-                          {activeAltRow
-                            ? localName(activeAltRow, lang)
-                            : "—"}{" "}
-                          ·{" "}
-                          {ownBranchState === "flowing"
-                            ? t("alternativeActive")
-                            : ownBranchState === "routeBlocked"
-                              ? t("flowBlocked")
-                              : t("alternativeAssigned")}
-                        </p>
-                      ) : actualAffected.length ? (
-                        <p>
-                          {t("impact")}:{" "}
-                          {actualAffected
-                            .map((c) => localName(c, lang))
-                            .join(" · ")}
-                        </p>
-                      ) : (
-                        <p className="ff2-muted">{t("noOtherAffected")}</p>
-                      )}
-                    </div>
-                  )}
-                  {transferActive && activeAltRow && (
-                    <div className="ff2-row-actions">
-                      <button
-                        onClick={() => {
-                          setSelectedId(String(activeAltRow.id));
-                          setPendingChoice(null);
-                          setEditingAlts(false);
+                </p>
+              </section>
+
+              {showQuickActions && (
+                <section className="ff2-operational-section" aria-labelledby="ff2-quick-actions">
+                  <h4 id="ff2-quick-actions">{t("quickActions")}</h4>
+                  <div className="ff2-quick-actions">
+                    {canStopHere && (
+                      <button onClick={() => { setQuickAction("stop"); setFlowNotice(""); }} disabled={flowBusy}>
+                        {t("stopMachine")}
+                      </button>
+                    )}
+                    {canRecordOutput && (
+                      <button onClick={() => { outputRequestId.current = crypto.randomUUID(); setQuickAction("output"); setFlowNotice(""); }} disabled={flowBusy}>
+                        {t("recordOutput")}
+                      </button>
+                    )}
+                    {canReturnHere && (
+                      <button className="primary" disabled={flowBusy} onClick={() => void returnProduction()}>
+                        {t("returnProduction")}
+                      </button>
+                    )}
+                    {canRestartHere && (
+                      <button className="primary" disabled={flowBusy} onClick={() => void startMachine()}>
+                        {t("returnToRunning")}
+                      </button>
+                    )}
+                    {canStartHere && (
+                      <button className="primary" disabled={flowBusy} onClick={() => void startMachine()}>
+                        {t("startMachine")}
+                      </button>
+                    )}
+                    {canTransferHere && (
+                        <button disabled={flowBusy} onClick={() => {
+                          setTransferTarget(String(transferCandidates[0].id));
                           setFlowNotice("");
-                        }}
-                      >
+                        }}>{t("transferProduction")}</button>
+                    )}
+                    {transferActive && activeAltRow && (
+                      <button onClick={() => { setSelectedId(String(activeAltRow.id)); setQuickAction(null); setFlowNotice(""); }}>
                         {t("viewAlternative")}
                       </button>
-                      {canReturn && (
-                        <button
-                          className="primary"
-                          disabled={flowBusy}
-                          onClick={() => void returnProduction()}
-                        >
-                          {t("returnProduction")}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  <h4>{t("ifThisMachineStops")}</h4>
-                  {selected.dependency_mode === "independent" ? (
-                    <p className="ff2-muted">
-                      {t("independentNote")}
-                      {impactEditable && (
-                        <>
-                          {" "}
-                          {t("useClassicEditor")}
-                        </>
-                      )}
-                    </p>
-                  ) : (
-                    <>
-                      <div className="ff2-options" role="radiogroup">
-                        {(
-                          [
-                            ["none", "impactNone"],
-                            ["downstream", "impactDownstream"],
-                            ["whole_line", "impactWholeLine"],
-                          ] as const
-                        ).map(([value, label]) => (
-                          <label
-                            key={value}
-                            className={`ff2-option${
-                              effectiveChoice === value ? " selected" : ""
-                            }${impactEditable ? "" : " readonly"}`}
-                          >
-                            <input
-                              type="radio"
-                              name="ff2-impact"
-                              disabled={!impactEditable}
-                              checked={effectiveChoice === value}
-                              onChange={() => setPendingChoice(value)}
-                            />
-                            {t(label)}
-                          </label>
-                        ))}
-                      </div>
-                      {!selected.line_id && (
-                        <p className="ff2-muted">{t("lineRequiredNote")}</p>
-                      )}
-                      {selected.dependency_mode === "buffer" && (
-                        <p className="ff2-muted">
-                          {t("bufferNote")}:{" "}
-                          <bdi dir="ltr">
-                            {String(selected.buffer_minutes)} {t("min")}
-                          </bdi>
-                          . {impactEditable ? t("useClassicEditor") : ""}
-                        </p>
-                      )}
-                      {preview && (
-                        <p className="ff2-current-effect">
-                          {t("currentEffect")}:{" "}
-                          {preview.selfState === "bufferActive"
-                            ? t("bufferHolds")
-                            : previewNames.length
-                              ? previewNames.length === centers.filter(
-                                    (c) => c.line_id === selected.line_id,
-                                  ).length - 1
-                                ? t("entireLine")
-                                : previewNames.join(" · ")
-                              : t("noOtherAffected")}
-                        </p>
-                      )}
-                      {impactEditable && pendingChoice && (
-                        <div className="ff2-row-actions">
-                          <button
-                            className="primary"
-                            disabled={flowBusy}
-                            onClick={() => void saveImpact()}
-                          >
-                            {t("save")}
-                          </button>
-                          <button
-                            disabled={flowBusy}
-                            onClick={() => setPendingChoice(null)}
-                          >
-                            {t("cancel")}
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <h4>{t("alternativeMachines")}</h4>
-                  {!editingAlts && (
-                    <>
-                      {availabilityRows.length ? (
-                        <ul className="ff2-alt-list">
-                          {availabilityRows.map(({ alt, availability }) => (
-                            <li
-                              key={String(alt.id)}
-                              className={`ff2-alt ${availability === "available" || availability === "active" ? "" : " ff2-dim"}`}
-                            >
-                              <span>{localName(alt, lang)}</span>
-                              <span className="ff2-alt-state">
-                                {availability === "available"
-                                  ? `● ${t("available")}`
-                                  : availability === "active"
-                                    ? `↗ ${t("alternativeActive")}`
-                                    : availability === "busy"
-                                      ? `○ ${t("onAnotherOrder")}`
-                                      : `${String(
-                                          alt.status === "stopped"
-                                            ? "■"
-                                            : alt.status === "running"
-                                              ? "●"
-                                              : "○",
-                                        )} ${t(String(alt.status))}`}
-                              </span>
-                            </li>
+                    )}
+                    {actingOriginal && (
+                      <button onClick={() => { setSelectedId(String(actingOriginal.id)); setQuickAction(null); setFlowNotice(""); }}>
+                        {t("viewOriginal")}
+                      </button>
+                    )}
+                  </div>
+
+                  {quickAction === "stop" && (
+                    <form className="ff2-quick-form" onSubmit={(event) => void stopMachine(event)}>
+                      <label>{t("reason")}
+                        <select value={stopReason} required onChange={(event) => setStopReason(event.target.value)}>
+                          <option value="">{t("reason")}</option>
+                          {(s.tables.downtime_reasons || []).filter((r) => !r.parent_id).map((r) => (
+                            <option key={String(r.id)} value={String(r.id)}>{localName(r, lang)}</option>
                           ))}
-                        </ul>
-                      ) : (
-                        <p className="ff2-muted">
-                          {t("noAlternativeConfigured")}
-                        </p>
-                      )}
-                      {selected.status === "stopped" &&
-                        !transferActive &&
-                        canTransfer && (
-                          <div className="ff2-transfer">
-                            {livePicker.blockedReason ? (
-                              <p className="ff2-muted">
-                                {t(livePicker.blockedReason)}
-                              </p>
-                            ) : !transferCandidates.length ? (
-                              <p className="ff2-muted">
-                                {t("noAlternativeAvailable")}
-                              </p>
-                            ) : (
-                              <>
-                            {transferCandidates.length === 1 && (
-                              <button
-                                className="primary"
-                                disabled={flowBusy}
-                                onClick={() => {
-                                  setTransferTarget(
-                                    String(transferCandidates[0].id),
-                                  );
-                                }}
-                              >
-                                {t("transferTo")}{" "}
-                                {localName(transferCandidates[0], lang)}
-                              </button>
-                            )}
-                            {transferCandidates.length > 1 &&
-                              !transferTarget && (
-                                <button
-                                  disabled={flowBusy}
-                                  onClick={() =>
-                                    setTransferTarget(
-                                      String(transferCandidates[0].id),
-                                    )
-                                  }
-                                >
-                                  {t("transferProduction")}
-                                </button>
-                              )}
-                            {transferCandidates.length >= 1 &&
-                              transferTarget && (
-                                <>
-                                  {transferCandidates.length > 1 && (
-                                    <div className="ff2-options">
-                                      {transferCandidates.map((alt: Row) => (
-                                        <label
-                                          key={String(alt.id)}
-                                          className={`ff2-option${
-                                            transferTarget === String(alt.id)
-                                              ? " selected"
-                                              : ""
-                                          }`}
-                                        >
-                                          <input
-                                            type="radio"
-                                            name="ff2-transfer-target"
-                                            checked={
-                                              transferTarget === String(alt.id)
-                                            }
-                                            onChange={() =>
-                                              setTransferTarget(String(alt.id))
-                                            }
-                                          />
-                                          {localName(alt, lang)} ·{" "}
-                                          {t(String(alt.status))}
-                                        </label>
-                                      ))}
-                                    </div>
-                                  )}
-                                  <textarea
-                                    value={transferReason}
-                                    onChange={(e) =>
-                                      setTransferReason(e.target.value)
-                                    }
-                                    placeholder={t("reason")}
-                                    minLength={3}
-                                    maxLength={2000}
-                                  />
-                                  <div className="ff2-row-actions">
-                                    <button
-                                      className="primary"
-                                      disabled={
-                                        flowBusy ||
-                                        !selected.order_id ||
-                                        transferReason.trim().length < 3
-                                      }
-                                      onClick={() => void runTransfer()}
-                                    >
-                                      {t("transferProduction")}
-                                    </button>
-                                    <button
-                                      disabled={flowBusy}
-                                      onClick={() => {
-                                        setTransferTarget(null);
-                                        setTransferReason("");
-                                      }}
-                                    >
-                                      {t("cancel")}
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      {canEditAlts && (
-                        <div className="ff2-row-actions">
-                          <button
-                            onClick={() => {
-                              setAltDraft(
-                                selectedAlternatives.map((a) => String(a.id)),
-                              );
-                              setEditingAlts(true);
-                            }}
-                          >
-                            {selectedAlternatives.length
-                              ? t("editAlternatives")
-                              : t("configureAlternative")}
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {editingAlts && (
-                    <div className="ff2-alt-edit">
-                      <p className="ff2-muted">{t("selectAlternatives")}</p>
-                      <ul className="ff2-alt-list">
-                        {sameCategoryMachines.map((c) => (
-                          <li key={String(c.id)}>
-                            <label className="ff2-check">
-                              <input
-                                type="checkbox"
-                                checked={altDraft.includes(String(c.id))}
-                                onChange={(e) =>
-                                  setAltDraft(
-                                    e.target.checked
-                                      ? [...altDraft, String(c.id)]
-                                      : altDraft.filter(
-                                          (x) => x !== String(c.id),
-                                        ),
-                                  )
-                                }
-                              />
-                              {localName(c, lang)}{" "}
-                              <span className="ff2-muted">
-                                · {t(String(c.status))}
-                              </span>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                      {!sameCategoryMachines.length && (
-                        <p className="ff2-muted">
-                          {t("noSameCategoryMachines")}
-                        </p>
-                      )}
+                        </select>
+                      </label>
+                      <label>{t("describeReason")}
+                        <textarea value={stopNotes} onChange={(event) => setStopNotes(event.target.value)} maxLength={2000}
+                          minLength={3} required={Boolean(s.tables.downtime_reasons?.find((r) => r.id === stopReason)?.requires_description)} />
+                      </label>
                       <div className="ff2-row-actions">
-                        <button
-                          className="primary"
-                          disabled={flowBusy}
-                          onClick={() => void saveAlternatives()}
-                        >
-                          {t("save")}
-                        </button>
-                        <button
-                          disabled={flowBusy}
-                          onClick={() => setEditingAlts(false)}
-                        >
-                          {t("cancel")}
-                        </button>
+                        <button className="primary" disabled={flowBusy || !stopReason}>{t("stopMachine")}</button>
+                        <button type="button" onClick={() => setQuickAction(null)}>{t("cancel")}</button>
+                      </div>
+                    </form>
+                  )}
+                  {quickAction === "output" && (
+                    <form className="ff2-quick-form" onSubmit={(event) => void recordOutput(event)}>
+                      <label>{t("produced_quantity")}
+                        <input type="number" min="1" step="1" required value={outputProduced}
+                          onChange={(event) => setOutputProduced(event.target.value)} />
+                      </label>
+                      <label>{t("rejected_quantity")}
+                        <input type="number" min="0" step="1" required value={outputRejected}
+                          onChange={(event) => setOutputRejected(event.target.value)} />
+                      </label>
+                      <div className="ff2-row-actions">
+                        <button className="primary" disabled={flowBusy || !outputProduced || Number(outputRejected) > Number(outputProduced)}>{t("recordOutput")}</button>
+                        <button type="button" onClick={() => setQuickAction(null)}>{t("cancel")}</button>
+                      </div>
+                    </form>
+                  )}
+                  {transferTarget && selected.status === "stopped" && !transferActive && (
+                    <div className="ff2-quick-form">
+                      {transferCandidates.length > 1 && (
+                        <label>{t("alternativeMachines")}
+                          <select value={transferTarget} onChange={(event) => setTransferTarget(event.target.value)}>
+                            {transferCandidates.map((alt: Row) => <option key={String(alt.id)} value={String(alt.id)}>{localName(alt, lang)}</option>)}
+                          </select>
+                        </label>
+                      )}
+                      <p>{t("transferTo")} {localName(transferCandidates.find((alt: Row) => String(alt.id) === transferTarget), lang)}</p>
+                      <label>{t("reason")}
+                        <textarea value={transferReason} onChange={(event) => setTransferReason(event.target.value)} minLength={3} maxLength={2000} />
+                      </label>
+                      <div className="ff2-row-actions">
+                        <button className="primary" disabled={flowBusy || transferReason.trim().length < 3} onClick={() => void runTransfer()}>{t("transferProduction")}</button>
+                        <button onClick={() => { setTransferTarget(null); setTransferReason(""); }}>{t("cancel")}</button>
                       </div>
                     </div>
                   )}
-                  {flowNotice && (
-                    <p role="status" className="notice">
-                      {t(flowNotice)}
-                    </p>
-                  )}
-                </div>
+                </section>
               )}
-              {tab === "downtime" && selectedStop && (
-                <div className="ff2-downtime">
-                  <strong>
-                    {localName(
-                      s.tables.downtime_reasons?.find(
-                        (r) => r.id === selectedStop.reason_id,
-                      ),
-                      lang,
-                    )}
-                  </strong>
-                  <p>
-                    {t("duration")}:{" "}
-                    {formatDuration(
-                      (Date.now() - Date.parse(String(selectedStop.started_at))) /
-                        60000,
-                      lang,
-                    )}
-                  </p>
-                  {selectedStop.expected_restart && (
-                    <p>{t("expectedRestart")}: {String(selectedStop.expected_restart)}</p>
-                  )}
-                  {String(selectedStop.notes || "") && (
-                    <p>{String(selectedStop.notes)}</p>
-                  )}
-                </div>
-              )}
-              {tab === "downtime" && !selectedStop && (
-                <p className="ff2-muted">{t("allClear")}</p>
-              )}
-              {tab === "configuration" && (
-                <>
-                  <dl className="ff2-dl">
-                    {config.map(([key, value]) => (
-                      <div key={key}>
-                        <dt>{t(key)}</dt>
-                        <dd>{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <p className="ff2-muted">{t("configurationHelp")}</p>
-                </>
-              )}
+              {flowNotice && <p role="status" className="notice">{t(flowNotice)}</p>}
             </div>
-            {(can("centers", "edit") ||
-              can("machine_status", "edit") ||
-              can("downtime", "edit") ||
-              can("orders", "edit")) && (
+            {(can("centers", "view") || can("centers", "edit")) && (
               <footer className="ff2-drawer-foot">
-                <button
-                  className="primary"
-                  onClick={() => setDetailsOpen(true)}
-                >
-                  {t("operatorView")}
+                <button className="ff2-settings-link" onClick={() => props.onManage(String(selected.id))}>
+                  {t("machineDetailsSettings")} <span aria-hidden="true" className="ff2-settings-arrow">→</span>
                 </button>
               </footer>
             )}
           </aside>
-          {detailsOpen && (
-            <CenterDetails
-              {...props}
-              center={selected}
-              onClose={() => setDetailsOpen(false)}
-            />
-          )}
         </>
       )}
     </section>

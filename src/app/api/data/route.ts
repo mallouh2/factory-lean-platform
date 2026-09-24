@@ -56,6 +56,7 @@ const rpcModules: Record<string, [string, string][]> = {
   ],
   configure_center_alternatives: [["centers", "edit"]],
   configure_center_capabilities: [["centers", "edit"]],
+  set_line_pause: [["centers", "edit"]],
   set_support_by_email: [["support", "edit"]],
   set_daily_target: [["orders", "edit"]],
   record_output: [["orders", "edit"]],

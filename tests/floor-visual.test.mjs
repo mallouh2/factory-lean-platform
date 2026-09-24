@@ -9,9 +9,72 @@ import {
   applyImpactChoice,
   previewStopImpact,
   alternativeAvailability,
+  liveTransferPicker,
   transferBranches,
   borrowingLineOf,
+  lineOperationalStatus,
+  lineFlowActive,
+  routeRows,
 } from "../src/utils/floor-visual.mjs";
+
+test("long route wraps in production order without reversing for RTL", () => {
+  assert.deepEqual(routeRows([1, 2, 3, 4, 5, 6, 7], 3), [[1, 2, 3], [4, 5, 6], [7]]);
+  assert.deepEqual(routeRows([1, 2], 0), [[1], [2]]);
+});
+
+test("paused home line releases an idle configured alternative with another order", () => {
+  const original = { id: "O", status: "stopped", order_id: "ORDER-B", category_id: "CAT" };
+  const alt = { id: "A", status: "idle", order_id: "ORDER-A", line_id: "HOME", category_id: "CAT" };
+  const orders = [{ id: "ORDER-B", status: "active" }];
+  const pausedLines = [{ id: "HOME", paused_at: "2026-09-23T10:00:00Z" }];
+  assert.equal(alternativeAvailability(alt, [], original.order_id, pausedLines), "available");
+  assert.deepEqual(
+    liveTransferPicker(original, [original, alt], ["A"], [], orders, pausedLines).candidates.map((c) => c.id),
+    ["A"],
+  );
+  assert.equal(alt.line_id, "HOME");
+  assert.equal(alternativeAvailability(alt, [], original.order_id, [{ id: "HOME", paused_at: null }]), "busy");
+  assert.equal(
+    liveTransferPicker(original, [original, alt], ["A"], [], orders, [{ id: "HOME", paused_at: null }]).candidates.length,
+    0,
+  );
+});
+
+test("paused-line exception keeps physical, assignment, category and configuration guards", () => {
+  const original = { id: "O", status: "stopped", order_id: "ORDER-B", category_id: "CAT" };
+  const alt = { id: "A", status: "idle", order_id: "ORDER-A", line_id: "HOME", category_id: "CAT" };
+  const orders = [{ id: "ORDER-B", status: "active" }];
+  const pausedLines = [{ id: "HOME", paused_at: "2026-09-23T10:00:00Z" }];
+  for (const status of ["stopped", "setup", "offline"]) {
+    const unavailable = { ...alt, status };
+    assert.equal(alternativeAvailability(unavailable, [], original.order_id, pausedLines), status);
+    assert.equal(liveTransferPicker(original, [original, unavailable], ["A"], [], orders, pausedLines).candidates.length, 0);
+  }
+  const open = [{ original_id: "OTHER", alternative_id: "A", ended_at: null }];
+  assert.equal(alternativeAvailability(alt, [], original.order_id, pausedLines, ["A"]), "borrowed");
+  assert.equal(liveTransferPicker(original, [original, alt], ["A"], open, orders, pausedLines).candidates.length, 0);
+  assert.equal(liveTransferPicker(original, [original, { ...alt, category_id: "OTHER" }], ["A"], [], orders, pausedLines).candidates.length, 0);
+  assert.equal(liveTransferPicker(original, [original, alt], [], [], orders, pausedLines).candidates.length, 0);
+});
+
+test("line pause masks line success but preserves borrowed flow and physical state", () => {
+  const pausedAt = "2026-09-23T09:00:00Z";
+  assert.equal(lineOperationalStatus("runningViaAlternative", pausedAt), "paused");
+  assert.equal(lineFlowActive(true, pausedAt), false);
+  assert.equal(lineFlowActive(true, null), true);
+  const centers = [
+    { id: "O", status: "stopped", line_id: "L", position: 0, dependency_mode: "blocking", impact_scope: "downstream", buffer_minutes: 0 },
+    { id: "A", status: "running", line_id: "H", position: 0, dependency_mode: "blocking", impact_scope: "downstream", buffer_minutes: 0 },
+  ];
+  const transfers = [{ original_id: "O", alternative_id: "A", ended_at: null }];
+  const flow = evaluateFlow(centers, [{ work_center_id: "O", started_at: pausedAt, ended_at: null }], transfers);
+  const branches = transferBranches(centers, flow, transfers);
+  assert.equal(branches[0].state, "flowing");
+  assert.equal(centers[1].status, "running");
+  assert.equal(centers[1].line_id, "H");
+  assert.equal(lineOperationalStatus(lineVisualStatus(["A"], machineVisualStates(centers, flow, transfers), branches, ["A"]), pausedAt), "paused");
+  assert.equal(lineOperationalStatus(lineVisualStatus(["O"], machineVisualStates(centers, flow, transfers), branches), null), "runningViaAlternative");
+});
 import { evaluateFlow } from "../src/utils/production-flow.mjs";
 
 // A five-machine line: O=root stopped machine, U1/U2 upstream, D1/D2 downstream,
@@ -501,4 +564,114 @@ test("successful cross-line transfer leaves only a non-flowing home placeholder"
   assert.equal(branches[0].state, "flowing");
   assert.equal(states.A, "alternative");
   assert.equal(lineVisualStatus(["O"], states, branches), "runningViaAlternative");
+});
+
+function borrowedHomeFixture(dependency_mode = "blocking", impact_scope = "whole_line") {
+  const centers = [
+    { id: "H0", line_id: "HOME", position: 0, status: "running", dependency_mode: "blocking", impact_scope: "downstream" },
+    { id: "A1", line_id: "HOME", position: 1, status: "running", dependency_mode, impact_scope },
+    { id: "H2", line_id: "HOME", position: 2, status: "running", dependency_mode: "blocking", impact_scope: "downstream" },
+    { id: "B1", line_id: "BORROWER", position: 0, status: "stopped", dependency_mode: "blocking", impact_scope: "whole_line" },
+    { id: "B2", line_id: "BORROWER", position: 1, status: "running", dependency_mode: "blocking", impact_scope: "downstream" },
+  ];
+  const stops = [{ work_center_id: "B1", started_at: "2026-09-24T08:00:00Z", ended_at: null }];
+  const transfers = [{ original_id: "B1", alternative_id: "A1", created_at: "2026-09-24T08:10:00Z", ended_at: null }];
+  return { centers, stops, transfers };
+}
+
+test("resumed home line is blocked by a whole-line machine borrowed elsewhere", () => {
+  const { centers, stops, transfers } = borrowedHomeFixture();
+  const flow = evaluateFlow(centers, stops, transfers);
+  const branches = transferBranches(centers, flow, transfers);
+  const states = machineVisualStates(centers, flow, transfers);
+  assert.equal(centers[1].status, "running");
+  assert.equal(centers[1].line_id, "HOME");
+  assert.equal(flow.A1.homeState, "blocked");
+  assert.equal(flow.A1.state, "clear");
+  assert.equal(flow.H0.state, "blocked");
+  assert.equal(flow.H2.state, "blocked");
+  assert.equal(states.H0, "affected");
+  assert.equal(states.H2, "affected");
+  assert.equal(lineOperationalStatus(lineVisualStatus(["H0", "A1", "H2"], states, branches, ["A1"], flow), null), "affected");
+  assert.equal(connectorFlowing(centers[0], centers[1], states, flow, ["A1"]), false);
+  assert.equal(connectorFlowing(centers[1], centers[2], states, flow, ["A1"]), false);
+  assert.equal(branches[0].state, "flowing");
+  assert.equal(states.A1, "alternative");
+  assert.equal(flow.B1.state, "transferred");
+  assert.equal(flow.B2.state, "clear");
+  assert.equal(lineVisualStatus(["B1", "B2"], states, branches), "runningViaAlternative");
+  assert.equal(borrowingLineOf(centers[1], branches, [{ id: "HOME" }, { id: "BORROWER" }])?.id, "BORROWER");
+});
+
+test("borrowed-away downstream impact leaves upstream flow clear", () => {
+  const { centers, stops, transfers } = borrowedHomeFixture("blocking", "downstream");
+  const flow = evaluateFlow(centers, stops, transfers);
+  const states = machineVisualStates(centers, flow, transfers);
+  assert.equal(flow.H0.state, "clear");
+  assert.equal(flow.H2.state, "blocked");
+  assert.equal(flow.A1.homeState, "blocked");
+  assert.equal(lineVisualStatus(["H0", "A1", "H2"], states, transferBranches(centers, flow, transfers), ["A1"], flow), "affected");
+});
+
+test("borrowed-away non-blocking machine does not block unrelated home production", () => {
+  for (const [mode, scope] of [["non_blocking", "none"], ["blocking", "none"], ["independent", "whole_line"]]) {
+    const { centers, stops, transfers } = borrowedHomeFixture(mode, scope);
+    const flow = evaluateFlow(centers, stops, transfers);
+    const branches = transferBranches(centers, flow, transfers);
+    const states = machineVisualStates(centers, flow, transfers);
+    assert.equal(flow.H0.state, "clear");
+    assert.equal(flow.H2.state, "clear");
+    assert.equal(flow.A1.homeState, undefined);
+    assert.equal(lineVisualStatus(["H0", "A1", "H2"], states, branches, ["A1"], flow), "running");
+    assert.equal(connectorFlowing(centers[0], centers[1], states, flow, ["A1"]), false);
+    assert.equal(branches[0].state, "flowing");
+  }
+});
+
+test("borrowed-away buffer delays its configured home-line impact", () => {
+  const { centers, stops, transfers } = borrowedHomeFixture("buffer", "whole_line");
+  centers[1].buffer_minutes = 30;
+  const before = evaluateFlow(centers, stops, transfers, Date.parse("2026-09-24T08:20:00Z"));
+  assert.equal(before.A1.homeState, "bufferActive");
+  assert.equal(before.H0.state, "clear");
+  const after = evaluateFlow(centers, stops, transfers, Date.parse("2026-09-24T08:40:00Z"));
+  assert.equal(after.A1.homeState, "blocked");
+  assert.equal(after.H0.state, "blocked");
+  assert.equal(after.A1.state, "clear");
+});
+
+test("ending the transfer restores the machine to its unchanged home route", () => {
+  const { centers, stops, transfers } = borrowedHomeFixture();
+  transfers[0].ended_at = "2026-09-24T09:00:00Z";
+  const flow = evaluateFlow(centers, stops, transfers);
+  const branches = transferBranches(centers, flow, transfers);
+  const states = machineVisualStates(centers, flow, transfers);
+  assert.equal(flow.A1.homeState, undefined);
+  assert.equal(flow.H0.state, "clear");
+  assert.equal(flow.H2.state, "clear");
+  assert.equal(centers[1].line_id, "HOME");
+  assert.equal(states.A1, "running");
+  assert.equal(lineVisualStatus(["H0", "A1", "H2"], states, branches, [], flow), "running");
+  assert.equal(connectorFlowing(centers[0], centers[1], states, flow), true);
+  assert.equal(branches.length, 0);
+});
+
+test("returned machine does not mask another home-line blocker", () => {
+  const { centers, stops, transfers } = borrowedHomeFixture();
+  centers[2].status = "stopped";
+  centers[2].impact_scope = "whole_line";
+  stops.push({ work_center_id: "H2", started_at: "2026-09-24T08:30:00Z", ended_at: null });
+  transfers[0].ended_at = "2026-09-24T09:00:00Z";
+  stops[0].ended_at = "2026-09-24T09:00:00Z";
+  centers[3].status = "running";
+  const flow = evaluateFlow(centers, stops, transfers);
+  const branches = transferBranches(centers, flow, transfers);
+  const states = machineVisualStates(centers, flow, transfers);
+  assert.equal(centers[1].status, "running");
+  assert.equal(centers[1].line_id, "HOME");
+  assert.equal(flow.A1.homeState, undefined);
+  assert.equal(flow.A1.state, "blocked");
+  assert.equal(states.A1, "affected");
+  assert.equal(lineVisualStatus(["H0", "A1", "H2"], states, branches, [], flow), "affected");
+  assert.equal(branches.length, 0);
 });

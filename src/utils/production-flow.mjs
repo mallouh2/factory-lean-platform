@@ -14,24 +14,49 @@ export function formatDuration(minutes, locale = "en") {
 }
 /** A sequence describes downstream dependency, never a replacement for the machine's actual state. */
 export function evaluateFlow(centers, stops, transfers, now = Date.now()) {
-  /** @type {Record<string,{state:string,source:string|null}>} */
+  /** @type {Record<string,{state:string,source:string|null,homeState?:string}>} */
   const result = {};
   const active = centers.filter((c) => !c.archived);
   for (const c of active) result[c.id] = { state: "clear", source: null };
+  const byId = new Map(active.map((c) => [String(c.id), c]));
+  // An open cross-line transfer assigns its alternative away from its home
+  // route. Its physical status still serves the borrowing line.
+  const borrowedAway = new Map();
+  for (const transfer of transfers.filter((x) => !x.ended_at)) {
+    const original = byId.get(String(transfer.original_id));
+    const alternative = byId.get(String(transfer.alternative_id));
+    if (
+      original?.line_id && alternative?.line_id &&
+      String(original.line_id) !== String(alternative.line_id)
+    ) borrowedAway.set(String(alternative.id), transfer);
+  }
+  const blocksHome = (c) =>
+    ["blocking", "buffer"].includes(c.dependency_mode) &&
+    c.impact_scope !== "none";
   const stopped = active.filter(
     (c) =>
       ["stopped", "setup", "offline"].includes(c.status) &&
-      ["blocking", "buffer"].includes(c.dependency_mode) &&
-      c.impact_scope !== "none",
+      blocksHome(c) && !borrowedAway.has(String(c.id)),
   );
+  const assignedAway = active.filter((c) => borrowedAway.has(String(c.id)) && blocksHome(c));
+  const roots = [...stopped, ...assignedAway];
   const unresolved = new Set();
   const candidates = [];
-  for (const c of stopped) {
-    const stop = stops.find((d) => d.work_center_id === c.id && !d.ended_at);
+  for (const c of roots) {
+    const transferAway = borrowedAway.get(String(c.id));
+    const stop = transferAway
+      ? null
+      : stops.find((d) => d.work_center_id === c.id && !d.ended_at);
+    const impactStartedAt = transferAway?.created_at || stop?.started_at;
     const buffered =
       c.dependency_mode === "buffer" &&
-      stop &&
-      now < Date.parse(stop.started_at) + Number(c.buffer_minutes) * 60000;
+      impactStartedAt &&
+      now < Date.parse(impactStartedAt) + Number(c.buffer_minutes) * 60000;
+    if (transferAway) {
+      if (buffered) result[c.id].homeState = "bufferActive";
+      else unresolved.add(c.id);
+      continue;
+    }
     const transfer = transfers.find(
       (x) => x.original_id === c.id && !x.ended_at,
     );
@@ -44,10 +69,12 @@ export function evaluateFlow(centers, stops, transfers, now = Date.now()) {
     } else unresolved.add(c.id);
   }
   const propagate = () => {
-    for (const c of stopped.filter((x) => unresolved.has(x.id))) {
-      result[c.id] = { state: "blocked", source: c.id };
+    for (const c of roots.filter((x) => unresolved.has(x.id))) {
+      if (borrowedAway.has(String(c.id))) result[c.id].homeState = "blocked";
+      else result[c.id] = { state: "blocked", source: c.id };
       if (!c.line_id) continue;
       for (const peer of active.filter((x) => x.line_id === c.line_id)) {
+        if (borrowedAway.has(String(peer.id))) continue;
         const downstream =
           Number(peer.position) > Number(c.position) &&
           peer.dependency_mode !== "independent";

@@ -1,4 +1,5 @@
 import CenterCapabilities from "./CenterCapabilities";
+import CenterAlternatives from "./CenterAlternatives";
 import {
   autoCode,
   formatLocalInput,
@@ -121,16 +122,36 @@ const numbers = [
   "produced_quantity",
   "rejected_quantity",
 ];
+type StandaloneEditor = {
+  record: Row | null;
+  onSaved: () => void;
+  onCancel: () => void;
+  blocked?: boolean;
+};
+function InlineEditor({ title, children }: {
+  t: FeatureProps["t"];
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return <div className="management-record-form"><h3>{title}</h3>{children}</div>;
+}
 export default function Configuration({
   view,
+  standalone,
   ...props
-}: FeatureProps & { view: string }) {
+}: FeatureProps & { view: string; standalone?: StandaloneEditor }) {
   const { snapshot: s, t, lang, command, can } = props;
   const [editing, setEditing] = useState<Row | null>(null),
     [search, setSearch] = useState(""),
     [busy, setBusy] = useState(false),
     [targetOrder, setTargetOrder] = useState<Row | null>(null);
+  const activeEditing = standalone ? standalone.record || {} : editing;
+  const EditorShell = standalone ? InlineEditor : Dialog;
   const c = config[view];
+  const editorFields = activeEditing?.id ? c.fields.filter((field) =>
+    !(standalone && view === "centers" && ["line_id", "position"].includes(field)),
+  ) : c.createFields || c.fields;
   const permissionModule =
     view === "products" || view === "work_center_categories"
       ? view === "work_center_categories"
@@ -158,8 +179,8 @@ export default function Configuration({
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
-    const creating = !editing?.id;
-    const activeFields = creating ? c.createFields || c.fields : c.fields;
+    const creating = !activeEditing?.id;
+    const activeFields = editorFields;
     const f = new FormData(e.currentTarget),
       payload: Record<string, unknown> = {};
     for (const field of activeFields) {
@@ -185,10 +206,11 @@ export default function Configuration({
       await command("save_record", {
         factory: s.factory?.id,
         resource: view,
-        id: editing?.id || null,
+        id: activeEditing?.id || null,
         payload,
       });
-      setEditing(null);
+      if (standalone) standalone.onSaved();
+      else setEditing(null);
     } catch {
       // Keep the form open so the user can correct the input.
     } finally {
@@ -196,16 +218,18 @@ export default function Configuration({
     }
   }
   async function archive(row: Row) {
-    if (confirm(t("confirmArchive")))
-      await command("save_record", {
+    if (!confirm(t("confirmArchive"))) return false;
+    await command("save_record", {
         factory: s.factory?.id,
         resource: view,
         id: row.id,
         payload: { archived: true },
-      });
+    });
+    return true;
   }
   return (
-    <section className="panel">
+    <section className={standalone ? "management-editor" : "panel"}>
+      {!standalone && <>
       <header className="section-head">
         <input
           aria-label={t("search")}
@@ -355,15 +379,16 @@ export default function Configuration({
           </form>
         </Dialog>
       )}
-      {editing && (
-        <Dialog
+      </>}
+      {activeEditing && (
+        <EditorShell
           t={t}
-          title={t(editing.id ? "edit" : "create")}
-          onClose={() => setEditing(null)}
+          title={t(activeEditing.id ? "edit" : "create")}
+          onClose={() => standalone ? standalone.onCancel() : setEditing(null)}
         >
           <form onSubmit={save}>
             <div className="form-grid">
-              {(editing.id ? c.fields : c.createFields || c.fields).map(
+              {editorFields.map(
                 (field) => (
                 <Field
                   key={field}
@@ -378,7 +403,7 @@ export default function Configuration({
                     field === "category_id" ? (
                       <select
                         name={field}
-                        defaultValue={String(editing[field] || "")}
+                        defaultValue={String(activeEditing[field] || "")}
                         required
                       >
                         <option value="">{t("chooseCategory")}</option>
@@ -393,7 +418,7 @@ export default function Configuration({
                     ) : (
                     <select
                       name={field}
-                      defaultValue={String(editing[field] || "")}
+                      defaultValue={String(activeEditing[field] || "")}
                       required={field === "product_id"}
                     >
                       <option value="">{t("unassigned")}</option>
@@ -401,7 +426,7 @@ export default function Configuration({
                         .filter(
                           (x) =>
                             !x.archived &&
-                            x.id !== editing.id &&
+                            x.id !== activeEditing.id &&
                             (field !== "operator_id" ||
                               x.status === "approved"),
                         )
@@ -417,7 +442,7 @@ export default function Configuration({
                   ) : field === "icon_key" ? (
                     <select
                       name={field}
-                      defaultValue={String(editing[field] || "generic")}
+                      defaultValue={String(activeEditing[field] || "generic")}
                     >
                       {CATEGORY_ICON_KEYS.map((x) => (
                         <option key={x} value={x}>
@@ -431,7 +456,7 @@ export default function Configuration({
                     <select
                       name={field}
                       defaultValue={String(
-                        editing[field] ||
+                        activeEditing[field] ||
                           (field === "type"
                             ? "machine"
                             : field === "stage"
@@ -462,13 +487,13 @@ export default function Configuration({
                     <input
                       name={field}
                       type="checkbox"
-                      defaultChecked={Boolean(editing[field])}
+                      defaultChecked={Boolean(activeEditing[field])}
                     />
                   ) : ["description", "notes"].includes(field) ? (
                     <textarea
                       name={field}
                       maxLength={2000}
-                      defaultValue={String(editing[field] || "")}
+                      defaultValue={String(activeEditing[field] || "")}
                     />
                   ) : (
                     <input
@@ -503,9 +528,9 @@ export default function Configuration({
                       )}
                       defaultValue={String(
                         (["start_time", "expected_finish"].includes(field) &&
-                        editing[field]
-                          ? formatLocalInput(String(editing[field]), zone)
-                          : editing[field]) ??
+                        activeEditing[field]
+                          ? formatLocalInput(String(activeEditing[field]), zone)
+                          : activeEditing[field]) ??
                           ([
                             "produced_quantity",
                             "rejected_quantity",
@@ -519,14 +544,20 @@ export default function Configuration({
                 </Field>
               ))}
             </div>
-            <button className="primary" disabled={busy}>
+            <button className="primary" disabled={busy || standalone?.blocked || !can(permissionModule, activeEditing.id ? "edit" : "create")}>
               {t("save")}
             </button>
           </form>
-          {view === "centers" && editing.id && (
-            <CenterCapabilities {...props} centerId={String(editing.id)} />
+          {view === "centers" && activeEditing.id && (
+            <>
+              <CenterAlternatives {...props} centerId={String(activeEditing.id)} />
+              <CenterCapabilities {...props} centerId={String(activeEditing.id)} />
+            </>
           )}
-        </Dialog>
+          {standalone && activeEditing.id && can(permissionModule, "delete") && (
+            <button className="management-archive" onClick={() => void archive(activeEditing).then((saved) => { if (saved) standalone.onSaved(); }).catch(() => {})}>{t("archive")}</button>
+          )}
+        </EditorShell>
       )}
     </section>
   );

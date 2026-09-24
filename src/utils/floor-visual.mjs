@@ -135,10 +135,14 @@ export function matchesVisualFilter(filter, state) {
  * the open row alone says nothing, and such a blocked branch also outranks
  * unrelated upstream machines that are still physically running.
  */
-export function lineVisualStatus(ids, states, branches, borrowedAwayIds = []) {
+export function lineVisualStatus(ids, states, branches, borrowedAwayIds = [], flow = {}) {
   const all = (ids || []).map(String);
   if (!all.length) return null;
   const borrowedAway = new Set((borrowedAwayIds || []).map(String));
+  // The flow engine, not the placeholder's physical status, decides whether
+  // an assigned-away machine blocks its home route.
+  if (all.some((id) => borrowedAway.has(id) && flow[id]?.homeState === "blocked"))
+    return "affected";
   const list = all.filter((id) => !borrowedAway.has(id));
   if (!list.length) return "idle";
   const lineBranches = (branches || []).filter((b) =>
@@ -176,6 +180,22 @@ export function connectorFlowing(a, b, states, flow, borrowedAwayIds = []) {
     running(aId) && running(bId) &&
     flow[aId]?.state !== "blocked" && flow[bId]?.state !== "blocked"
   );
+}
+
+/** A paused line never presents as flowing; physical status comes from the database. */
+export function lineOperationalStatus(status, pausedAt) {
+  return pausedAt ? "paused" : status;
+}
+export function lineFlowActive(flowing, pausedAt) {
+  return !pausedAt && Boolean(flowing);
+}
+
+/** Keep the real position order when a visual route spans several rows. */
+export function routeRows(items, columns) {
+  const size = Math.max(1, Math.floor(Number(columns) || 1));
+  const rows = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+  return rows;
 }
 /**
  * The simplified V2 impact choice for a machine: which existing impact
@@ -254,17 +274,26 @@ export function previewStopImpact(
  * Truthful availability of a CONFIGURED alternative. "active" = effectively
  * carrying production right now (target of a transfer evaluateFlow credits
  * whose restored route is clear — an open transfer with a blocked route or a
- * stopped alternative does not count); "available" = idle and order-
- * compatible (exactly what the existing transfer RPC accepts); other statuses
- * pass through for display, and "busy" marks an idle machine locked to a
- * different production order.
+ * stopped alternative does not count); "available" = idle and either order-
+ * compatible or released by a paused home line. Other statuses pass through;
+ * "busy" marks an idle machine locked to a different order on an active line.
  */
-export function alternativeAvailability(alt, activeAlternativeIds, originalOrderId) {
+export function alternativeAvailability(
+  alt, activeAlternativeIds, originalOrderId, lines = [], openAlternativeIds = [],
+) {
   const id = String(alt.id);
   if ((activeAlternativeIds || []).includes(id)) return "active";
+  if ((openAlternativeIds || []).includes(id)) return "borrowed";
   const status = String(alt.status || "idle");
   if (status === "idle") {
+    const homePaused = (lines || []).some(
+      (line) =>
+        !line.archived &&
+        String(line.id) === String(alt.line_id || "") &&
+        !!line.paused_at,
+    );
     const orderOk =
+      homePaused ||
       !originalOrderId ||
       !alt.order_id ||
       String(alt.order_id) === String(originalOrderId);
@@ -310,6 +339,7 @@ export function liveTransferPicker(
   configuredAlternativeIds,
   transfers,
   orders,
+  lines = [],
 ) {
   const oid = String(original.id);
   // Original-side prerequisites (server: invalid_order / stale transfers).
@@ -330,11 +360,10 @@ export function liveTransferPicker(
   const openDowntime = true; // open-stop presence is implied by stopped state in the UI; RPC remains authority
   if (!openDowntime)
     return { blockedReason: "activeOrderRequired", candidates: [] };
-  const busyTargets = new Set(
+  const openAlternativeIds =
     (transfers || [])
       .filter((x) => !x.ended_at)
-      .map((x) => String(x.alternative_id)),
-  );
+      .map((x) => String(x.alternative_id));
   const candidates = (centers || [])
     .filter(
       (c) =>
@@ -342,9 +371,7 @@ export function liveTransferPicker(
         !c.archived &&
         (configuredAlternativeIds || []).includes(String(c.id)) &&
         String(c.category_id) === String(original.category_id) &&
-        String(c.status) === "idle" &&
-        (!c.order_id || String(c.order_id) === String(original.order_id)) &&
-        !busyTargets.has(String(c.id)),
+        alternativeAvailability(c, [], original.order_id, lines, openAlternativeIds) === "available",
     );
   return { blockedReason: null, candidates };
 }

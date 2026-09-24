@@ -37,21 +37,26 @@ const future = [
   "costing",
   "hr",
 ];
-const icons: Record<string, string> = {
-  dashboard: "▦",
-  factory: "▥",
-  lines: "≡",
-  centers: "⚙",
-  orders: "▤",
-  products: "▣",
-  downtime: "◷",
-  reports: "▥",
-  employees: "♙",
-  roles: "⌘",
-  settings: "⚙",
-  support: "◉",
-  audit: "▧",
+const sidebarIconPaths: Record<string, string[]> = {
+  platform: ["M3 21h18", "M5 21V7l7-4 7 4v14", "M9 10h.01", "M15 10h.01", "M9 14h.01", "M15 14h.01", "M10 21v-4h4v4"],
+  dashboard: ["M3 3h8v8H3z", "M13 3h8v8h-8z", "M3 13h8v8H3z", "M13 13h8v8h-8z"],
+  lines: ["M2 9h5v6H2z", "M10 9h5v6h-5z", "M18 9h4v6h-4z", "M7 12h3", "M15 12h3"],
+  orders: ["M8 4h8", "M9 3h6v3H9z", "M7 5H5v16h14V5h-2", "M8 11h8", "M8 15h8", "M8 19h5"],
+  products: ["M3 7 12 3l9 4v10l-9 4-9-4z", "M3 7l9 4 9-4", "M12 11v10"],
+  downtime: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M10 9v6", "M14 9v6"],
+  reports: ["M4 20V10h4v10", "M10 20V5h4v15", "M16 20v-8h4v8", "M3 20h18"],
+  employees: ["M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M2 20v-2a7 7 0 0 1 14 0v2", "M17 5a4 4 0 0 1 0 7", "M19 14a6 6 0 0 1 3 5v1"],
+  roles: ["M5 4h14v16H5z", "M9 9a2 2 0 1 0 4 0 2 2 0 0 0-4 0z", "M8 16a3 3 0 0 1 6 0", "M16 9h1", "M16 13h1"],
+  settings: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M10 2h4l.5 2.3 1.5.7 2-.9 2.8 2.8-.9 2 .7 1.5L23 11v2l-2.4.5-.7 1.5.9 2-2.8 2.8-2-.9-1.5.7L14 22h-4l-.5-2.4-1.5-.7-2 .9-2.8-2.8.9-2-.7-1.5L1 13v-2l2.4-.6.7-1.5-.9-2L6 4.1l2 .9 1.5-.7z"],
+  support: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M5.6 5.6 9.2 9.2", "M14.8 14.8l3.6 3.6", "M18.4 5.6l-3.6 3.6", "M9.2 14.8l-3.6 3.6"],
+  audit: ["M6 3h9l4 4v14H6z", "M15 3v4h4", "M9 12h7", "M9 16h4", "M16 16l1.5 1.5L20 15"],
 };
+function SidebarIcon({ name }: { name: string }) {
+  return <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {(sidebarIconPaths[name] || sidebarIconPaths.dashboard).map((path, index) => <path key={index} d={path} />)}
+  </svg>;
+}
 export default function FactoryApp() {
   const [lang, setLang] = useState<Language>("en"),
     [dirtyLayout, setDirtyLayout] = useState(false),
@@ -60,13 +65,11 @@ export default function FactoryApp() {
     [loading, setLoading] = useState(true),
     [notice, setNotice] = useState(""),
     [mobile, setMobile] = useState(false),
+    [sidebarCollapsed, setSidebarCollapsed] = useState(false),
+    [lineManagement, setLineManagement] = useState(false),
+    [lineManagementMachineId, setLineManagementMachineId] = useState<string | null>(null),
     [supportFactory, setSupportFactory] = useState(""),
-    [center, setCenter] = useState<Row | null>(null),
-    [floorV2, setFloorV2] = useState(
-      () =>
-        typeof window === "undefined" ||
-        localStorage.getItem("factory-floor-v2") !== "0",
-    );
+    [center, setCenter] = useState<Row | null>(null);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
   const can = (module: string, action = "view") =>
@@ -103,6 +106,7 @@ export default function FactoryApp() {
   }, [supportFactory]);
   useEffect(() => {
     setLang(localStorage.getItem("factory-language") === "ar" ? "ar" : "en");
+    setSidebarCollapsed(localStorage.getItem("factory-sidebar-collapsed") === "1");
     void load();
     const timer = setInterval(() => {
       if (!document.hidden) void load();
@@ -120,8 +124,8 @@ export default function FactoryApp() {
     localStorage.setItem("factory-language", lang);
   }, [lang]);
   useEffect(() => {
-    localStorage.setItem("factory-floor-v2", floorV2 ? "1" : "0");
-  }, [floorV2]);
+    localStorage.setItem("factory-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
   async function command(command: string, args: Record<string, unknown>) {
     setNotice("");
     try {
@@ -152,6 +156,7 @@ export default function FactoryApp() {
   const navigate = (x: string) => {
     if (dirtyLayout && !confirm(t("discardChanges"))) return;
     setView(x);
+    setLineManagement(false);
     setMobile(false);
     setNotice("");
   };
@@ -230,7 +235,7 @@ export default function FactoryApp() {
             ))}
         </>
       ) : (
-        <div className="app-shell">
+        <div className={`app-shell${sidebarCollapsed ? " nav-collapsed" : ""}`}>
           {mobile && (
             <button
               className="nav-backdrop"
@@ -239,6 +244,12 @@ export default function FactoryApp() {
             />
           )}
           <aside className={`sidebar ${mobile ? "is-open" : ""}`}>
+            <button className="sidebar-toggle" title={t(sidebarCollapsed ? "expandNavigation" : "collapseNavigation")}
+              aria-label={t(sidebarCollapsed ? "expandNavigation" : "collapseNavigation")}
+              aria-expanded={!sidebarCollapsed}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
+              {sidebarCollapsed ? "»" : "«"}
+            </button>
             <button
               className="sidebar-close"
               aria-label={t("close")}
@@ -246,7 +257,7 @@ export default function FactoryApp() {
             >
               ×
             </button>
-            <a className="brand" href="#" onClick={() => navigate("dashboard")}>
+            <a className="brand" href="#" title={t("dashboard")} aria-label={t("dashboard")} onClick={() => navigate("dashboard")}>
               {snapshot.factory.logo_path ? (
                 <img
                   className="factory-logo"
@@ -256,20 +267,23 @@ export default function FactoryApp() {
               ) : (
                 <span className="brand-symbol">▥</span>
               )}
-              <span>
+              <span className="brand-copy">
                 {t("brand")}
                 <small>{String(snapshot.factory.name)}</small>
               </span>
             </a>
             {snapshot.platformAdmin && (
               <button
+                className="platform-nav-link"
+                title={t("platformDashboard")}
+                aria-label={t("platformDashboard")}
                 onClick={() => {
                   if(dirtyLayout&&!confirm(t("discardChanges")))return;
                   setSupportFactory("");
                   setView("dashboard");
                 }}
               >
-                {t("platformDashboard")}
+                <SidebarIcon name="platform" /><span className="nav-label">{t("platformDashboard")}</span>
               </button>
             )}
             <div className="nav-section-label">{t("operations")}</div>
@@ -280,10 +294,12 @@ export default function FactoryApp() {
                     <button
                       key={x}
                       className={view === x ? "nav-active" : ""}
+                      title={t(x)}
+                      aria-label={t(x)}
                       onClick={() => navigate(x)}
                     >
-                      <span aria-hidden="true">{icons[x]}</span>
-                      {t(x)}
+                      <SidebarIcon name={x} />
+                      <span className="nav-label">{t(x)}</span>
                       {x === "downtime" && (
                         <small>
                           {snapshot.tables.downtime_events?.filter(
@@ -303,10 +319,12 @@ export default function FactoryApp() {
                     <button
                       key={x}
                       className={view === x ? "nav-active" : ""}
+                      title={t(x)}
+                      aria-label={t(x)}
                       onClick={() => navigate(x)}
                     >
-                      <span aria-hidden="true">{icons[x]}</span>
-                      {t(x)}
+                      <SidebarIcon name={x} />
+                      <span className="nav-label">{t(x)}</span>
                     </button>
                   ),
               )}
@@ -330,7 +348,7 @@ export default function FactoryApp() {
                   .slice(0, 1)
                   .toUpperCase()}
               </div>
-              <div>
+              <div className="sidebar-account-copy">
                 <strong>
                   {String(
                     snapshot.membership?.display_name || snapshot.user.email,
@@ -417,18 +435,22 @@ export default function FactoryApp() {
                   ) : view === "reports" ? (
                     <Reports {...props} view={view} />
                   ) : view === "lines" ? (
-                    floorV2 ? (
+                    !lineManagement ? (
                       <FactoryFloorV2
                         {...props}
-                        onEditLayout={() => setFloorV2(false)}
-                        onRefresh={() => void load()}
+                        onManage={(machineId) => {
+                          setLineManagementMachineId(machineId || null);
+                          setLineManagement(true);
+                        }}
                       />
                     ) : (
-                      <LineBuilder
-                        {...props}
-                        onDirtyChange={setDirtyLayout}
-                        onSwitchVersion={() => setFloorV2(true)}
-                      />
+                      <div className="line-management">
+                        <button className="line-management-back" onClick={() => {
+                          if (dirtyLayout && !confirm(t("discardChanges"))) return;
+                          setLineManagement(false);
+                        }}><span className="line-management-back-icon" aria-hidden="true">←</span> {t("backToFactoryFloor")}</button>
+                        <LineBuilder {...props} initialMachineId={lineManagementMachineId} onDirtyChange={setDirtyLayout} />
+                      </div>
                     )
                   ) : view === "roles" ? (
                     <>
