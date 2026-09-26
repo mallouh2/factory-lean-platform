@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import en from "@/locales/en.json";
 import ar from "@/locales/ar.json";
 import type { Language, Row, Snapshot } from "@/types";
@@ -11,11 +11,13 @@ import Configuration from "@/features/Configuration";
 import Reports from "@/features/Reports";
 import LineBuilder from "@/features/LineBuilder";
 import FactoryFloorV2 from "@/features/FactoryFloorV2";
+import ProductionOrdersV2 from "@/features/ProductionOrdersV2";
 import PlatformDashboard from "@/features/PlatformDashboard";
 import PersonPermissions from "@/features/PersonPermissions";
 import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
+import { previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
 const primary = [
   "dashboard",
   "lines",
@@ -50,6 +52,7 @@ const sidebarIconPaths: Record<string, string[]> = {
   settings: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M10 2h4l.5 2.3 1.5.7 2-.9 2.8 2.8-.9 2 .7 1.5L23 11v2l-2.4.5-.7 1.5.9 2-2.8 2.8-2-.9-1.5.7L14 22h-4l-.5-2.4-1.5-.7-2 .9-2.8-2.8.9-2-.7-1.5L1 13v-2l2.4-.6.7-1.5-.9-2L6 4.1l2 .9 1.5-.7z"],
   support: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M5.6 5.6 9.2 9.2", "M14.8 14.8l3.6 3.6", "M18.4 5.6l-3.6 3.6", "M9.2 14.8l-3.6 3.6"],
   audit: ["M6 3h9l4 4v14H6z", "M15 3v4h4", "M9 12h7", "M9 16h4", "M16 16l1.5 1.5L20 15"],
+  preview: ["M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z", "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"],
 };
 function SidebarIcon({ name }: { name: string }) {
   return <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -66,15 +69,19 @@ export default function FactoryApp() {
     [notice, setNotice] = useState(""),
     [mobile, setMobile] = useState(false),
     [sidebarCollapsed, setSidebarCollapsed] = useState(false),
+    [preview, setPreview] = useState("full"),
     [lineManagement, setLineManagement] = useState(false),
     [lineManagementMachineId, setLineManagementMachineId] = useState<string | null>(null),
     [supportFactory, setSupportFactory] = useState(""),
     [center, setCenter] = useState<Row | null>(null);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
+  const previewMode = snapshot?.testingPreviewEligible ? preview : "full";
+  const visiblePermissions = useMemo(() => snapshot
+    ? previewPermissions(snapshot.permissions, previewMode) : [], [snapshot, previewMode]);
   const can = (module: string, action = "view") =>
     Boolean(
-      snapshot?.permissions.includes(
+      visiblePermissions.includes(
         `${module === "products" ? "orders" : module}:${action}`,
       ),
     );
@@ -89,6 +96,7 @@ export default function FactoryApp() {
       );
       if (res.status === 401) {
         setSnapshot(null);
+        setPreview("full");
         return;
       }
       const body = await res.json();
@@ -113,6 +121,14 @@ export default function FactoryApp() {
     }, 30000);
     return () => clearInterval(timer);
   }, [load]);
+  useEffect(() => {
+    if (!snapshot?.factory) return;
+    const allowed = (page: string) => visiblePermissions.includes(`${page === "products" ? "orders" : page}:view`);
+    if (!allowed(view)) {
+      const first = [...primary, ...admin].find(allowed);
+      if (first) setView(first);
+    }
+  }, [snapshot, view, visiblePermissions]);
   useEffect(() => {
     const handler = (e: Event) => setNotice((e as CustomEvent).detail);
     window.addEventListener("factory-error", handler);
@@ -152,12 +168,21 @@ export default function FactoryApp() {
       throw error;
     }
   }
-  const props = snapshot ? { snapshot, t, lang, command, can } : null;
+  const props = snapshot ? { snapshot: previewMode === "full" ? snapshot : { ...snapshot, permissions: visiblePermissions }, t, lang, command, can } : null;
+  const previewHome = can("dashboard") ? "dashboard" : [...primary, ...admin].find((page) => can(page)) || "dashboard";
   const navigate = (x: string) => {
+    if (previewMode !== "full" && !can(x)) return;
     if (dirtyLayout && !confirm(t("discardChanges"))) return;
     setView(x);
     setLineManagement(false);
     setMobile(false);
+    setNotice("");
+  };
+  const changePreview = (next: string) => {
+    if (dirtyLayout && !confirm(t("discardChanges"))) return;
+    setPreview(next);
+    setCenter(null);
+    setLineManagement(false);
     setNotice("");
   };
   async function openFactory(id: string) {
@@ -174,6 +199,7 @@ export default function FactoryApp() {
     });
     setSnapshot(null);
     setSupportFactory("");
+    setPreview("full");
   }
   return (
     <>
@@ -257,7 +283,11 @@ export default function FactoryApp() {
             >
               ×
             </button>
-            <a className="brand" href="#" title={t("dashboard")} aria-label={t("dashboard")} onClick={() => navigate("dashboard")}>
+            <a className="brand" href="#" title={t(previewHome)}
+              aria-label={t(previewHome)} onClick={(event) => {
+              event.preventDefault();
+              navigate(previewHome);
+            }}>
               {snapshot.factory.logo_path ? (
                 <img
                   className="factory-logo"
@@ -272,7 +302,7 @@ export default function FactoryApp() {
                 <small>{String(snapshot.factory.name)}</small>
               </span>
             </a>
-            {snapshot.platformAdmin && (
+            {snapshot.platformAdmin && previewMode === "full" && (
               <button
                 className="platform-nav-link"
                 title={t("platformDashboard")}
@@ -338,6 +368,18 @@ export default function FactoryApp() {
                 </div>
               ))}
             </details>
+            {snapshot.testingPreviewEligible && <div className="sidebar-preview">
+              <label htmlFor="testing-view-as">{t("viewAs")}</label>
+              <select id="testing-view-as" value={previewMode} onChange={(event) => changePreview(event.target.value)}
+                aria-describedby="testing-view-as-help">
+                {Object.keys(previewPresets).map((key) => <option key={key} value={key}>{t(`preview_${key}`)}</option>)}
+              </select>
+              <small id="testing-view-as-help">{t("viewAsHelp")}</small>
+              <button className="sidebar-preview-expand" type="button" title={t("viewAs")}
+                aria-label={t("viewAs")} onClick={() => setSidebarCollapsed(false)}>
+                <SidebarIcon name="preview" />
+              </button>
+            </div>}
             <footer className="sidebar-footer">
               <div className="avatar">
                 {String(
@@ -398,6 +440,10 @@ export default function FactoryApp() {
               </div>
             </header>
             <main className="main-content">
+              {previewMode !== "full" && <div className="preview-indicator" role="status">
+                <span>{t("previewing")}: <strong>{t(`preview_${previewMode}`)}</strong></span>
+                <button type="button" onClick={() => changePreview("full")}>{t("exitPreview")}</button>
+              </div>}
               {snapshot.factory.is_demo && (
                 <div className="demo-banner">{t("demo")}</div>
               )}
@@ -460,6 +506,8 @@ export default function FactoryApp() {
                         <Administration {...props} view="roles" />
                       </details>
                     </>
+                  ) : view === "orders" ? (
+                    <ProductionOrdersV2 {...props} />
                   ) : primary.includes(view) ? (
                     <Configuration key={view} {...props} view={view} />
                   ) : (

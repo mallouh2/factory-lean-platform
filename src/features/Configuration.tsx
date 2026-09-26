@@ -68,7 +68,6 @@ const config: Record<string, {
   orders: {
     table: "production_orders",
     fields: [
-      "code",
       "product_id",
       "line_id",
       "status",
@@ -237,7 +236,7 @@ export default function Configuration({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        {can(permissionModule, "create") && (
+        {view !== "orders" && can(permissionModule, "create") && (
           <button className="primary" onClick={() => setEditing({})}>
             + {t("add")}
           </button>

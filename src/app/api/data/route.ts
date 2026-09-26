@@ -5,6 +5,7 @@ import {
   verifyOrigin,
   safeError,
 } from "@/services/authorization";
+import { hasEveryDefinedPermission } from "@/utils/permission-preview.mjs";
 export async function GET(req: NextRequest) {
   try {
     const { db, user } = await authenticatedClient();
@@ -15,6 +16,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ...data,
       user: { id: user.id, email: user.email },
+      testingPreviewEligible:
+        process.env.APP_ENV === "development" &&
+        process.env.VERCEL_ENV !== "production" &&
+        process.env.SUPABASE_URL === "https://silmfbpjyepalnggwulp.supabase.co" &&
+        data?.membership?.status === "approved" &&
+        hasEveryDefinedPermission(data?.permissions, data?.tables?.permissions),
     });
   } catch (e) {
     return NextResponse.json(safeError(e), {
@@ -45,6 +52,7 @@ const joinErrors: Record<string, string> = {
 };
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
+  create_production_request: [["orders", "create"]],
   set_user_permissions: [["roles", "edit"]],
   save_line_layout: [
     ["lines", "edit"],

@@ -10,6 +10,7 @@ export type Snapshot = {
   platformAdmin?: boolean;
   factories?: Row[];
   supportFactories: Row[];
+  testingPreviewEligible?: boolean;
 };
 export type Language = "en" | "ar";
 export type Translate = (key: string) => string;
