@@ -43,6 +43,18 @@ const commandErrors: Record<string, string> = {
   category_in_use: "categoryInUse",
   category_alternative_conflict: "categoryAlternativeConflict",
   incompatible_alternative: "incompatibleAlternative",
+  planning_already_started: "planningAlreadyStarted",
+  planning_invalid_start: "planningInvalidStart",
+  planning_incompatible_line: "planningIncompatibleLine",
+  planning_missing_rate: "planningMissingRate",
+  planning_ambiguous_rate: "planningAmbiguousRate",
+  planning_ambiguous_setup: "planningAmbiguousSetup",
+  planning_invalid_calendar: "planningInvalidCalendar",
+  planning_invalid_quantity: "planningInvalidQuantity",
+  planning_unknown_block: "planningUnknownBlock",
+  planning_overlap: "planningOverlap",
+  planning_locked: "planningLockedMessage",
+  planning_reason_required: "planningReasonRequired",
 };
 /** request_membership reports failures as JSONB values instead of raising; map them to specific client keys. */
 const joinErrors: Record<string, string> = {
@@ -53,6 +65,9 @@ const joinErrors: Record<string, string> = {
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
   create_production_request: [["orders", "create"]],
+  plan_product_item: [["orders", "edit"]],
+  revise_product_plan: [["orders", "edit"]],
+  set_plan_lock: [["orders", "edit"]],
   set_user_permissions: [["roles", "edit"]],
   save_line_layout: [
     ["lines", "edit"],
@@ -72,6 +87,7 @@ const rpcModules: Record<string, [string, string][]> = {
   manage_member: [["employees", "approve"]],
   get_join_code: [["settings", "edit"]],
   update_settings: [["settings", "edit"]],
+  configure_working_calendar: [["settings", "edit"]],
   set_permissions: [["roles", "edit"]],
   set_support: [["support", "edit"]],
 };

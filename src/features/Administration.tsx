@@ -16,6 +16,8 @@ export default function Administration({
     [membershipFilter, setMembershipFilter] = useState("all"),
     [supportMode, setSupportMode] = useState("disabled");
   const [localError, setLocalError] = useState("");
+  const [calendarMask, setCalendarMask] = useState(Number(s.factory?.working_days_mask) || 31);
+  const [calendarError, setCalendarError] = useState("");
   const safeCommand: typeof command = (...args) =>
     command(...args).catch(() => "");
   const factory = s.factory!;
@@ -47,6 +49,22 @@ export default function Administration({
     } finally {
       setBusy(false);
     }
+  }
+  async function saveCalendar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const dayStart = String(form.get("day_start") || "");
+    const dayEnd = String(form.get("day_end") || "");
+    if (!calendarMask || !dayStart || !dayEnd || dayStart >= dayEnd) {
+      setCalendarError("planningInvalidCalendar"); return;
+    }
+    setBusy(true); setCalendarError("");
+    try {
+      await command("configure_working_calendar", { factory: factory.id,
+        days_mask: calendarMask, day_start: dayStart, day_end: dayEnd });
+    } catch (cause) {
+      setCalendarError(cause instanceof Error ? cause.message : "planningInvalidCalendar");
+    } finally { setBusy(false); }
   }
   if (view === "settings")
     return (
@@ -87,6 +105,29 @@ export default function Administration({
           >
             {t("save")}
           </button>
+        </form>
+        <hr />
+        <h3>{t("planningWorkingCalendar")}</h3>
+        <p className="muted">{t("planningCalendarHelp")} ({zone})</p>
+        <form onSubmit={(e) => void saveCalendar(e)}>
+          <fieldset className="planning-calendar-days"><legend>{t("planningWorkingDays")}</legend>
+            {Array.from({ length: 7 }, (_, day) => <label key={day}>
+              <input type="checkbox" checked={Boolean(calendarMask & (1 << day))}
+                onChange={(event) => setCalendarMask((mask) => event.target.checked
+                  ? mask | (1 << day) : mask & ~(1 << day))} />
+              {t(`planningWeekday${day}`)}
+            </label>)}
+          </fieldset>
+          <div className="form-grid">
+            <Field label={t("planningWorkdayStart")}>
+              <input type="time" name="day_start" required defaultValue={String(factory.workday_start || "08:00").slice(0, 5)} />
+            </Field>
+            <Field label={t("planningWorkdayEnd")}>
+              <input type="time" name="day_end" required defaultValue={String(factory.workday_end || "17:00").slice(0, 5)} />
+            </Field>
+          </div>
+          {calendarError && <p className="planning-warning" role="alert">{t(calendarError)}</p>}
+          <button className="primary" disabled={busy || !can("settings", "edit")}>{t("save")}</button>
         </form>
         <hr />
         <h3>{t("joinCode")}</h3>

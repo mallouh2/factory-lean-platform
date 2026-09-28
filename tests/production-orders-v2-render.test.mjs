@@ -124,7 +124,6 @@ test("request creation exposes header, repeatable item controls, requester and o
       assert.doesNotMatch(html, new RegExp(`name="${field}"`));
   }
 });
-
 test("later planning editor still allows line and start time without changing the generated code", () => {
   const html = renderToStaticMarkup(createElement(Configuration, {
     snapshot, t: (key) => en[key] || key, lang: "en", can: () => true,
@@ -145,4 +144,100 @@ test("generic order editor no longer exposes a create button", () => {
     command: async () => {}, view: "orders",
   }));
   assert.doesNotMatch(html, /<button class="primary">\+ Add<\/button>/);
+});
+
+// ---------------------------------------------------------------------------
+// Required By (business deadline) creation path. A partially entered
+// datetime-local displays segments while reporting value "" with
+// validity.badInput = true; submission must be blocked with a clear error
+// instead of silently saving a missing deadline. A complete value converts to
+// UTC and reaches create_production_request unchanged; empty stays null.
+// ---------------------------------------------------------------------------
+function createSubmitHarness({ requiredBy = "", badInput = false, command } = {}) {
+  const created = [];
+  const bag = {};
+  const commandImpl = command ?? (async (name, args) => {
+    bag.saved = { name, args };
+    return "REQ-NEW";
+  });
+  const state = [
+    "Required By path verification",
+    [{ key: 0, productId: "P", quantity: "100", unit: "meter", query: "", open: false, active: -1 }],
+    "normal",
+    requiredBy,
+    "",
+    {},
+    false,
+  ];
+  const updates = [];
+  const fakeReact = { useState: (() => { let index = 0;
+    return (fallback) => { const position = index++;
+      return [state[position] ?? (typeof fallback === "function" ? fallback() : fallback),
+        (value) => updates.push({ position, value })]; }; })(),
+    useEffect: () => {}, useRef: () => ({ current: null }) };
+  const moduleWithHooks = { exports: {} };
+  new Function("require", "module", "exports", createBundle.outputFiles[0].text)(
+    (name) => name === "react" ? fakeReact : require(name), moduleWithHooks, moduleWithHooks.exports);
+  const tree = moduleWithHooks.exports.default({ snapshot,
+    t: (key) => en[key] || key, lang: "en", can: () => true, command: commandImpl,
+    onCreated: (id) => created.push(id), onCancel: () => {} });
+  const form = (function find(node) {
+    if (!node || typeof node !== "object") return null;
+    if (Array.isArray(node)) { for (const child of node) { const hit = find(child); if (hit) return hit; } return null; }
+    if (node.type === "form") return node;
+    return find(node.props?.children);
+  })(tree);
+  return {
+    updates, created, bag,
+    submit: async () => {
+      const previous = globalThis.document;
+      globalThis.document = { activeElement: null,
+        getElementById: (id) => id === "request-required-by"
+          ? { validity: { badInput: Boolean(badInput) }, focus() {} } : null };
+      try { await form.props.onSubmit({ preventDefault() {} }); }
+      finally { globalThis.document = previous; }
+    },
+  };
+}
+
+test("a filled Required By reaches the create command converted to UTC", async () => {
+  const harness = createSubmitHarness({ requiredBy: "2026-10-05T15:00" });
+  await harness.submit();
+  assert.deepEqual(harness.bag.saved, { name: "create_production_request", args: {
+    factory: "F",
+    request_name: "Required By path verification",
+    request_priority: "normal",
+    request_required_by: "2026-10-05T15:00:00.000Z",
+    request_notes: "",
+    request_items: [{ product_id: "P", quantity: 100, unit: "meter" }],
+  } });
+  assert.deepEqual(harness.created, ["REQ-NEW"]);
+});
+
+test("an incomplete Required By entry blocks submission instead of silently saving null", async () => {
+  const harness = createSubmitHarness({ requiredBy: "2026-10-05T15:00", badInput: true });
+  await harness.submit();
+  assert.equal(harness.bag.saved, undefined);
+  const lastError = harness.updates.filter((update) => update.position === 5).at(-1).value;
+  assert.equal(typeof lastError, "function");
+  assert.deepEqual(lastError({}), { requiredBy: "orderRequiredByInvalid" });
+  assert.deepEqual(harness.created, []);
+});
+
+test("an empty Required By still creates the request without a deadline", async () => {
+  const harness = createSubmitHarness({ requiredBy: "" });
+  await harness.submit();
+  assert.equal(harness.bag.saved.args.request_required_by, null);
+  assert.deepEqual(harness.created, ["REQ-NEW"]);
+});
+
+test("the deadline field presents the business-deadline meaning in English and Arabic", () => {
+  for (const [lang, dictionary] of [["en", en], ["ar", ar]]) {
+    const html = renderToStaticMarkup(createElement(CreateProductionOrder, {
+      snapshot, t: (key) => dictionary[key] || key, lang, can: () => true,
+      command: async () => {}, onCreated: () => {}, onCancel: () => {} }));
+    assert.match(html, /type="datetime-local"/);
+    assert.ok(html.includes(dictionary.requiredBy));
+    assert.ok(html.includes(dictionary.requiredByHint));
+  }
 });

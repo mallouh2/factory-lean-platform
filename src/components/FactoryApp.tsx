@@ -12,6 +12,7 @@ import Reports from "@/features/Reports";
 import LineBuilder from "@/features/LineBuilder";
 import FactoryFloorV2 from "@/features/FactoryFloorV2";
 import ProductionOrdersV2 from "@/features/ProductionOrdersV2";
+import ProductionPlanning from "@/features/ProductionPlanning";
 import PlatformDashboard from "@/features/PlatformDashboard";
 import PersonPermissions from "@/features/PersonPermissions";
 import DowntimeAnalysis from "@/features/DowntimeAnalysis";
@@ -22,13 +23,13 @@ const primary = [
   "dashboard",
   "lines",
   "orders",
+  "planning",
   "products",
   "downtime",
   "reports",
 ];
 const admin = ["employees", "roles", "settings", "support", "audit"];
 const future = [
-  "planning",
   "warehouse",
   "purchasing",
   "sales",
@@ -44,6 +45,7 @@ const sidebarIconPaths: Record<string, string[]> = {
   dashboard: ["M3 3h8v8H3z", "M13 3h8v8h-8z", "M3 13h8v8H3z", "M13 13h8v8h-8z"],
   lines: ["M2 9h5v6H2z", "M10 9h5v6h-5z", "M18 9h4v6h-4z", "M7 12h3", "M15 12h3"],
   orders: ["M8 4h8", "M9 3h6v3H9z", "M7 5H5v16h14V5h-2", "M8 11h8", "M8 15h8", "M8 19h5"],
+  planning: ["M3 5h18v16H3z", "M3 10h18", "M8 3v4", "M16 3v4", "M7 15h4", "M14 15h3"],
   products: ["M3 7 12 3l9 4v10l-9 4-9-4z", "M3 7l9 4 9-4", "M12 11v10"],
   downtime: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M10 9v6", "M14 9v6"],
   reports: ["M4 20V10h4v10", "M10 20V5h4v15", "M16 20v-8h4v8", "M3 20h18"],
@@ -74,6 +76,7 @@ export default function FactoryApp() {
     [lineManagementMachineId, setLineManagementMachineId] = useState<string | null>(null),
     [supportFactory, setSupportFactory] = useState(""),
     [center, setCenter] = useState<Row | null>(null);
+  const [planningItemId, setPlanningItemId] = useState<string | null>(null);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
   const previewMode = snapshot?.testingPreviewEligible ? preview : "full";
@@ -82,7 +85,7 @@ export default function FactoryApp() {
   const can = (module: string, action = "view") =>
     Boolean(
       visiblePermissions.includes(
-        `${module === "products" ? "orders" : module}:${action}`,
+        `${module === "products" || module === "planning" ? "orders" : module}:${action}`,
       ),
     );
   const load = useCallback(async () => {
@@ -123,7 +126,7 @@ export default function FactoryApp() {
   }, [load]);
   useEffect(() => {
     if (!snapshot?.factory) return;
-    const allowed = (page: string) => visiblePermissions.includes(`${page === "products" ? "orders" : page}:view`);
+    const allowed = (page: string) => visiblePermissions.includes(`${page === "products" || page === "planning" ? "orders" : page}:view`);
     if (!allowed(view)) {
       const first = [...primary, ...admin].find(allowed);
       if (first) setView(first);
@@ -174,6 +177,7 @@ export default function FactoryApp() {
     if (previewMode !== "full" && !can(x)) return;
     if (dirtyLayout && !confirm(t("discardChanges"))) return;
     setView(x);
+    if (x !== "planning") setPlanningItemId(null);
     setLineManagement(false);
     setMobile(false);
     setNotice("");
@@ -507,7 +511,11 @@ export default function FactoryApp() {
                       </details>
                     </>
                   ) : view === "orders" ? (
-                    <ProductionOrdersV2 {...props} />
+                    <ProductionOrdersV2 {...props} onPlanItem={(itemId) => {
+                      setPlanningItemId(itemId); setView("planning");
+                    }} />
+                  ) : view === "planning" ? (
+                    <ProductionPlanning key={planningItemId || "planning"} {...props} initialItemId={planningItemId} />
                   ) : primary.includes(view) ? (
                     <Configuration key={view} {...props} view={view} />
                   ) : (

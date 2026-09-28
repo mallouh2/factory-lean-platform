@@ -14,13 +14,14 @@ type Screen = "list" | "details" | "create" | "edit";
 type Filter = "all" | "active" | "planned" | "delayed" | "completed";
 const filters: Filter[] = ["all", "active", "planned", "delayed", "completed"];
 
-export default function ProductionOrdersV2(props: FeatureProps) {
+export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: (itemId: string) => void }) {
   const { snapshot: s, t, lang, can, command } = props;
   const [screen, setScreen] = useState<Screen>("list");
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [createDirty, setCreateDirty] = useState(false);
   const [dailyTargetOpen, setDailyTargetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -44,6 +45,8 @@ export default function ProductionOrdersV2(props: FeatureProps) {
     requests.filter((request) => requestMatchesFilter(request, itemsByRequest.get(String(request.id)) || [], filter, now)),
     items, now,
   );
+  const filterCounts = new Map(filters.map((key) => [key,
+    requests.filter((request) => requestMatchesFilter(request, itemsByRequest.get(String(request.id)) || [], key, now)).length]));
   if (filter === "planned" && createdId)
     visible.sort((a, b) => Number(String(b.id) === createdId) - Number(String(a.id) === createdId));
   const created = requests.find((request) => String(request.id) === createdId);
@@ -82,8 +85,16 @@ export default function ProductionOrdersV2(props: FeatureProps) {
   }
 
   if (screen === "create" || screen === "edit") {
+    const leaveCreate = () => {
+      if (screen === "create" && createDirty && !confirm(t("discardRequestDraft"))) return false;
+      setCreateDirty(false);
+      return true;
+    };
     return <section className="orders-v2 orders-v2-subscreen">
-      <button className="orders-v2-back" onClick={() => screen === "edit" ? setScreen("details") : backToList()}>
+      <button className="orders-v2-back" onClick={() => {
+        if (screen === "edit") { setScreen("details"); return; }
+        if (leaveCreate()) backToList();
+      }}>
         <span aria-hidden="true" className="orders-v2-back-arrow">←</span> {t("backToOrders")}
       </button>
       <header className="orders-v2-page-head"><div>
@@ -92,7 +103,8 @@ export default function ProductionOrdersV2(props: FeatureProps) {
         {screen === "create" ? <p className="orders-v2-help">{t("orderCreationSteps")}</p> :
           selectedItem && <p className="orders-v2-help" dir="auto">{localName(productOf(selectedItem), lang)}</p>}
       </div></header>
-      {screen === "create" ? <CreateProductionOrder {...props} onCancel={backToList}
+      {screen === "create" ? <CreateProductionOrder {...props} onCancel={() => { if (leaveCreate()) backToList(); }}
+        onDirtyChange={setCreateDirty}
         onCreated={(id) => { setCreatedId(id); setFilter("planned"); backToList(); }} /> :
         selectedItem && <Configuration key={String(selectedItem.id)} {...props} view="orders"
           standalone={{ record: selectedItem, onSaved: () => setScreen("details"), onCancel: () => setScreen("details") }} />}
@@ -117,7 +129,9 @@ export default function ProductionOrdersV2(props: FeatureProps) {
       <section className="orders-v2-surface orders-v2-request-facts" aria-label={t("requestDetails")}>
         <dl className="orders-v2-facts">
           <div><dt>{t("requestedBy")}</dt><dd dir="auto">{String(selected.requested_by_name || t("notAvailable"))}</dd></div>
-          <div><dt>{t("priority")}</dt><dd>{t(`priority_${selected.priority || "normal"}`)}</dd></div>
+          <div><dt>{t("priority")}</dt>
+            <dd className={["high", "urgent"].includes(String(selected.priority)) ? "orders-v2-priority" : undefined}>
+              {t(`priority_${selected.priority || "normal"}`)}</dd></div>
           {selected.required_by && <div><dt>{t("requiredBy")}</dt><dd>{formatTime(selected.required_by, lang, zone)}</dd></div>}
           {selected.notes && <div><dt>{t("notes")}</dt><dd dir="auto">{String(selected.notes)}</dd></div>}
         </dl>
@@ -142,7 +156,10 @@ export default function ProductionOrdersV2(props: FeatureProps) {
               {item.start_time && <div><dt>{t("start_time")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>}
             </dl>
             {can("orders", "edit") && <div className="orders-v2-detail-actions">
-              <button className="primary" onClick={() => { setSelectedItemId(String(item.id)); setScreen("edit"); }}>{t("planScheduleOrder")}</button>
+              {item.status === "planned" &&
+              <button className="primary" onClick={() => props.onPlanItem
+                ? props.onPlanItem(String(item.id))
+                : (setSelectedItemId(String(item.id)), setScreen("edit"))}>{t("planScheduleOrder")}</button>}
               {["planned", "active"].includes(String(item.status)) &&
                 <button onClick={() => { setSelectedItemId(String(item.id)); setDailyTargetOpen(true); }}>{t("dailyTarget")}</button>}
             </div>}
@@ -180,7 +197,7 @@ export default function ProductionOrdersV2(props: FeatureProps) {
     <header className="orders-v2-page-head">
       <div><h2>{t("orders")}</h2><p>{t("ordersOverviewHelp")}</p></div>
       {can("orders", "create") && <button className="primary" onClick={(event) => {
-        openerRef.current = event.currentTarget; setScreen("create");
+        openerRef.current = event.currentTarget; setCreatedId(null); setScreen("create");
       }}>+ {t("createProductionRequest")}</button>}
     </header>
     {created && <p className="orders-v2-created" role="status">
@@ -193,7 +210,8 @@ export default function ProductionOrdersV2(props: FeatureProps) {
     </div>}
     <nav className="orders-v2-filters" aria-label={t("orderStatusFilters")}>
       {filters.map((key) => <button key={key} aria-pressed={filter === key}
-        onClick={() => setFilter(key)}>{t(key === "planned" ? "plannedWaiting" : key)}</button>)}
+        onClick={() => setFilter(key)}>{t(key === "planned" ? "plannedWaiting" : key)}
+        ({quantity(filterCounts.get(key) || 0)})</button>)}
     </nav>
     {visible.length ? <div className="orders-v2-list">
       {visible.map((request) => {
@@ -201,16 +219,17 @@ export default function ProductionOrdersV2(props: FeatureProps) {
         const attention = requestAttention(requestItems, now);
         const completed = requestItems.filter((item) => item.status === "completed").length;
         return <button key={String(request.id)} className={`orders-v2-row${attention ? " orders-v2-row-attention" : ""}`}
-          onClick={(event) => { openerRef.current = event.currentTarget; setSelectedId(String(request.id)); setScreen("details"); }}>
+          onClick={(event) => { openerRef.current = event.currentTarget; setCreatedId(null); setSelectedId(String(request.id)); setScreen("details"); }}>
           <span className="orders-v2-identity">
-            <strong><bdi dir="ltr">{String(request.code)}</bdi></strong>
-            <span dir="auto">{String(request.name)}</span>
+            <strong dir="auto">{String(request.name)}</strong>
+            <small><bdi dir="ltr">{String(request.code)}</bdi></small>
           </span>
           <span className="orders-v2-line"><small>{t("requestProducts")}</small>
             {t(requestItems.length === 1 ? "productCountOne" : "productCount").replace("{count}", String(requestItems.length))}
             <span className="orders-v2-quantities">{requestItems.slice(0, 2).map((item) =>
               <span key={String(item.id)} dir="auto">{localName(productOf(item), lang)}: {quantity(item.target_quantity)} {unitOf(item)}</span>)}
-              {requestItems.length > 2 && <span>+{requestItems.length - 2}</span>}
+              {requestItems.length > 2 &&
+                <span dir="auto">{t("moreProducts").replace("{count}", String(requestItems.length - 2))}</span>}
             </span>
           </span>
           <span className="orders-v2-timing"><small>{t("requestedBy")}</small>
@@ -226,6 +245,6 @@ export default function ProductionOrdersV2(props: FeatureProps) {
           </span>
         </button>;
       })}
-    </div> : <p className="orders-v2-empty">{t("noResults")}</p>}
+    </div> : <p className="orders-v2-empty">{requests.length ? t("noResults") : t("noRequestsYet")}</p>}
   </section>;
 }

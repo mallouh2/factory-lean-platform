@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { localName } from "@/components/ui";
 import { localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import type { FeatureProps } from "./types";
@@ -7,8 +7,8 @@ type Item = { key: number; productId: string; quantity: string; unit: string; qu
 type ItemError = { product?: string; quantity?: string; unit?: string };
 const blank = (key: number): Item => ({ key, productId: "", quantity: "", unit: "", query: "", open: false, active: -1 });
 
-export default function CreateProductionOrder({ snapshot, t, lang, command, onCreated, onCancel }: FeatureProps & {
-  onCreated: (id: string) => void; onCancel: () => void;
+export default function CreateProductionOrder({ snapshot, t, lang, command, onCreated, onCancel, onDirtyChange }: FeatureProps & {
+  onCreated: (id: string) => void; onCancel: () => void; onDirtyChange?: (dirty: boolean) => void;
 }) {
   const products = snapshot.tables.products || [];
   const [name, setName] = useState("");
@@ -25,6 +25,18 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
   const role = snapshot.tables.roles?.find((candidate) => String(candidate.id) === String(snapshot.membership?.role_id));
   const ownTitle = lang === "ar" ? snapshot.membership?.job_title_ar || snapshot.membership?.job_title : snapshot.membership?.job_title;
   const title = String(ownTitle || (role ? localName(role, lang) : ""));
+  const dirty = Boolean(name.trim() || requiredBy || notes.trim()) ||
+    items.some((item) => item.productId || item.query.trim() || item.quantity.trim() || item.unit);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      onDirtyChange?.(false);
+      window.removeEventListener("beforeunload", warn);
+    };
+  }, [dirty, onDirtyChange]);
 
   function updateItem(key: number, patch: Partial<Item>, clearError = true) {
     setItems((current) => current.map((item) => item.key === key ? { ...item, ...patch } : item));
@@ -62,6 +74,15 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
       return;
     }
     let requiredByUtc: string | null = null;
+    // A partially entered datetime-local displays segments but reports value "" —
+    // the browser flags exactly that state as badInput. Block with a clear error
+    // instead of silently saving a missing deadline.
+    const requiredByInput = document.getElementById("request-required-by") as HTMLInputElement | null;
+    if (requiredByInput?.validity?.badInput) {
+      setErrors((current) => ({ ...current, requiredBy: "orderRequiredByInvalid" }));
+      requiredByInput.focus();
+      return;
+    }
     try {
       if (requiredBy) requiredByUtc = localDateTimeToUtc(requiredBy, String(snapshot.factory?.timezone || "UTC"));
     } catch {
@@ -131,6 +152,9 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
                   } else if (event.key === "Enter" && item.open && item.active >= 0 && matches[item.active]) {
                     event.preventDefault();
                     chooseProduct(matches[item.active]);
+                  } else if (event.key === "Enter" && item.open) {
+                    // Enter with no highlighted option closes the pick; it must not submit the request.
+                    event.preventDefault();
                   } else if (event.key === "Escape" && item.open) {
                     event.preventDefault();
                     updateItem(item.key, { open: false, active: -1 }, false);
@@ -144,7 +168,8 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
                     className={matchIndex === item.active ? "is-active" : ""}
                     onPointerDown={(event) => event.preventDefault()} onClick={() => chooseProduct(product)}>
                     {localName(product, lang)}{product.code ? <small>{String(product.code)}</small> : null}
-                  </li>) : <li className="orders-v2-product-empty" role="presentation">{t("noResults")}</li>}
+                  </li>) : <li className="orders-v2-product-empty" role="presentation">
+                    {products.length ? t("noResults") : t("orderNoProducts")}</li>}
               </ul>}
             </div>
             {rowError.product && <p id={`request-product-error-${item.key}`} className="orders-v2-field-error" role="alert">{t(rowError.product)}</p>}
@@ -157,7 +182,7 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
             {rowError.quantity && <p id={`request-quantity-error-${item.key}`} className="orders-v2-field-error" role="alert">{t(rowError.quantity)}</p>}
           </div>
           <div className="orders-v2-create-field">
-            <label htmlFor={`request-unit-${item.key}`}>{t("unit")}</label>
+            <label htmlFor={`request-unit-${item.key}`}>{t("unit")} <span aria-hidden="true">*</span></label>
             <select id={`request-unit-${item.key}`} value={item.unit} required
               onChange={(event) => updateItem(item.key, { unit: event.target.value })}
               aria-invalid={Boolean(rowError.unit)} aria-describedby={rowError.unit ? `request-unit-error-${item.key}` : undefined}>
@@ -195,8 +220,10 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
         <label htmlFor="request-required-by">{t("requiredBy")}</label>
         <input id="request-required-by" type="datetime-local" value={requiredBy}
           onChange={(event) => { setRequiredBy(event.target.value); setErrors((current) => ({ ...current, requiredBy: undefined })); }}
-          aria-invalid={Boolean(errors.requiredBy)} aria-describedby={errors.requiredBy ? "request-required-by-error" : undefined} />
-        {errors.requiredBy && <p id="request-required-by-error" className="orders-v2-field-error" role="alert">{t(errors.requiredBy)}</p>}
+          aria-invalid={Boolean(errors.requiredBy)} aria-describedby={errors.requiredBy ? "request-required-by-error" : "request-required-by-hint"} />
+        {errors.requiredBy
+          ? <p id="request-required-by-error" className="orders-v2-field-error" role="alert">{t(errors.requiredBy)}</p>
+          : <p id="request-required-by-hint" className="orders-v2-field-hint">{t("requiredByHint")}</p>}
       </div>
       <div className="orders-v2-create-field orders-v2-notes">
         <label htmlFor="request-notes">{t("notes")}</label>
@@ -207,7 +234,9 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
     {errors.submit && <p className="orders-v2-field-error" role="alert">{t(errors.submit)}</p>}
     <div className="orders-v2-create-actions">
       <button type="button" onClick={onCancel}>{t("cancel")}</button>
-      <button className="primary" type="submit" disabled={busy}>{t("createProductionRequest")}</button>
+      <button className="primary" type="submit" disabled={busy} aria-busy={busy}>
+        {busy ? t("creating") : t("createProductionRequest")}
+      </button>
     </div>
   </form>;
 }
