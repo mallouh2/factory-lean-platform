@@ -55,6 +55,12 @@ const commandErrors: Record<string, string> = {
   planning_overlap: "planningOverlap",
   planning_locked: "planningLockedMessage",
   planning_reason_required: "planningReasonRequired",
+  execution_use_command: "executionUseCommand",
+  execution_already_started: "executionAlreadyStarted",
+  execution_plan_required: "executionPlanRequired",
+  execution_line_busy: "executionLineBusy",
+  execution_out_of_sequence: "executionOutOfSequence",
+  execution_not_running: "executionNotRunning",
 };
 /** request_membership reports failures as JSONB values instead of raising; map them to specific client keys. */
 const joinErrors: Record<string, string> = {
@@ -68,6 +74,8 @@ const rpcModules: Record<string, [string, string][]> = {
   plan_product_item: [["orders", "edit"]],
   revise_product_plan: [["orders", "edit"]],
   set_plan_lock: [["orders", "edit"]],
+  start_product_item: [["orders", "edit"]],
+  finish_product_item: [["orders", "edit"]],
   set_user_permissions: [["roles", "edit"]],
   save_line_layout: [
     ["lines", "edit"],

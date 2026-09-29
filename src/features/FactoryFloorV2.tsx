@@ -7,7 +7,8 @@ import {
 } from "@/utils/manufacturing.mjs";
 import MachineIcon from "@/components/MachineIcon";
 import FactoryRoute from "@/components/FactoryRoute";
-import { localName } from "@/components/ui";
+import { formatTime, localName } from "@/components/ui";
+import { executionTiming, lineExecutionQueue } from "@/utils/execution-queue.mjs";
 import {
   machineVisualStates,
   matchesVisualFilter,
@@ -67,6 +68,7 @@ export default function FactoryFloorV2(
   const [transferReason, setTransferReason] = useState("");
   const [flowNotice, setFlowNotice] = useState("");
   const [flowBusy, setFlowBusy] = useState(false);
+  const [executionBusyId, setExecutionBusyId] = useState<string | null>(null);
   const [quickAction, setQuickAction] = useState<"stop" | "output" | null>(null);
   const [stopReason, setStopReason] = useState("");
   const [stopNotes, setStopNotes] = useState("");
@@ -79,6 +81,7 @@ export default function FactoryFloorV2(
   const centers = (s.tables.work_centers || []).filter((c) => !c.archived);
   const lines = (s.tables.production_lines || []).filter((l) => !l.archived);
   const orders = s.tables.production_orders || [];
+  const requests = s.tables.production_requests || [];
   const stops = s.tables.downtime_events || [];
   const transfers = s.tables.production_transfers || [];
   const zone = String(s.factory?.timezone || "Asia/Qatar");
@@ -93,6 +96,47 @@ export default function FactoryFloorV2(
     (e) =>
       String(e.created_at) >= period.from && String(e.created_at) < period.to,
   );
+  async function executeItem(action: "start_product_item" | "finish_product_item", itemId: string) {
+    setExecutionBusyId(itemId);
+    try {
+      await props.command(action, { factory: s.factory?.id, item: itemId });
+    } catch { /* The shared command handler shows the database error. */ }
+    finally { setExecutionBusyId(null); }
+  }
+  function executionJob(item: Row, label: string, ready: boolean) {
+    const product = s.tables.products?.find((p) => String(p.id) === String(item.product_id));
+    const request = requests.find((r) => String(r.id) === String(item.request_id));
+    const timing = executionTiming(item);
+    const unit = t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : "legacyUnit");
+    const variance = (minutes: number) => minutes === 0 ? t("executionOnTime")
+      : `${formatDuration(Math.abs(minutes), lang)} ${t(minutes > 0 ? "executionLate" : "executionEarly")}`;
+    return <div className="ff2-queue-job" key={String(item.id)}>
+      <div className="ff2-queue-job-head">
+        <strong>{label}</strong>
+        <span>{item.status === "active" ? t("executionInProduction") : ready ? t("executionReady") : t("executionWaiting")}</span>
+      </div>
+      <div className="ff2-queue-product" dir="auto">{product ? localName(product, lang) : t("notAvailable")}</div>
+      <p>{Number(item.target_quantity).toLocaleString(lang)} {unit}
+        {request ? ` · ${String(request.code)}${request.name ? ` — ${String(request.name)}` : ""}` : ""}</p>
+      <dl className="ff2-queue-times">
+        <div><dt>{t("executionPlannedStart")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>
+        <div><dt>{t("executionPlannedFinish")}</dt><dd>{formatTime(item.expected_finish, lang, zone)}</dd></div>
+        {item.actual_start && <div><dt>{t("executionActualStart")}</dt><dd>{formatTime(item.actual_start, lang, zone)}</dd></div>}
+        {item.actual_finish && <div><dt>{t("executionActualFinish")}</dt><dd>{formatTime(item.actual_finish, lang, zone)}</dd></div>}
+      </dl>
+      {timing.startVarianceMinutes !== null && <small>{t("executionStartVariance")}: {variance(timing.startVarianceMinutes)}</small>}
+      {timing.finishVarianceMinutes !== null && <small>{t("executionFinishVariance")}: {variance(timing.finishVarianceMinutes)}</small>}
+      {ready && timing.startOverdueMinutes !== null && <small>{t("executionStartLateBy")}: {formatDuration(timing.startOverdueMinutes, lang)}</small>}
+      {item.status === "active" && timing.overdueMinutes !== null && <small>{t("executionFinishLateBy")}: {formatDuration(timing.overdueMinutes, lang)}</small>}
+      {item.status === "active" && !item.actual_start && <small>{t("executionLegacyStartMissing")}</small>}
+      {can("orders", "edit") && ready && <button className="primary"
+        disabled={Boolean(executionBusyId) || Boolean(s.truncatedTables?.includes("production_orders"))}
+        onClick={() => void executeItem("start_product_item", String(item.id))}>{t("startProduction")}</button>}
+      {can("orders", "edit") && item.status === "active" && item.actual_start && <button className="primary"
+        disabled={Boolean(executionBusyId)}
+        onClick={() => void executeItem("finish_product_item", String(item.id))}>{t("finishProduction")}</button>}
+    </div>;
+  }
   // Pure mapping (see utils/floor-visual.mjs): physical status is the
   // machine's own truth; computed flow impact only overrides running machines;
   // "alternative" only for open transfers whose branch effectively carries
@@ -278,6 +322,7 @@ export default function FactoryFloorV2(
   }
   function lineCard(line: Row | null) {
     const lineId = line ? String(line.id) : "";
+    const queue = line ? lineExecutionQueue(orders, lineId) : null;
     const borrowed = borrowedInto(lineId);
     const homeMachines = centers
       .filter((c) =>
@@ -366,6 +411,13 @@ export default function FactoryFloorV2(
           </div>
         )}
         {pauseNotice && pauseLineId === lineId && <p role="status" className="ff2-muted">{t(pauseNotice)}</p>}
+        {line && <section className="ff2-queue" aria-label={t("productionQueue")}>
+          <h4>{t("productionQueue")}</h4>
+          {queue?.current
+            ? executionJob(queue.current, t("executionCurrentReady"), String(queue.readyId) === String(queue.current.id))
+            : <p className="muted">{t("executionNoQueuedJobs")}</p>}
+          {queue?.next && executionJob(queue.next, t("executionNext"), false)}
+        </section>}
         <FactoryRoute machines={machines} continuationLabel={t("routeContinues")}
           connectorActive={(a, b) => lineFlowActive(connectorFlowing(a, b, visual, flow, borrowedAwayIds), pausedAt)}
           renderMachine={(c, i) => {

@@ -1,16 +1,20 @@
-/** Presentation only: timestamps remain the source of truth. */
-export function formatDuration(minutes, locale = "en") {
-  const total = Math.max(0, Math.floor(Number(minutes) || 0));
-  const hours = Math.floor(total / 60),
-    rest = total % 60;
-  if (locale === "ar") {
-    // CLDR now defaults the ar locale to Latin digits; request Arabic-Indic explicitly.
-    const digit = (value) => value.toLocaleString("ar-u-nu-arab");
-    if (!hours) return `${digit(total)} د`;
-    return `${digit(hours)} س ${digit(rest).padStart(2, "٠")} د`;
-  }
-  if (!hours) return `${total} min`;
-  return `${hours}h ${String(rest).padStart(2, "0")}m`;
+/** Presentation only: whole elapsed minutes; timestamps and calculations stay unchanged. */
+export function formatDuration(minutes, locale = "en", signed = false) {
+  const numeric = Number(minutes);
+  const value = Number.isFinite(numeric) ? numeric : 0;
+  const total = Math.floor(signed ? Math.abs(value) : Math.max(0, value));
+  const days = Math.floor(total / 1440);
+  const hours = Math.floor(total % 1440 / 60);
+  const rest = total % 60;
+  const arabic = locale === "ar";
+  // CLDR now defaults ar to Latin digits; request Arabic-Indic explicitly.
+  const digit = (number) => arabic ? number.toLocaleString("ar-u-nu-arab") : String(number);
+  const units = arabic ? ["ي", "س", "د"] : ["d", "h", "min"];
+  const parts = [];
+  if (days) parts.push(`${digit(days)} ${units[0]}`);
+  if (hours) parts.push(`${digit(hours)} ${units[1]}`);
+  if (rest || !parts.length) parts.push(`${digit(rest)} ${units[2]}`);
+  return `${signed && total ? value < 0 ? "-" : "+" : ""}${parts.join(" ")}`;
 }
 /** A sequence describes downstream dependency, never a replacement for the machine's actual state. */
 export function evaluateFlow(centers, stops, transfers, now = Date.now()) {

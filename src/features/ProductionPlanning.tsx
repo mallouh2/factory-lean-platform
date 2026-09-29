@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatTime, localName } from "@/components/ui";
 import { formatLocalInput, localDateTimeToUtc } from "@/utils/manufacturing.mjs";
+import { formatDuration } from "@/utils/production-flow.mjs";
 import {
   capableLines, deadlineStatus, durationMs, finishAfterWorkingMs, firstAvailable, freeGaps, lineCapacity,
   groupPlanningRequests, isScheduled, panViewStart, workingCalendar, workingSegments, wheelViewStart,
@@ -148,7 +149,6 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
   const formatQuantity = (value: number) => new Intl.NumberFormat(lang === "ar" ? "ar" : "en", {
     maximumFractionDigits: 1,
   }).format(value);
-  const formatHours = (minutes: number) => formatQuantity(minutes / 60);
   const snapIncrement = scale.snap;
   const ticks = Array.from({ length: Math.floor(scale.span / scale.tick) + 1 }, (_, index) =>
     rangeStart + index * scale.tick);
@@ -611,9 +611,9 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
                 <time dateTime={new Date(slot.finish).toISOString()}>{formatTime(new Date(slot.finish).toISOString(), lang, zone)}</time></div>
               <div className="planning-slot-facts">
                 <span>{t("planningRate")}: {formatQuantity(slot.rate)} {unitOf(slotOrder)}/{t("planningHour")}</span>
-                <span>{t("planningSlotSetup")}: {Math.ceil(slot.setupMs / 60_000)} {t("planningMinutesShort")}</span>
-                <span>{t("planningSlotProduction")}: {Math.ceil(slot.productionMs / 60_000)} {t("planningMinutesShort")}</span>
-                <span>{t("planningSlotTotal")}: {Math.ceil(slot.totalMs / 60_000)} {t("planningMinutesShort")}</span>
+                <span>{t("planningSlotSetup")}: {formatDuration(Math.ceil(slot.setupMs / 60_000), lang)}</span>
+                <span>{t("planningSlotProduction")}: {formatDuration(Math.ceil(slot.productionMs / 60_000), lang)}</span>
+                <span>{t("planningSlotTotal")}: {formatDuration(Math.ceil(slot.totalMs / 60_000), lang)}</span>
                 <span>{t("planningSlotLoad")}: {slot.load.percent === null ? t("planningLoadNoCapacity") :
                   `${formatQuantity(slot.load.percent)}%`}{slot.load.incomplete ? " *" : ""}</span></div>
               <button type="button" onClick={() => { setSlotChoice(index);
@@ -681,13 +681,13 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
                 <span className="planning-line-name">{localName(line, lang)}</span>
                 {load && <><span className="planning-line-load" dir="ltr"
                   title={load.incomplete ? t("planningLoadIncomplete") : t("planningLoadDetail")}>{load.percent === null
-                    ? t("planningLoadNoCapacity") : `${formatQuantity(load.percent)}%`} · {formatHours(load.bookedMinutes)} / {formatHours(load.availableMinutes)} {t("planningHoursShort")}{load.incomplete ? " *" : ""}</span>
+                    ? t("planningLoadNoCapacity") : `${formatQuantity(load.percent)}%`} · {formatDuration(load.bookedMinutes, lang)} / {formatDuration(load.availableMinutes, lang)}{load.incomplete ? " *" : ""}</span>
                   <span className="planning-load-track" aria-hidden="true"><span style={{ width: Math.min(100,
                     Math.max(0, load.percent || 0)) + "%" }} /></span></>}
                 {dragging && <small className={dropState?.error || linePreview?.error ? "planning-warning" : "planning-drop-hint"}>
                   {dropState?.error || linePreview?.error ? t(dropState?.error || linePreview?.error || "") :
-                    linePreview?.durationMs ? `${Math.ceil(linePreview.durationMs / 60_000)} ${t("planningMinutes")} · ${linePreview.rate} ${unitOf(dragging)}/${t("planningHour")}` :
-                    `${Math.ceil(dropState.totalMs / 60_000)} ${t("planningMinutes")}`}</small>}
+                    linePreview?.durationMs ? `${formatDuration(Math.ceil(linePreview.durationMs / 60_000), lang)} · ${linePreview.rate} ${unitOf(dragging)}/${t("planningHour")}` :
+                    formatDuration(Math.ceil(dropState.totalMs / 60_000), lang)}</small>}
                 {linePreview && !linePreview.error && linePreview.requestedStart !== linePreview.start &&
                   <small className="planning-drop-hint">{t("planningSnappedStart")}: {formatTime(new Date(linePreview.start).toISOString(), lang, zone)}</small>}
                 {conflicts.size > 0 && <small className="planning-warning">{t("planningOverlap")}</small>}</strong>
@@ -755,9 +755,9 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
                     onDragEnd={() => finishDrag(String(order.id))}
                     onClick={() => openEditor(order)}
                     title={String(request?.code || order.code) + " · " + localName(productOf(order), lang) +
-                      (!breakdown.error ? " · " + t("planningSetupMinutes") + ": " + breakdown.setupMinutes +
-                        " · " + t("planningProductionDuration") + ": " + Math.ceil(breakdown.productionMs / 60_000) +
-                        " · " + t("planningTotalWorking") + ": " + Math.ceil(breakdown.totalMs / 60_000) : "") +
+                      (!breakdown.error ? " · " + t("planningSetupDuration") + ": " + formatDuration(breakdown.setupMinutes, lang) +
+                        " · " + t("planningProductionDuration") + ": " + formatDuration(Math.ceil(breakdown.productionMs / 60_000), lang) +
+                        " · " + t("planningTotalWorking") + ": " + formatDuration(Math.ceil(breakdown.totalMs / 60_000), lang) : "") +
                       " · " + formatTime(new Date(slot.start).toISOString(), lang, zone) +
                       " – " + (slot.finish ? formatTime(new Date(slot.finish).toISOString(), lang, zone) : t("planningUnknownFinish")) +
                       (order.planning_locked_at ? " · " + lockInfo(order) : "")}
@@ -838,11 +838,11 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
           <span>{t("planningRate")}: <strong>{selectedDuration && !selectedDuration.error
             ? selectedDuration.rate + " " + unitOf(editing) + "/" + t("planningHour") : "—"}</strong></span>
           <span>{t("planningSetupDuration")}: <strong>{selectedDuration?.error ? t(selectedDuration.error) :
-            selectedDuration ? selectedDuration.setupMinutes + " " + t("planningMinutes") : "—"}</strong></span>
+            selectedDuration ? formatDuration(selectedDuration.setupMinutes, lang) : "—"}</strong></span>
           <span>{t("planningProductionDuration")}: <strong>{selectedDuration?.error ? t(selectedDuration.error) :
-            selectedDuration ? Math.ceil(selectedDuration.productionMs / 60_000) + " " + t("planningMinutes") : "—"}</strong></span>
+            selectedDuration ? formatDuration(Math.ceil(selectedDuration.productionMs / 60_000), lang) : "—"}</strong></span>
           <span>{t("planningTotalWorking")}: <strong>{selectedDuration?.error ? t(selectedDuration.error) :
-            selectedDuration ? Math.ceil(selectedDuration.totalMs / 60_000) + " " + t("planningMinutes") : "—"}</strong></span>
+            selectedDuration ? formatDuration(Math.ceil(selectedDuration.totalMs / 60_000), lang) : "—"}</strong></span>
           <span>{t("planningPlannedStart")}: <strong>{proposal && !proposal.error
             ? formatTime(new Date(proposal.start).toISOString(), lang, zone) : "—"}</strong></span>
           {proposal && !proposal.error && proposal.start !== proposal.requestedStart &&

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Dialog, Field, formatTime, localName } from "@/components/ui";
 import { formatLocalInput } from "@/utils/manufacturing.mjs";
+import { formatDuration } from "@/utils/production-flow.mjs";
+import { executionTiming } from "@/utils/execution-queue.mjs";
 import {
   nextScheduledOrder, orderAttention, requestAttention, requestMatchesFilter,
   requestStatus, sortRequestsForScan,
@@ -141,6 +143,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
         {selectedItems.map((item) => {
           const product = productOf(item);
           const line = lineOf(item);
+          const timing = executionTiming(item, now);
           const itemEntries = (s.tables.production_entries || [])
             .filter((entry) => String(entry.order_id) === String(item.id))
             .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5);
@@ -153,7 +156,12 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
             {itemProgress(item)}
             <dl className="orders-v2-facts">
               <div><dt>{t("line")}</dt><dd dir="auto">{line ? localName(line, lang) : t("unassigned")}</dd></div>
-              {item.start_time && <div><dt>{t("start_time")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>}
+              {item.start_time && <div><dt>{t("executionPlannedStart")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>}
+              {item.actual_start && <div><dt>{t("executionActualStart")}</dt><dd>{formatTime(item.actual_start, lang, zone)}</dd></div>}
+              {item.expected_finish && <div><dt>{t("executionPlannedFinish")}</dt><dd>{formatTime(item.expected_finish, lang, zone)}</dd></div>}
+              {item.actual_finish && <div><dt>{t("executionActualFinish")}</dt><dd>{formatTime(item.actual_finish, lang, zone)}</dd></div>}
+              {timing.startVarianceMinutes !== null && <div><dt>{t("executionStartVariance")}</dt><dd><bdi dir="ltr">{formatDuration(timing.startVarianceMinutes, lang, true)}</bdi></dd></div>}
+              {timing.finishVarianceMinutes !== null && <div><dt>{t("executionFinishVariance")}</dt><dd><bdi dir="ltr">{formatDuration(timing.finishVarianceMinutes, lang, true)}</bdi></dd></div>}
             </dl>
             {can("orders", "edit") && <div className="orders-v2-detail-actions">
               {item.status === "planned" &&

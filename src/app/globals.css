@@ -1920,6 +1920,20 @@ details.panel > summary {
 .ff2-pause-help { flex-basis: 100%; margin: 0; color: var(--ff2-text); font-size: 0.84rem; line-height: 1.5; }
 .ff2-pause-form label { display: grid; gap: 0.3rem; font-size: 0.83rem; color: var(--ff2-muted); }
 .ff2-pause-form select { min-height: 38px; min-width: 215px; }
+.ff2-queue { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; margin: 0.2rem 0 1rem; }
+.ff2-queue > h4 { grid-column: 1 / -1; margin: 0; font-size: 0.92rem; }
+.ff2-queue > p { grid-column: 1 / -1; margin: 0; }
+.ff2-queue-job { min-width: 0; padding: 0.7rem 0.8rem; border: 1px solid var(--ff2-border); border-radius: 10px; background: #f8fbfc; display: grid; gap: 0.35rem; }
+.ff2-queue-job-head { display: flex; justify-content: space-between; gap: 0.5rem; color: #155b62; font-size: 0.78rem; }
+.ff2-queue-job-head span { white-space: nowrap; }
+.ff2-queue-product { font-weight: 700; }
+.ff2-queue-job p, .ff2-queue-job small { margin: 0; color: var(--ff2-muted); font-size: 0.78rem; }
+.ff2-queue-job .primary { justify-self: start; min-height: 34px; }
+.ff2-queue-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.3rem 0.7rem; margin: 0; font-size: 0.76rem; }
+.ff2-queue-times div { min-width: 0; }
+.ff2-queue-times dt { color: var(--ff2-muted); }
+.ff2-queue-times dd { margin: 0; font-weight: 600; }
+@media (max-width: 640px) { .ff2-queue { grid-template-columns: minmax(0, 1fr); } }
 .ff2-flow { display: grid; gap: 0; overflow: visible; min-width: 0; padding: 0; }
 .ff2-route-group, .ff2-route-row { min-width: 0; }
 .ff2-route-row { display: grid; gap: 34px; align-items: start; }
