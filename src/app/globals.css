@@ -1977,6 +1977,8 @@ details.panel > summary {
 .center-alternatives { display: grid; gap: 0.55rem; margin: 1rem 0; }
 .center-alternatives h4, .center-alternatives p { margin: 0; }
 .center-alternatives .ff2-check { display: flex; align-items: center; gap: 0.5rem; }
+.center-alternatives .ff2-check > span { display: grid; line-height: 1.3; }
+.center-alternatives .ff2-check small { color: var(--ff2-muted); font-size: 0.74rem; }
 .center-alternatives > button { justify-self: start; }
 .center-capabilities { display: grid; gap: 0.55rem; margin: 1rem 0 0; padding-top: 1rem; border-top: 1px solid var(--ff2-border); }
 .center-capabilities h4, .center-capabilities p { margin: 0; }
@@ -2769,6 +2771,7 @@ details.panel > summary {
 .management-line-symbol { font-size: 1.35rem; color: #2e6683; line-height: 1; }
 .management-unassigned { background: #f4f6f8; cursor: default; }
 .management-line-arrow { color: #9aabb9; align-self: center; text-align: center; font-size: 1.1rem; }
+[dir="rtl"] .management-line-arrow { transform: scaleX(-1); }
 .management-route { min-width: 0; }
 .management-machine { width: 100%; min-height: 116px; border: 1px solid var(--ff2-border); border-radius: 15px;
   background: #fff; padding: 0.65rem 0.5rem; display: flex; flex-direction: column; align-items: center;
@@ -2798,13 +2801,17 @@ details.panel > summary {
 .management-position { display: flex; align-items: center; gap: 0.4rem; min-height: 39px; }
 .management-position span { min-width: 55px; color: var(--ff2-muted); font-size: 0.85rem; }
 .management-position button, .management-order .row-actions button { min-width: 36px; min-height: 36px; }
+.management-field-group-head { grid-column: 1 / -1; margin-top: 0.9rem; }
+.management-field-group-head:first-child { margin-top: 0; }
+.management-field-group-head h4 { margin: 0 0 0.2rem; font-size: 0.95rem; color: #1d3946; }
+.management-field-group-head p { margin: 0; }
 .management button:focus-visible, .management select:focus-visible, .management input:focus-visible {
   outline: 3px solid #4b88c8; outline-offset: 2px;
 }
 @media (max-width: 640px) {
   .management-line-body { grid-template-columns: minmax(0, 1fr); }
   .management-line-anchor { min-height: 76px; }
-  .management-line-arrow { transform: rotate(90deg); justify-self: center; }
+  .management-line-arrow, [dir="rtl"] .management-line-arrow { transform: rotate(90deg); justify-self: center; }
   .management-actions { width: 100%; }
 }
 .ff2-alt-edit .ff2-check input {

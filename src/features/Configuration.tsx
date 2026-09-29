@@ -76,10 +76,6 @@ const config: Record<string, {
       "expected_finish",
     ],
   },
-  downtime: {
-    table: "downtime_reasons",
-    fields: ["name", "name_ar", "parent_id", "requires_description"],
-  },
   products: {
     table: "products",
     fields: [
@@ -120,6 +116,15 @@ const numbers = [
   "target_quantity",
   "produced_quantity",
   "rejected_quantity",
+];
+// Machine editor reading order for the configuration persona: what the machine is,
+// what it is doing now, what it can produce, and free-text notes. Field names and the
+// saved payload are unchanged; only the presentation is grouped.
+const centerGroups: Array<readonly [string, string[]]> = [
+  ["groupIdentity", ["name", "name_ar", "category_id", "type", "area_id", "parent_id"]],
+  ["groupAssignment", ["line_id", "position", "order_id", "operator_id", "start_time", "expected_finish"]],
+  ["groupRates", ["production_speed", "default_cycle_time", "current_cycle_time", "planned_capacity"]],
+  ["groupNotes", ["description", "notes"]],
 ];
 type StandaloneEditor = {
   record: Row | null;
@@ -163,6 +168,17 @@ export default function Configuration({
       ? "work_centers"
       : relations[field];
   if (!c) return null;
+  const groupedFields: Array<string | { group: string }> = [];
+  if (view === "centers") {
+    for (const [groupKey, groupFieldNames] of centerGroups) {
+      const active = groupFieldNames.filter((f) => editorFields.includes(f));
+      if (!active.length) continue;
+      groupedFields.push({ group: groupKey });
+      groupedFields.push(...active);
+    }
+  } else {
+    groupedFields.push(...editorFields);
+  }
   const rows = (s.tables[c.table] || []).filter(
     (x) =>
       !x.archived &&
@@ -185,9 +201,7 @@ export default function Configuration({
     for (const field of activeFields) {
       const value = String(f.get(field) || "");
       payload[field] =
-        field === "requires_description"
-          ? f.has(field)
-          : numbers.includes(field)
+        numbers.includes(field)
             ? value === ""
               ? null
               : Number(value)
@@ -387,8 +401,14 @@ export default function Configuration({
         >
           <form onSubmit={save}>
             <div className="form-grid">
-              {editorFields.map(
-                (field) => (
+              {groupedFields.map(
+                (field) => typeof field === "object" ? (
+                <div className="management-field-group-head" key={field.group}>
+                  <h4>{t(field.group)}</h4>
+                  {field.group === "groupAssignment" && activeEditing.id &&
+                    <p className="muted">{t("groupAssignmentHint")}</p>}
+                </div>
+                ) : (
                 <Field
                   key={field}
                   label={
@@ -482,12 +502,6 @@ export default function Configuration({
                         </option>
                       ))}
                     </select>
-                  ) : field === "requires_description" ? (
-                    <input
-                      name={field}
-                      type="checkbox"
-                      defaultChecked={Boolean(activeEditing[field])}
-                    />
                   ) : ["description", "notes"].includes(field) ? (
                     <textarea
                       name={field}

@@ -6,6 +6,7 @@ import type { FeatureProps } from "./types";
 export default function CenterAlternatives(props: FeatureProps & { centerId: string }) {
   const { snapshot, centerId, t, lang, can, command } = props;
   const centers = (snapshot.tables.work_centers || []).filter((c) => !c.archived);
+  const lines = snapshot.tables.production_lines || [];
   const center = centers.find((c) => String(c.id) === centerId);
   const saved = (snapshot.tables.work_center_alternatives || [])
     .filter((x) => String(x.work_center_id) === centerId)
@@ -31,12 +32,18 @@ export default function CenterAlternatives(props: FeatureProps & { centerId: str
   return <section className="center-alternatives">
     <h4>{t("alternativeMachines")}</h4>
     <p className="muted">{t("selectAlternatives")}</p>
-    {candidates.map((c) => <label key={String(c.id)} className="ff2-check">
-      <input type="checkbox" disabled={!can("centers", "edit") || busy}
-        checked={draft.includes(String(c.id))}
-        onChange={(e) => setDraft(e.target.checked ? [...draft, String(c.id)] : draft.filter((id) => id !== String(c.id)))} />
-      {localName(c, lang)}
-    </label>)}
+    {candidates.map((c) => {
+      const candidateLine = lines.find((l) => String(l.id) === String(c.line_id));
+      return <label key={String(c.id)} className="ff2-check">
+        <input type="checkbox" disabled={!can("centers", "edit") || busy}
+          checked={draft.includes(String(c.id))}
+          onChange={(e) => setDraft(e.target.checked ? [...draft, String(c.id)] : draft.filter((id) => id !== String(c.id)))} />
+        <span>
+          {localName(c, lang)}
+          <small>{candidateLine ? localName(candidateLine, lang) : t("independent")}</small>
+        </span>
+      </label>;
+    })}
     {!candidates.length && <p className="muted">{t("noSameCategoryMachines")}</p>}
     {can("centers", "edit") && <button className="primary" disabled={busy || draft.join(",") === saved.join(",")}
       onClick={() => void save()}>{t("save")}</button>}

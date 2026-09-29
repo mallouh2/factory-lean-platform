@@ -12,7 +12,11 @@ type Screen =
   | { kind: "line" | "machine"; id: string }
   | { kind: "createLine" | "createMachine" | "areas" | "categories" };
 
-export default function LineBuilder(props: FeatureProps & { initialMachineId?: string | null; onDirtyChange?: (dirty: boolean) => void }) {
+export default function LineBuilder(props: FeatureProps & {
+  initialMachineId?: string | null;
+  onBackToFloor?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { snapshot: s, t, lang, command, can } = props;
   const [screen, setScreen] = useState<Screen>(
     props.initialMachineId ? { kind: "machine", id: props.initialMachineId } : { kind: "overview" },
@@ -41,7 +45,9 @@ export default function LineBuilder(props: FeatureProps & { initialMachineId?: s
   function go(next: Screen) {
     if (draft && !confirm(t("discardChanges"))) return;
     setDraft(null);
-    setScreen(next);
+    if (next.kind === "overview" && props.initialMachineId && props.onBackToFloor) {
+      props.onBackToFloor();
+    } else setScreen(next);
   }
   function change(next: Row[]) {
     if (!editable) return;
@@ -78,7 +84,8 @@ export default function LineBuilder(props: FeatureProps & { initialMachineId?: s
         })),
       });
       setDraft(null);
-      setScreen({ kind: "overview" });
+      if (props.initialMachineId && props.onBackToFloor) props.onBackToFloor();
+      else setScreen({ kind: "overview" });
     } catch {
       // The shared command reports a layout conflict and refreshes the snapshot.
     } finally { setBusy(false); }
@@ -130,10 +137,11 @@ export default function LineBuilder(props: FeatureProps & { initialMachineId?: s
       <header className="management-head">
         <div><h2>{t("manageLinesMachines")}</h2><p>{t("managementHelp")}</p></div>
         <div className="management-actions">
-          {can("lines", "create") && <button className="primary" onClick={() => go({ kind: "createLine" })}>+ {t("addLine")}</button>}
+          {can("lines", "create") && <button onClick={() => go({ kind: "createLine" })}>+ {t("addLine")}</button>}
           {can("centers", "create") && <button className="primary" onClick={() => go({ kind: "createMachine" })}>+ {t("addMachineShort")}</button>}
         </div>
       </header>
+      {!lines.length && !savedCenters.length && <p className="management-empty">{t("noLinesYet")}</p>}
       <div className="management-line-list">{lines.map(lineCard)}{lineCard(null)}</div>
       <div className="management-secondary">
         {can("factory", "view") && <button onClick={() => go({ kind: "areas" })}>{t("areasOptional")}</button>}
@@ -141,7 +149,7 @@ export default function LineBuilder(props: FeatureProps & { initialMachineId?: s
       </div>
     </> : <>
       <header className="management-subhead">
-        <button className="line-management-back" onClick={() => go({ kind: "overview" })}>← {t("backToLinesMachines")}</button>
+        <button className="line-management-back" onClick={() => go({ kind: "overview" })}>← {t(props.initialMachineId ? "backToFactoryFloor" : "backToLinesMachines")}</button>
         <div><p>{t("manageLinesMachines")}</p><h2 ref={initialHeadingRef} tabIndex={-1}>{
           screen.kind === "line" ? `${t("lineDetails")} · ${localName(selectedLine, lang)}` :
           screen.kind === "machine" ? `${t("machineDetails")} · ${localName(selectedMachine, lang)}` :
@@ -153,7 +161,8 @@ export default function LineBuilder(props: FeatureProps & { initialMachineId?: s
       {(screen.kind === "line" || screen.kind === "createLine") && <>
         <Configuration key={screen.kind === "line" ? screen.id : "new-line"} {...props} view="lines"
           standalone={{ record: selectedLine || null, blocked: !!draft,
-            onSaved: () => setScreen({ kind: "overview" }), onCancel: () => go({ kind: "overview" }) }} />
+            onSaved: () => props.initialMachineId && props.onBackToFloor
+              ? props.onBackToFloor() : setScreen({ kind: "overview" }), onCancel: () => go({ kind: "overview" }) }} />
         {selectedLine && <section className="management-order panel">
           <div className="section-head"><div><h3>{t("machineOrder")}</h3><p>{t("machineOrderHelp")}</p></div>
             <button className="primary" disabled={!draft || busy} onClick={() => void saveLayout()}>{t("saveOrder")}</button></div>
@@ -171,7 +180,8 @@ export default function LineBuilder(props: FeatureProps & { initialMachineId?: s
       {(screen.kind === "machine" || screen.kind === "createMachine") && <>
         <Configuration key={screen.kind === "machine" ? screen.id : "new-machine"} {...props} view="centers"
           standalone={{ record: savedMachine || null, blocked: !!draft,
-            onSaved: () => setScreen({ kind: "overview" }), onCancel: () => go({ kind: "overview" }) }} />
+            onSaved: () => props.initialMachineId && props.onBackToFloor
+              ? props.onBackToFloor() : setScreen({ kind: "overview" }), onCancel: () => go({ kind: "overview" }) }} />
         {selectedMachine && <section className="management-flow-settings panel">
           <div className="section-head"><div><h3>{t("flowSettings")}</h3><p>{t("flowSettingsHelp")}</p></div>
             <button className="primary" disabled={!draft || busy} onClick={() => void saveLayout()}>{t("saveFlowSettings")}</button></div>

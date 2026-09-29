@@ -61,6 +61,13 @@ const commandErrors: Record<string, string> = {
   execution_line_busy: "executionLineBusy",
   execution_out_of_sequence: "executionOutOfSequence",
   execution_not_running: "executionNotRunning",
+  downtime_invalid_interval: "downtimeInvalidInterval",
+  downtime_overlap: "downtimeOverlap",
+  downtime_initial_locked: "downtimeInitialLocked",
+  downtime_approval_locked: "downtimeApprovalLocked",
+  downtime_not_reviewable: "downtimeNotReviewable",
+  downtime_immutable: "downtimeImmutable",
+  reason_required: "reasonRequired",
 };
 /** request_membership reports failures as JSONB values instead of raising; map them to specific client keys. */
 const joinErrors: Record<string, string> = {
@@ -76,6 +83,8 @@ const rpcModules: Record<string, [string, string][]> = {
   set_plan_lock: [["orders", "edit"]],
   start_product_item: [["orders", "edit"]],
   finish_product_item: [["orders", "edit"]],
+  approve_downtime_cause: [["downtime", "edit"]],
+  record_missed_downtime: [["downtime", "edit"]],
   set_user_permissions: [["roles", "edit"]],
   save_line_layout: [
     ["lines", "edit"],
@@ -133,19 +142,21 @@ export async function POST(req: NextRequest) {
         args.id ? "edit" : "create",
         context,
       );
-    } else if (["change_status", "update_downtime"].includes(command)) {
+    } else if (["change_status", "update_downtime", "set_downtime_initial"].includes(command)) {
       const { data: allowed } = await db.rpc("can_access", {
         factory: args.factory,
         module: "machine_status",
         action: "edit",
       });
-      if (!allowed)
-        await authorize(
-          args.factory,
-          command === "update_downtime" ? "downtime" : "centers",
-          "edit",
-          context,
-        );
+      if (!allowed) {
+        if (command === "set_downtime_initial") {
+          const { data: centersAllowed } = await db.rpc("can_access", {
+            factory: args.factory, module: "centers", action: "edit",
+          });
+          if (!centersAllowed) await authorize(args.factory, "downtime", "edit", context);
+        } else await authorize(args.factory,
+          command === "update_downtime" ? "downtime" : "centers", "edit", context);
+      }
     } else if (rpcModules[command]) {
       for (const [module, action] of rpcModules[command])
         await authorize(args.factory, module, action, context);

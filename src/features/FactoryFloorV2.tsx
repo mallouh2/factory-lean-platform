@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { downtimeReasonChoices } from "@/utils/downtime-reasons";
 import { evaluateFlow, formatDuration } from "@/utils/production-flow.mjs";
 import {
   downtimeMinutes,
@@ -69,9 +70,9 @@ export default function FactoryFloorV2(
   const [flowNotice, setFlowNotice] = useState("");
   const [flowBusy, setFlowBusy] = useState(false);
   const [executionBusyId, setExecutionBusyId] = useState<string | null>(null);
-  const [quickAction, setQuickAction] = useState<"stop" | "output" | null>(null);
+  const [quickAction, setQuickAction] = useState<"output" | "stop" | null>(null);
   const [stopReason, setStopReason] = useState("");
-  const [stopNotes, setStopNotes] = useState("");
+  const [stopDetail, setStopDetail] = useState("");
   const [outputProduced, setOutputProduced] = useState("");
   const [outputRejected, setOutputRejected] = useState("0");
   const outputRequestId = useRef<string>("");
@@ -83,6 +84,9 @@ export default function FactoryFloorV2(
   const orders = s.tables.production_orders || [];
   const requests = s.tables.production_requests || [];
   const stops = s.tables.downtime_events || [];
+  const stopCategories = downtimeReasonChoices.map(([name, key]) => ({
+    row: s.tables.downtime_reasons?.find((reason) => reason.name === name && !reason.parent_id), key,
+  })).filter(({ row }) => Boolean(row));
   const transfers = s.tables.production_transfers || [];
   const zone = String(s.factory?.timezone || "Asia/Qatar");
   const period = reportPeriod("today", zone);
@@ -655,19 +659,19 @@ export default function FactoryFloorV2(
   }
   async function stopMachine(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !stopReason) return;
+    if (!selected || !stopReason || !stopCategories.some(({ row }) => String(row?.id) === stopReason)) return;
     setFlowBusy(true);
     setFlowNotice("");
     try {
       await props.command("change_status", {
         factory: s.factory?.id, work_center: selected.id, status: "stopped",
-        reason: stopReason, sub_reason: null, notes: stopNotes,
+        reason: stopReason, sub_reason: null, notes: stopDetail.trim(),
         expected_restart: null, responsible: null, alternative: null,
         transferred: false,
       });
       setQuickAction(null);
       setStopReason("");
-      setStopNotes("");
+      setStopDetail("");
       setFlowNotice("saved");
     } catch (error) {
       setFlowNotice(error instanceof Error ? error.message : "error");
@@ -802,7 +806,7 @@ export default function FactoryFloorV2(
                   <div className="ff2-issue-card">
                     {selectedDisplayState === "stopped" && (
                       <>
-                        <strong dir="auto">{stopReasonRow ? localName(stopReasonRow, lang) : t("stopped")}</strong>
+                        <strong dir="auto">{stopReasonRow ? localName(stopReasonRow, lang) : t("downtimeUnclassified")}</strong>
                         {selectedStop?.started_at && (
                           <span>{t("duration")}: {formatDuration(
                             (Date.now() - Date.parse(String(selectedStop.started_at))) / 60000, lang,
@@ -864,7 +868,7 @@ export default function FactoryFloorV2(
                   <h4 id="ff2-quick-actions">{t("quickActions")}</h4>
                   <div className="ff2-quick-actions">
                     {canStopHere && (
-                      <button onClick={() => { setQuickAction("stop"); setFlowNotice(""); }} disabled={flowBusy}>
+                      <button onClick={() => { setQuickAction("stop"); setStopReason(""); setStopDetail(""); setFlowNotice(""); }} disabled={flowBusy}>
                         {t("stopMachine")}
                       </button>
                     )}
@@ -880,7 +884,7 @@ export default function FactoryFloorV2(
                     )}
                     {canRestartHere && (
                       <button className="primary" disabled={flowBusy} onClick={() => void startMachine()}>
-                        {t("returnToRunning")}
+                        {t("downtimeEnd")}
                       </button>
                     )}
                     {canStartHere && (
@@ -906,26 +910,25 @@ export default function FactoryFloorV2(
                     )}
                   </div>
 
-                  {quickAction === "stop" && (
+                  {quickAction === "stop" && canStopHere && (
                     <form className="ff2-quick-form" onSubmit={(event) => void stopMachine(event)}>
-                      <label>{t("reason")}
-                        <select value={stopReason} required onChange={(event) => setStopReason(event.target.value)}>
-                          <option value="">{t("reason")}</option>
-                          {(s.tables.downtime_reasons || []).filter((r) => !r.parent_id).map((r) => (
-                            <option key={String(r.id)} value={String(r.id)}>{localName(r, lang)}</option>
-                          ))}
+                      <label>{t("downtimeInitialReason")}
+                        <select required value={stopReason} onChange={(event) => setStopReason(event.target.value)}>
+                          <option value="">{t("downtimeChooseReason")}</option>
+                          {stopCategories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{t(key)}</option>)}
                         </select>
                       </label>
-                      <label>{t("describeReason")}
-                        <textarea value={stopNotes} onChange={(event) => setStopNotes(event.target.value)} maxLength={2000}
-                          minLength={3} required={Boolean(s.tables.downtime_reasons?.find((r) => r.id === stopReason)?.requires_description)} />
+                      <label>{t("downtimeDetailedReason")}
+                        <textarea maxLength={2000} value={stopDetail}
+                          onChange={(event) => setStopDetail(event.target.value)} />
                       </label>
                       <div className="ff2-row-actions">
-                        <button className="primary" disabled={flowBusy || !stopReason}>{t("stopMachine")}</button>
+                        <button className="primary" disabled={flowBusy || !stopReason}>{t("confirmStop")}</button>
                         <button type="button" onClick={() => setQuickAction(null)}>{t("cancel")}</button>
                       </div>
                     </form>
                   )}
+
                   {quickAction === "output" && (
                     <form className="ff2-quick-form" onSubmit={(event) => void recordOutput(event)}>
                       <label>{t("produced_quantity")}

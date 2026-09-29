@@ -16,6 +16,7 @@ import ProductionPlanning from "@/features/ProductionPlanning";
 import PlatformDashboard from "@/features/PlatformDashboard";
 import PersonPermissions from "@/features/PersonPermissions";
 import DowntimeAnalysis from "@/features/DowntimeAnalysis";
+import DowntimeCapture from "@/features/DowntimeCapture";
 import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
 import { previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
@@ -477,10 +478,10 @@ export default function FactoryApp() {
                     />
                   ) : view === "downtime" ? (
                     <>
-                      <DowntimeAnalysis {...props} />
-                      {can("downtime", "create") && (
-                        <Configuration {...props} view="downtime" />
-                      )}
+                      <DowntimeCapture {...props} />
+                      <details className="panel"><summary>{t("impactRankedDowntime")}</summary>
+                        <DowntimeAnalysis {...props} />
+                      </details>
                     </>
                   ) : view === "reports" ? (
                     <Reports {...props} view={view} />
@@ -495,11 +496,12 @@ export default function FactoryApp() {
                       />
                     ) : (
                       <div className="line-management">
-                        <button className="line-management-back" onClick={() => {
+                        {!lineManagementMachineId && <button className="line-management-back" onClick={() => {
                           if (dirtyLayout && !confirm(t("discardChanges"))) return;
                           setLineManagement(false);
-                        }}><span className="line-management-back-icon" aria-hidden="true">←</span> {t("backToFactoryFloor")}</button>
-                        <LineBuilder {...props} initialMachineId={lineManagementMachineId} onDirtyChange={setDirtyLayout} />
+                        }}><span className="line-management-back-icon" aria-hidden="true">←</span> {t("backToFactoryFloor")}</button>}
+                        <LineBuilder {...props} initialMachineId={lineManagementMachineId}
+                          onBackToFloor={() => setLineManagement(false)} onDirtyChange={setDirtyLayout} />
                       </div>
                     )
                   ) : view === "roles" ? (

@@ -1,7 +1,7 @@
 import ProductionTransfers from "./ProductionTransfers";
 import { formatDuration } from "@/utils/production-flow.mjs";
 import DowntimePlan from "./DowntimePlan";
-import { downtimeMinutes, localDateTimeToUtc } from "@/utils/manufacturing.mjs";
+import { downtimeMinutes } from "@/utils/manufacturing.mjs";
 import { useState } from "react";
 import { Badge, Dialog, Field, formatTime, localName } from "@/components/ui";
 import type { Row } from "@/types";
@@ -14,7 +14,6 @@ export default function CenterDetails({
   const { snapshot: s, t, lang, command, can } = props;
   const [outputRequestId] = useState(() => crypto.randomUUID());
   const [status, setStatus] = useState(String(center.status)),
-    [reason, setReason] = useState(""),
     [busy, setBusy] = useState(false);
   const zone = String(s.factory?.timezone);
   const current =
@@ -25,9 +24,6 @@ export default function CenterDetails({
   const downtime = s.tables.downtime_events?.find(
     (x) => x.work_center_id === current.id && !x.ended_at,
   );
-  const down = s.tables.machine_statuses?.find(
-    (x) => x.code === status,
-  )?.is_downtime;
   const reasons = s.tables.downtime_reasons || [];
   const history = (s.tables.status_events || [])
     .filter((x) => x.work_center_id === current.id)
@@ -41,14 +37,12 @@ export default function CenterDetails({
         factory: s.factory?.id,
         work_center: current.id,
         status,
-        reason: down ? reason : null,
-        sub_reason: down ? f.get("sub_reason") || null : null,
+        reason: null,
+        sub_reason: null,
         notes: f.get("notes") || "",
-        expected_restart: f.get("expected_restart")
-          ? localDateTimeToUtc(String(f.get("expected_restart")), zone)
-          : null,
-        responsible: f.get("responsible") || null,
-        alternative: f.get("alternative") || null,
+        expected_restart: null,
+        responsible: null,
+        alternative: null,
         transferred: false,
       });
       onClose();
@@ -166,7 +160,7 @@ export default function CenterDetails({
         <form onSubmit={submit}>
           <h3>{t("operatorView")}</h3>
           <div className="operator-actions">
-            {["running", "stopped", "setup", "idle", "offline"].map((x) => (
+            {["running", "idle", "offline"].map((x) => (
               <button
                 type="button"
                 className={status === x ? "selected" : ""}
@@ -177,79 +171,10 @@ export default function CenterDetails({
               </button>
             ))}
           </div>
-          {down && (
-            <>
-              <Field label={t("reason")}>
-                <select
-                  value={reason}
-                  required
-                  onChange={(e) => setReason(e.target.value)}
-                >
-                  <option value="">{t("reason")}</option>
-                  {reasons
-                    .filter((x) => !x.parent_id)
-                    .map((x) => (
-                      <option value={String(x.id)} key={String(x.id)}>
-                        {localName(x, lang)}
-                      </option>
-                    ))}
-                </select>
-              </Field>
-              <Field label={t("subReason")}>
-                <select name="sub_reason">
-                  <option value="">{t("notAvailable")}</option>
-                  {reasons
-                    .filter((x) => x.parent_id === reason)
-                    .map((x) => (
-                      <option value={String(x.id)} key={String(x.id)}>
-                        {localName(x, lang)}
-                      </option>
-                    ))}
-                </select>
-              </Field>
-              <Field label={`${t("expectedRestart")} (${zone})`}>
-                <input name="expected_restart" type="datetime-local" />
-              </Field>
-              <Field label={t("responsible")}>
-                <select name="responsible">
-                  <option value="">{t("unassigned")}</option>
-                  {s.tables.memberships
-                    ?.filter((x) => x.status === "approved")
-                    .map((x) => (
-                      <option key={String(x.id)} value={String(x.id)}>
-                        {String(x.display_name)}
-                      </option>
-                    ))}
-                </select>
-              </Field>
-              <Field label={t("alternative")}>
-                <select name="alternative">
-                  <option value="">{t("notAvailable")}</option>
-                  {s.tables.work_centers
-                    .filter((x) => x.id !== current.id && !x.archived)
-                    .map((x) => (
-                      <option key={String(x.id)} value={String(x.id)}>
-                        {localName(x, lang)}
-                      </option>
-                    ))}
-                </select>
-              </Field>
-            </>
-          )}
           <Field label={t("describeReason")}>
             <textarea
               name="notes"
               maxLength={2000}
-              required={Boolean(
-                down &&
-                reasons.find((x) => x.id === reason)?.requires_description,
-              )}
-              minLength={
-                down &&
-                reasons.find((x) => x.id === reason)?.requires_description
-                  ? 3
-                  : undefined
-              }
             />
           </Field>
           <button
