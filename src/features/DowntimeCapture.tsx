@@ -6,6 +6,7 @@ import { downtimeReasonChoices } from "@/utils/downtime-reasons";
 import type { Row } from "@/types";
 import type { FeatureProps } from "./types";
 import styles from "./DowntimeCapture.module.css";
+import LossImpactReview from "./LossImpactReview";
 
 export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: FeatureProps) {
   const [now, setNow] = useState(() => Date.now());
@@ -38,7 +39,8 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
     .sort((a, b) => String(a.started_at).localeCompare(String(b.started_at)));
   const needsReview = events.filter((e) => e.ended_at && !e.approved_at)
     .sort((a, b) => String(b.ended_at).localeCompare(String(a.ended_at)));
-  const endedUnclassified = events.filter((e) => e.ended_at && !e.reason_id)
+  const endedUnclassified = events.filter((e) => e.ended_at && !e.reason_id &&
+    e.stop_nature !== "planned")
     .sort((a, b) => String(b.ended_at).localeCompare(String(a.ended_at)));
   const focused = needsReview.find((e) => String(e.id) === reviewId) || needsReview[0];
   const focusedInitialIsCurrent = categories.some(({ row }) => row?.id === focused?.reason_id);
@@ -48,6 +50,11 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
   const reasonName = (id: unknown) => id
     ? localName(reasons.find((r) => String(r.id) === String(id)), lang)
     : t("downtimeUnclassified");
+  const stopName = (event: Row) => event.stop_nature === "planned"
+    ? `${t("lossPlanned")} — ${t(`lossActivity_${event.planned_activity}`)}`
+    : event.stop_nature === "legacy_unknown"
+      ? `${t("lossLegacyUnknown")} — ${reasonName(event.reason_id)}`
+      : reasonName(event.reason_id);
   const personName = (id: unknown) => String((s.tables.memberships || [])
     .find((m) => String(m.user_id) === String(id))?.display_name || "—");
   const context = (event: Row) => {
@@ -81,14 +88,16 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
           <div className={styles.eventHead}><strong>{localName(machine(event.work_center_id), lang)}</strong>
             <span>{elapsed(event)}</span></div>
           <p>{context(event)}</p>
-          <p>{t("downtimeInitialReason")}: <strong>{reasonName(event.reason_id)}</strong></p>
+          <p>{t("lossStopType")}: <strong>{stopName(event)}</strong></p>
           <small>{formatTime(event.started_at, lang, zone)}</small>
           {canOperate && <div className={styles.actions}>
-            {!event.reason_id && <button disabled={busy} onClick={() => {
+            {!event.reason_id && event.stop_nature !== "planned" &&
+              <button disabled={busy} onClick={() => {
               setInitialEvent(String(event.id)); setInitialReason(""); setInitialNote("");
             }}>{t("downtimeAddReason")}</button>}
           </div>}
           {canOperate && initialEvent === String(event.id) && !event.reason_id &&
+            event.stop_nature !== "planned" &&
             <form className={styles.form} onSubmit={(e) => { e.preventDefault();
               void run("set_downtime_initial", { event: event.id, reason: initialReason,
                 notes: initialNote }, () => { setInitialEvent(""); setInitialNote(""); });
@@ -149,7 +158,7 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
               setReviewId(String(e.id)); setCauseId(""); setEngineeringNote("");
             }}>
             <strong>{localName(machine(e.work_center_id), lang)}</strong>
-            <span>{elapsed(e)} · {reasonName(e.reason_id)}</span>
+            <span>{elapsed(e)} · {stopName(e)}</span>
           </button>)}
         </div>
         {focused && <div className={styles.reviewDetail} key={String(focused.id)}>
@@ -159,12 +168,12 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
             <div><dt>{t("downtimeStarted")}</dt><dd>{formatTime(focused.started_at, lang, zone)}</dd></div>
             <div><dt>{t("downtimeEnded")}</dt><dd>{formatTime(focused.ended_at, lang, zone)}</dd></div>
             <div><dt>{t("duration")}</dt><dd>{elapsed(focused)}</dd></div>
-            <div><dt>{t("downtimeInitialReason")}</dt><dd>{reasonName(focused.reason_id)}</dd></div>
+            <div><dt>{t("lossStopType")}</dt><dd>{stopName(focused)}</dd></div>
             <div><dt>{t("downtimeOperatorNote")}</dt><dd>{String(focused.initial_note || focused.notes || "—")}</dd></div>
             <div><dt>{t("downtimeEnteredBy")}</dt><dd>{personName(focused.initial_entered_by || focused.created_by)}</dd></div>
             {focused.retroactive && <div><dt>{t("downtimeRetroactive")}</dt><dd>{t("downtimeYes")}</dd></div>}
           </dl>
-          <label>{t("downtimeApprovedCause")}
+          {focused.stop_nature !== "planned" && <><label>{t("downtimeApprovedCause")}
             <select value={causeId || (focusedInitialIsCurrent ? String(focused.reason_id) : "")}
               onChange={(e) => setCauseId(e.target.value)}>
               <option value="">{t("downtimeChooseReason")}</option>
@@ -186,10 +195,22 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
                 cause: causeId || focused.reason_id, notes: engineeringNote }, () => {
                   setCauseId(""); setEngineeringNote("");
                 })}>{t("downtimeSaveCause")}</button>
-          </div>
+          </div></>}
+          {focused.stop_nature === "planned" && <>
+            <label>{t("downtimeEngineeringNote")}
+              <textarea maxLength={2000} value={engineeringNote}
+                onChange={(e) => setEngineeringNote(e.target.value)} />
+            </label>
+            <button className="primary" disabled={busy}
+              onClick={() => void run("approve_planned_downtime", {
+                event: focused.id, notes: engineeringNote,
+              }, () => setEngineeringNote(""))}>{t("lossApprovePlanned")}</button>
+          </>}
         </div>}
       </div>}
     </section>}
+
+    <LossImpactReview {...{ snapshot: s, t, lang, command, can }} />
 
     {canReview && <details className={styles.card}>
       <summary>{t("downtimeRetroactive")}</summary>

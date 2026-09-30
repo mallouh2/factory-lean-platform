@@ -214,6 +214,8 @@ test("working-time gap fit includes setup, keeps booked jobs fixed, and manual e
 });
 
 test("Gantt renders closed periods and setup inside the real elapsed reservation in both languages", () => {
+  const RealDate = globalThis.Date;
+  const fixedNow = "2026-09-27T12:00:00Z";
   const item = { ...orders[1], start_time: "2026-09-27T15:00:00Z",
     expected_finish: "2026-09-28T09:00:00Z" };
   const calendarSnapshot = { ...snapshot,
@@ -221,15 +223,23 @@ test("Gantt renders closed periods and setup inside the real elapsed reservation
       workday_start: "08:00:00", workday_end: "17:00:00" },
     tables: { ...snapshot.tables, production_orders: [item],
       work_center_capabilities: [{ ...capabilities[0], setup_minutes: 60 }] } };
-  for (const [lang, dictionary] of [["en", en], ["ar", ar]]) {
-    const html = renderToStaticMarkup(createElement(ProductionPlanning, {
-      snapshot: calendarSnapshot, lang, t: (key) => dictionary[key] || key,
-      can: () => true, command: async () => {}, initialItemId: item.id }));
-    assert.match(html, /planning-closed-time/);
-    assert.match(html, /planning-setup-segment/);
-    assert.match(html, /planning-timeline-scroll" dir="ltr"/);
-    assert.ok(html.includes(dictionary.planningTotalWorking));
-  }
+  // The visible Gantt window defaults to today; keep this historical fixture
+  // in view regardless of the real date when the regression suite runs.
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [fixedNow])); }
+    static now() { return RealDate.parse(fixedNow); }
+  };
+  try {
+    for (const [lang, dictionary] of [["en", en], ["ar", ar]]) {
+      const html = renderToStaticMarkup(createElement(ProductionPlanning, {
+        snapshot: calendarSnapshot, lang, t: (key) => dictionary[key] || key,
+        can: () => true, command: async () => {}, initialItemId: item.id }));
+      assert.match(html, /planning-closed-time/);
+      assert.match(html, /planning-setup-segment/);
+      assert.match(html, /planning-timeline-scroll" dir="ltr"/);
+      assert.ok(html.includes(dictionary.planningTotalWorking));
+    }
+  } finally { globalThis.Date = RealDate; }
 });
 
 test("sorted jobs expose a free middle gap and reject a job too large for it", () => {

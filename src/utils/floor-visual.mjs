@@ -119,6 +119,28 @@ export function machineVisualStates(centers, flow, transfers) {
   }
   return map;
 }
+/** A presentation hint only: no event, transfer, or current production demand. */
+export function noDemandIdle(center, orders, stops, transfers, now = Date.now()) {
+  const status = String(center?.status || "");
+  if (!["stopped", "offline", "idle"].includes(status)) return false;
+  const id = String(center.id);
+  if ((stops || []).some((event) =>
+    String(event.work_center_id) === id && !event.ended_at)) return false;
+  if ((transfers || []).some((tx) => !tx.ended_at &&
+    (String(tx.original_id) === id || String(tx.alternative_id) === id))) return false;
+  const expectedNow = (item) => {
+    if (item.status === "active") return true;
+    const start = Date.parse(String(item.start_time || ""));
+    const finish = Date.parse(String(item.expected_finish || ""));
+    return item.status === "planned" && Number.isFinite(start) &&
+      Number.isFinite(finish) && start <= now && now < finish;
+  };
+  if (center.order_id && (orders || []).some((item) =>
+    String(item.id) === String(center.order_id) && expectedNow(item))) return false;
+  const lineId = String(center.line_id || "");
+  return !(orders || []).some((item) => lineId &&
+    String(item.line_id || "") === lineId && expectedNow(item));
+}
 export function matchesVisualFilter(filter, state) {
   if (filter === "all") return true;
   // A machine producing via an alternative route is operationally running.

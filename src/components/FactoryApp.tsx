@@ -80,6 +80,8 @@ export default function FactoryApp() {
   const [planningItemId, setPlanningItemId] = useState<string | null>(null);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
+  const commandErrorKey = (value: unknown) =>
+    typeof value === "string" && Object.hasOwn(dictionary, value) ? value : "error";
   const previewMode = snapshot?.testingPreviewEligible ? preview : "full";
   const visiblePermissions = useMemo(() => snapshot
     ? previewPermissions(snapshot.permissions, previewMode) : [], [snapshot, previewMode]);
@@ -106,7 +108,7 @@ export default function FactoryApp() {
       const body = await res.json();
       if (!res.ok) {
         if (res.status === 403) setSnapshot(null);
-        setNotice(body.error || "error");
+        setNotice(commandErrorKey(body.error));
         return;
       }
       setSnapshot(body);
@@ -156,20 +158,20 @@ export default function FactoryApp() {
       });
       const body = await r.json();
       if (!r.ok) {
-        setNotice(body.error || "error");
-        throw new Error(body.error);
+        throw new Error(commandErrorKey(body.error));
       }
       setNotice("saved");
       await load();
       return body.data;
     } catch (error) {
-      setNotice(error instanceof Error ? error.message || "error" : "error");
+      const key = commandErrorKey(error instanceof Error ? error.message : null);
+      setNotice(key);
       window.dispatchEvent(
         new CustomEvent("factory-error", {
-          detail: error instanceof Error ? error.message || "error" : "error",
+          detail: key,
         }),
       );
-      throw error;
+      throw new Error(key);
     }
   }
   const props = snapshot ? { snapshot: previewMode === "full" ? snapshot : { ...snapshot, permissions: visiblePermissions }, t, lang, command, can } : null;

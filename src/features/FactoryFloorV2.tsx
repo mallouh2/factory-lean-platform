@@ -12,6 +12,7 @@ import { formatTime, localName } from "@/components/ui";
 import { executionTiming, lineExecutionQueue } from "@/utils/execution-queue.mjs";
 import {
   machineVisualStates,
+  noDemandIdle,
   matchesVisualFilter,
   lineVisualStatus,
   connectorFlowing,
@@ -50,7 +51,7 @@ const stateLabelKey: Record<VisualState, string> = {
   bufferActive: "bufferActive",
   alternative: "alternativeActive",
 };
-const pauseReasons = ["borrow_machine", "planned_stop", "cleaning", "changeover", "no_production", "other"];
+const pauseReasons = ["borrow_machine", "cleaning", "changeover", "no_production", "other"];
 export default function FactoryFloorV2(
   props: FeatureProps & {
     onManage: (machineId?: string) => void;
@@ -71,6 +72,8 @@ export default function FactoryFloorV2(
   const [flowBusy, setFlowBusy] = useState(false);
   const [executionBusyId, setExecutionBusyId] = useState<string | null>(null);
   const [quickAction, setQuickAction] = useState<"output" | "stop" | null>(null);
+  const [stopNature, setStopNature] = useState<"unplanned" | "planned">("unplanned");
+  const [plannedActivity, setPlannedActivity] = useState("");
   const [stopReason, setStopReason] = useState("");
   const [stopDetail, setStopDetail] = useState("");
   const [outputProduced, setOutputProduced] = useState("");
@@ -247,6 +250,7 @@ export default function FactoryFloorV2(
   ) {
     const state = (paused ? String(c.status || "idle") : stateOf(c)) as VisualState;
     const stop = openStopOf(c);
+    const noDemand = !paused && noDemandIdle(c, orders, stops, transfers);
     const source = state === "affected" ? sourceOf(c) : null;
     return (
       <button
@@ -271,8 +275,8 @@ export default function FactoryFloorV2(
           }
         />
         <span className="ff2-node-name" dir="auto">{localName(c, lang)}</span>
-        <span className={`ff2-chip ff2-chip-${state}`} dir="auto">
-          {t(paused ? stateLabelKey[state] : branch?.labelKey || stateLabelKey[state])}
+        <span className={`ff2-chip ff2-chip-${noDemand ? "idle" : state}`} dir="auto">
+          {t(noDemand ? "idleNoDemand" : paused ? stateLabelKey[state] : branch?.labelKey || stateLabelKey[state])}
         </span>
         {state === "stopped" && stop && (
           <span className="ff2-node-duration">
@@ -350,6 +354,8 @@ export default function FactoryFloorV2(
       borrowedAwayIds,
       flow,
     ), pausedAt);
+    const noDemandLine = !pausedAt && machines.length > 0 &&
+      machines.every((machine) => noDemandIdle(machine, orders, stops, transfers));
     const activeOrder = line
       ? orders.find(
           (o) => o.status === "active" && o.line_id === line.id,
@@ -391,7 +397,8 @@ export default function FactoryFloorV2(
             )}
           </div>
           <div className="ff2-card-controls">
-            {status && <span className={`ff2-chip ff2-chip-line ff2-chip-${status}`}>{t(status)}</span>}
+            {status && <span className={`ff2-chip ff2-chip-line ff2-chip-${noDemandLine ? "idle" : status}`}>
+              {t(noDemandLine ? "idleNoDemand" : status)}</span>}
             {line && can("centers", "edit") && (
               <button className="ff2-line-action" disabled={pauseBusy} onClick={() => {
                 setPauseNotice("");
@@ -491,6 +498,8 @@ export default function FactoryFloorV2(
     );
   }
   const selectedState = selected ? stateOf(selected) : null;
+  const selectedNoDemand = selected && !selectedContextPaused &&
+    noDemandIdle(selected, orders, stops, transfers);
   const selectedOrder = selected
     ? orders.find((o) => o.id === selected.order_id)
     : undefined;
@@ -659,18 +668,21 @@ export default function FactoryFloorV2(
   }
   async function stopMachine(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !stopReason || !stopCategories.some(({ row }) => String(row?.id) === stopReason)) return;
+    if (!selected || (stopNature === "unplanned"
+      ? !stopCategories.some(({ row }) => String(row?.id) === stopReason)
+      : !plannedActivity)) return;
     setFlowBusy(true);
     setFlowNotice("");
     try {
-      await props.command("change_status", {
-        factory: s.factory?.id, work_center: selected.id, status: "stopped",
-        reason: stopReason, sub_reason: null, notes: stopDetail.trim(),
-        expected_restart: null, responsible: null, alternative: null,
-        transferred: false,
+      await props.command("stop_machine", {
+        factory: s.factory?.id, work_center: selected.id,
+        nature: stopNature, reason: stopNature === "unplanned" ? stopReason : null,
+        activity: stopNature === "planned" ? plannedActivity : null,
+        notes: stopDetail.trim(),
       });
       setQuickAction(null);
       setStopReason("");
+      setPlannedActivity("");
       setStopDetail("");
       setFlowNotice("saved");
     } catch (error) {
@@ -752,8 +764,8 @@ export default function FactoryFloorV2(
                 <h3>{localName(selected, lang)}</h3>
                 <p className="ff2-card-sub">
                   {selectedDisplayState && (
-                    <span className={`ff2-chip ff2-chip-${selectedDisplayState}`}>
-                      {t(stateLabelKey[selectedDisplayState])}
+                    <span className={`ff2-chip ff2-chip-${selectedNoDemand ? "idle" : selectedDisplayState}`}>
+                      {t(selectedNoDemand ? "idleNoDemand" : stateLabelKey[selectedDisplayState])}
                     </span>
                   )}{" "}
                   {selectedLine
@@ -806,7 +818,10 @@ export default function FactoryFloorV2(
                   <div className="ff2-issue-card">
                     {selectedDisplayState === "stopped" && (
                       <>
-                        <strong dir="auto">{stopReasonRow ? localName(stopReasonRow, lang) : t("downtimeUnclassified")}</strong>
+                        <strong dir="auto">{selectedStop?.stop_nature === "planned"
+                          ? `${t("lossPlanned")} — ${t(`lossActivity_${selectedStop.planned_activity}`)}`
+                          : stopReasonRow ? localName(stopReasonRow, lang)
+                            : t("downtimeUnclassified")}</strong>
                         {selectedStop?.started_at && (
                           <span>{t("duration")}: {formatDuration(
                             (Date.now() - Date.parse(String(selectedStop.started_at))) / 60000, lang,
@@ -912,18 +927,36 @@ export default function FactoryFloorV2(
 
                   {quickAction === "stop" && canStopHere && (
                     <form className="ff2-quick-form" onSubmit={(event) => void stopMachine(event)}>
-                      <label>{t("downtimeInitialReason")}
+                      <label>{t("lossStopType")}
+                        <select value={stopNature} onChange={(event) => {
+                          setStopNature(event.target.value as "unplanned" | "planned");
+                          setStopReason(""); setPlannedActivity("");
+                        }}>
+                          <option value="unplanned">{t("lossUnplanned")}</option>
+                          <option value="planned">{t("lossPlanned")}</option>
+                        </select>
+                      </label>
+                      {stopNature === "unplanned" ? <label>{t("downtimeInitialReason")}
                         <select required value={stopReason} onChange={(event) => setStopReason(event.target.value)}>
                           <option value="">{t("downtimeChooseReason")}</option>
                           {stopCategories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{t(key)}</option>)}
                         </select>
-                      </label>
-                      <label>{t("downtimeDetailedReason")}
+                      </label> : <label>{t("lossPlannedActivity")}
+                        <select required value={plannedActivity}
+                          onChange={(event) => setPlannedActivity(event.target.value)}>
+                          <option value="">{t("lossChooseActivity")}</option>
+                          {(["cleaning", "changeover", "preventive_maintenance",
+                            "inspection", "planned_process", "other"] as const).map((activity) =>
+                            <option key={activity} value={activity}>{t(`lossActivity_${activity}`)}</option>)}
+                        </select>
+                      </label>}
+                      <label>{t("downtimeOperatorNote")}
                         <textarea maxLength={2000} value={stopDetail}
                           onChange={(event) => setStopDetail(event.target.value)} />
                       </label>
                       <div className="ff2-row-actions">
-                        <button className="primary" disabled={flowBusy || !stopReason}>{t("confirmStop")}</button>
+                        <button className="primary" disabled={flowBusy ||
+                          (stopNature === "unplanned" ? !stopReason : !plannedActivity)}>{t("confirmStop")}</button>
                         <button type="button" onClick={() => setQuickAction(null)}>{t("cancel")}</button>
                       </div>
                     </form>

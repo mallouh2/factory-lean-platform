@@ -68,6 +68,19 @@ const commandErrors: Record<string, string> = {
   downtime_not_reviewable: "downtimeNotReviewable",
   downtime_immutable: "downtimeImmutable",
   reason_required: "reasonRequired",
+  invalid_planned_activity: "lossInvalidPlannedActivity",
+  invalid_stop_nature: "lossInvalidStopType",
+  loss_profile_incompatible: "lossProfileIncompatible",
+  loss_recovery_incompatible: "lossRecoveryIncompatible",
+  loss_estimate_incomplete: "lossMissing",
+  loss_estimate_context_mismatch: "lossEstimateContextMismatch",
+  loss_estimate_locked: "lossEstimateLocked",
+  loss_actual_nonnegative: "lossActualNonnegative",
+  loss_scrap_need_total_or_both: "lossScrapNeedTotalOrBoth",
+  loss_scrap_breakdown_exceeds_total: "lossScrapBreakdownExceedsTotal",
+  loss_scrap_breakdown_mismatch: "lossScrapBreakdownMismatch",
+  loss_actual_invalid_unit: "lossActualInvalidUnit",
+  loss_actual_at_least_one: "lossActualAtLeastOne",
 };
 /** request_membership reports failures as JSONB values instead of raising; map them to specific client keys. */
 const joinErrors: Record<string, string> = {
@@ -84,6 +97,12 @@ const rpcModules: Record<string, [string, string][]> = {
   start_product_item: [["orders", "edit"]],
   finish_product_item: [["orders", "edit"]],
   approve_downtime_cause: [["downtime", "edit"]],
+  approve_planned_downtime: [["downtime", "edit"]],
+  correct_downtime_classification: [["downtime", "edit"]],
+  record_production_loss_actuals: [["downtime", "edit"]],
+  save_production_loss_estimate: [["downtime", "edit"]],
+  configure_production_loss_profile: [["centers", "edit"], ["downtime", "edit"]],
+  configure_production_loss_recovery_rate: [["centers", "edit"], ["downtime", "edit"]],
   record_missed_downtime: [["downtime", "edit"]],
   set_user_permissions: [["roles", "edit"]],
   save_line_layout: [
@@ -142,7 +161,8 @@ export async function POST(req: NextRequest) {
         args.id ? "edit" : "create",
         context,
       );
-    } else if (["change_status", "update_downtime", "set_downtime_initial"].includes(command)) {
+    } else if (["change_status", "stop_machine", "update_downtime",
+      "set_downtime_initial"].includes(command)) {
       const { data: allowed } = await db.rpc("can_access", {
         factory: args.factory,
         module: "machine_status",
@@ -168,6 +188,26 @@ export async function POST(req: NextRequest) {
       ].includes(command)
     )
       throw new Error("invalid_command");
+    if (command === "save_production_loss_estimate") {
+      // The Edge Function reads authoritative event/context data and invokes a
+      // service-only persistence RPC. Never forward browser arithmetic.
+      if (Object.keys(args).sort().join(",") !== "event,factory" ||
+        typeof args.factory !== "string" || typeof args.event !== "string")
+        throw new Error("invalid_input");
+      const { data, error } = await db.functions.invoke(
+        "save-production-loss-estimate", { body: {
+          factory: args.factory, event: args.event,
+        } });
+      if (error) {
+        const response = error.context;
+        const detail = response instanceof Response ? await response.json()
+          .catch(() => ({})) : {};
+        return NextResponse.json({
+          error: commandErrors[detail.error] || "error",
+        }, { status: 400 });
+      }
+      return NextResponse.json({ data: data?.id });
+    }
     const { data, error } = await db.rpc(command, args);
     if (data?.error)
       return NextResponse.json(
@@ -175,7 +215,7 @@ export async function POST(req: NextRequest) {
           error:
             command === "request_membership"
               ? joinErrors[data.error] || "joinError"
-              : "joinError",
+              : commandErrors[data.error] || "error",
         },
         { status: 400 },
       );

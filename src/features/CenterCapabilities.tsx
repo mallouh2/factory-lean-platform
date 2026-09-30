@@ -26,6 +26,9 @@ export default function CenterCapabilities({
             setError("planningInvalidSetup");
             return;
           }
+          if (capabilities.some((capability) =>
+            !selected.some((product) => product.id === capability.product_id)) &&
+            !confirm(t("confirmRemoveCapabilities"))) return;
           setError("");
           setBusy(true);
           try {

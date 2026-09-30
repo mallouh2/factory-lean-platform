@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   machineVisualStates,
+  noDemandIdle,
   matchesVisualFilter,
   lineVisualStatus,
   connectorFlowing,
@@ -16,6 +17,22 @@ import {
   lineFlowActive,
   routeRows,
 } from "../src/utils/floor-visual.mjs";
+
+test("no-demand idle is only a display hint without an event or assignment", () => {
+  const now = Date.parse("2026-09-30T09:00:00Z");
+  const machine = { id: "M", line_id: "L", status: "stopped" };
+  assert.equal(noDemandIdle(machine, [], [], [], now), true);
+  assert.equal(machine.status, "stopped");
+  assert.equal(noDemandIdle(machine, [], [{ work_center_id: "M", ended_at: null }], [], now), false);
+  assert.equal(noDemandIdle(machine, [], [], [{ original_id: "M", ended_at: null }], now), false);
+  assert.equal(noDemandIdle(machine, [{ line_id: "L", status: "active" }], [], [], now), false);
+  assert.equal(noDemandIdle({ ...machine, line_id: null, order_id: "O" },
+    [{ id: "O", status: "active" }], [], [], now), false);
+  assert.equal(noDemandIdle(machine, [{ line_id: "L", status: "planned",
+    start_time: "2026-09-30T08:00:00Z", expected_finish: "2026-09-30T10:00:00Z" }],
+  [], [], now), false);
+  assert.equal(noDemandIdle({ ...machine, status: "running" }, [], [], [], now), false);
+});
 
 test("long route wraps in production order without reversing for RTL", () => {
   assert.deepEqual(routeRows([1, 2, 3, 4, 5, 6, 7], 3), [[1, 2, 3], [4, 5, 6], [7]]);

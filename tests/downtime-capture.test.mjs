@@ -43,7 +43,8 @@ const snapshot = {
         started_at: "2026-09-29T08:00:00Z", reason_id: null, entered_by: "U" },
       { id: "REVIEW", work_center_id: "M", line_id: "L", order_id: "O",
         started_at: "2026-09-28T08:00:00Z", ended_at: "2026-09-28T09:00:00Z",
-        reason_id: "MECH", initial_note: "Belt slipped", initial_entered_by: "U" },
+        reason_id: "MECH", stop_nature: "legacy_unknown",
+        initial_note: "Belt slipped", initial_entered_by: "U" },
       { id: "MISSED", work_center_id: "M", line_id: "L", order_id: "O",
         started_at: "2026-09-27T08:00:00Z", ended_at: "2026-09-27T09:00:00Z",
         reason_id: null, retroactive: true, entered_by: "U" },
@@ -69,6 +70,9 @@ test("downtime page retains review, retroactive entry and fixed configuration in
     assert.match(html, new RegExp(dictionary.downtimeNeedsReview));
     assert.match(html, new RegExp(dictionary.downtimeApprovedCause));
     assert.match(html, new RegExp(dictionary.downtimeRetroactive));
+    assert.match(html, new RegExp(dictionary.lossImpact));
+    assert.match(html, new RegExp(dictionary.lossLegacyUnknown));
+    assert.match(html, new RegExp(dictionary.lossGapHistorical));
     assert.match(html, /ITEM-101/);
     assert.match(html, /Belt slipped/);
     assert.match(html, /Operator/);
@@ -88,4 +92,21 @@ test("per-person view hides stop and approval controls without edit grants", () 
   const reviewer = render("en", ["downtime:edit"]);
   assert.match(reviewer, /Approve initial reason/);
   assert.doesNotMatch(reviewer, /Start downtime/);
+});
+
+test("actual result uses clear bilingual helpers, shared scrap unit and visible Save", () => {
+  for (const lang of ["en", "ar"]) {
+    const dictionary = lang === "ar" ? ar : en;
+    const html = render(lang, ["downtime:edit"]);
+    for (const key of ["lossActualLossTime", "lossActualLossTimeHelp",
+      "lossActualLostQuantity", "lossActualLostQuantityHelp", "lossActualScrapHelp",
+      "lossActualShutdownHelp", "lossActualRestartHelp", "lossScrapSharedUnitHelp"]) {
+      assert.ok(html.includes(dictionary[key].replaceAll("'", "&#x27;")), key);
+    }
+    assert.ok(html.includes(`value="kg" selected=""`));
+    assert.ok(html.includes(`value="piece"`));
+    assert.ok(html.includes(dictionary.lossOptional));
+    assert.ok(!html.includes(dictionary.lossActualRecoveryHelp));
+    assert.match(html, /<button class="primary">/);
+  }
 });

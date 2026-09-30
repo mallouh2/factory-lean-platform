@@ -47,6 +47,9 @@ export default function DowntimeAnalysis({
   const events = (s.tables.downtime_events || []).filter((e) => {
     const c = s.tables.work_centers?.find((c) => c.id === e.work_center_id);
     return (
+      // This legacy ranking has no Planning-window segmentation. V1 stops
+      // belong in event review until the final loss analysis is built.
+      (!e.stop_nature || e.stop_nature === "legacy_unknown") &&
       (!machine || e.work_center_id === machine) &&
       (!line || (e.line_id || c?.line_id) === line) &&
       (!area || c?.area_id === area) &&
@@ -75,6 +78,7 @@ export default function DowntimeAnalysis({
     <section className="panel">
       <h2>{t("impactRankedDowntime")}</h2>
       <p>{t("impactHelp")}</p>
+      <p className="muted">{t("lossLegacyReportHelp")}</p>
       <div className="filters">
         <Field label={t("period")}>
           <select value={period} onChange={(e) => setPeriod(e.target.value)}>

@@ -75,7 +75,7 @@ export default function ProductionTransfers({
                 s.tables.work_centers.find((c) => c.id === x.original_id),
                 lang,
               )}{" "}
-              →{" "}
+              <span aria-hidden="true">{lang === "ar" ? "←" : "→"}</span>{" "}
               {localName(
                 s.tables.work_centers.find((c) => c.id === x.alternative_id),
                 lang,

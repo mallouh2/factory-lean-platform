@@ -1,5 +1,6 @@
 import CenterCapabilities from "./CenterCapabilities";
 import CenterAlternatives from "./CenterAlternatives";
+import CenterLossProfile from "./CenterLossProfile";
 import {
   autoCode,
   formatLocalInput,
@@ -565,6 +566,7 @@ export default function Configuration({
             <>
               <CenterAlternatives {...props} centerId={String(activeEditing.id)} />
               <CenterCapabilities {...props} centerId={String(activeEditing.id)} />
+              <CenterLossProfile {...props} centerId={String(activeEditing.id)} />
             </>
           )}
           {standalone && activeEditing.id && can(permissionModule, "delete") && (

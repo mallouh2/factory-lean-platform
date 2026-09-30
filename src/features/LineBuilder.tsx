@@ -149,7 +149,10 @@ export default function LineBuilder(props: FeatureProps & {
       </div>
     </> : <>
       <header className="management-subhead">
-        <button className="line-management-back" onClick={() => go({ kind: "overview" })}>← {t(props.initialMachineId ? "backToFactoryFloor" : "backToLinesMachines")}</button>
+        <button className="line-management-back" onClick={() => go({ kind: "overview" })}>
+          <span className="line-management-back-icon" aria-hidden="true">←</span>{" "}
+          {t(props.initialMachineId ? "backToFactoryFloor" : "backToOverview")}
+        </button>
         <div><p>{t("manageLinesMachines")}</p><h2 ref={initialHeadingRef} tabIndex={-1}>{
           screen.kind === "line" ? `${t("lineDetails")} · ${localName(selectedLine, lang)}` :
           screen.kind === "machine" ? `${t("machineDetails")} · ${localName(selectedMachine, lang)}` :
