@@ -42,17 +42,18 @@ test("long route wraps in production order without reversing for RTL", () => {
 test("paused home line releases an idle configured alternative with another order", () => {
   const original = { id: "O", status: "stopped", order_id: "ORDER-B", category_id: "CAT" };
   const alt = { id: "A", status: "idle", order_id: "ORDER-A", line_id: "HOME", category_id: "CAT" };
-  const orders = [{ id: "ORDER-B", status: "active" }];
+  const orders = [{ id: "ORDER-B", status: "active", product_id: "P", unit: "meter" }];
+  const caps = [{ work_center_id: "A", product_id: "P", rate: 100, rate_unit: "meter" }];
   const pausedLines = [{ id: "HOME", paused_at: "2026-09-23T10:00:00Z" }];
   assert.equal(alternativeAvailability(alt, [], original.order_id, pausedLines), "available");
   assert.deepEqual(
-    liveTransferPicker(original, [original, alt], ["A"], [], orders, pausedLines).candidates.map((c) => c.id),
+    liveTransferPicker(original, [original, alt], ["A"], [], orders, pausedLines, caps).candidates.map((c) => c.id),
     ["A"],
   );
   assert.equal(alt.line_id, "HOME");
   assert.equal(alternativeAvailability(alt, [], original.order_id, [{ id: "HOME", paused_at: null }]), "busy");
   assert.equal(
-    liveTransferPicker(original, [original, alt], ["A"], [], orders, [{ id: "HOME", paused_at: null }]).candidates.length,
+    liveTransferPicker(original, [original, alt], ["A"], [], orders, [{ id: "HOME", paused_at: null }], caps).candidates.length,
     0,
   );
 });
@@ -60,18 +61,19 @@ test("paused home line releases an idle configured alternative with another orde
 test("paused-line exception keeps physical, assignment, category and configuration guards", () => {
   const original = { id: "O", status: "stopped", order_id: "ORDER-B", category_id: "CAT" };
   const alt = { id: "A", status: "idle", order_id: "ORDER-A", line_id: "HOME", category_id: "CAT" };
-  const orders = [{ id: "ORDER-B", status: "active" }];
+  const orders = [{ id: "ORDER-B", status: "active", product_id: "P", unit: "meter" }];
+  const caps = [{ work_center_id: "A", product_id: "P", rate: 100, rate_unit: "meter" }];
   const pausedLines = [{ id: "HOME", paused_at: "2026-09-23T10:00:00Z" }];
   for (const status of ["stopped", "setup", "offline"]) {
     const unavailable = { ...alt, status };
     assert.equal(alternativeAvailability(unavailable, [], original.order_id, pausedLines), status);
-    assert.equal(liveTransferPicker(original, [original, unavailable], ["A"], [], orders, pausedLines).candidates.length, 0);
+    assert.equal(liveTransferPicker(original, [original, unavailable], ["A"], [], orders, pausedLines, caps).candidates.length, 0);
   }
   const open = [{ original_id: "OTHER", alternative_id: "A", ended_at: null }];
   assert.equal(alternativeAvailability(alt, [], original.order_id, pausedLines, ["A"]), "borrowed");
-  assert.equal(liveTransferPicker(original, [original, alt], ["A"], open, orders, pausedLines).candidates.length, 0);
-  assert.equal(liveTransferPicker(original, [original, { ...alt, category_id: "OTHER" }], ["A"], [], orders, pausedLines).candidates.length, 0);
-  assert.equal(liveTransferPicker(original, [original, alt], [], [], orders, pausedLines).candidates.length, 0);
+  assert.equal(liveTransferPicker(original, [original, alt], ["A"], open, orders, pausedLines, caps).candidates.length, 0);
+  assert.equal(liveTransferPicker(original, [original, { ...alt, category_id: "OTHER" }], ["A"], [], orders, pausedLines, caps).candidates.length, 0);
+  assert.equal(liveTransferPicker(original, [original, alt], [], [], orders, pausedLines, caps).candidates.length, 0);
 });
 
 test("line pause masks line success but preserves borrowed flow and physical state", () => {

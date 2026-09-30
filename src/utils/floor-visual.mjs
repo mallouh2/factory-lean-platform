@@ -362,6 +362,7 @@ export function liveTransferPicker(
   transfers,
   orders,
   lines = [],
+  capabilities = [],
 ) {
   const oid = String(original.id);
   // Original-side prerequisites (server: invalid_order / stale transfers).
@@ -393,6 +394,9 @@ export function liveTransferPicker(
         !c.archived &&
         (configuredAlternativeIds || []).includes(String(c.id)) &&
         String(c.category_id) === String(original.category_id) &&
+        capabilities.some((cap) => String(cap.work_center_id) === String(c.id) &&
+          String(cap.product_id) === String(order.product_id) &&
+          Number(cap.rate) > 0 && cap.rate_unit === order.unit) &&
         alternativeAvailability(c, [], original.order_id, lines, openAlternativeIds) === "available",
     );
   return { blockedReason: null, candidates };

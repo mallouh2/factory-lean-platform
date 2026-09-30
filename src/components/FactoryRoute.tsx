@@ -8,27 +8,33 @@ export default function FactoryRoute({
   renderMachine,
   connectorActive,
   continuationLabel,
+  direction = "ltr",
+  minimumCardWidth = 180,
+  fillLastRow = true,
 }: {
   machines: Row[];
   renderMachine: (machine: Row, index: number) => ReactNode;
   connectorActive: (previous: Row, current: Row) => boolean;
   continuationLabel: string;
+  direction?: "ltr" | "rtl";
+  minimumCardWidth?: number;
+  fillLastRow?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(1);
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const measure = () => setColumns(Math.max(1, Math.floor((element.clientWidth + 34) / 214)));
+    const measure = () => setColumns(Math.max(1, Math.floor((element.clientWidth + 34) / (minimumCardWidth + 34))));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [minimumCardWidth]);
   const rows = routeRows(machines, columns) as Row[][];
   let offset = 0;
   return (
-    <div className="ff2-flow" dir="ltr" ref={ref}>
+    <div className="ff2-flow" dir={direction} ref={ref}>
       {rows.map((row, rowIndex) => {
         const first = offset;
         offset += row.length;
@@ -41,7 +47,7 @@ export default function FactoryRoute({
                 <span aria-hidden="true">↓</span>
               </div>
             )}
-            <div className="ff2-route-row" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
+            <div className="ff2-route-row" style={{ gridTemplateColumns: `repeat(${fillLastRow ? row.length : columns}, minmax(0, 1fr))` }}>
               {row.map((machine, index) => (
                 <div className="ff2-flow-item" key={String(machine.id)}>
                   {renderMachine(machine, first + index)}
