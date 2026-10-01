@@ -10,6 +10,7 @@ import {
   calculateOee,
 } from "@/utils/manufacturing.mjs";
 import type { Row } from "@/types";
+import HistoryLimitWarning from "@/components/HistoryLimitWarning";
 export default function Reports({
   view,
   ...props
@@ -233,6 +234,13 @@ export default function Reports({
           </button>
         )}
       </section>
+      <HistoryLimitWarning snapshot={s} t={t} tables={[
+        "downtime_events", // Downtime KPIs remain visible on every report tab.
+        ...(["utilization", "dailySummary"].includes(report) ? ["status_events", "oee_observations"] : []),
+        ...(["lineReport", "dailySummary", "productionStatus"].includes(report) ? ["production_entries"] : []),
+        ...(["dailySummary", "productionStatus"].includes(report) ? ["production_orders"] : []),
+        ...(report === "operatorActivity" ? ["status_events"] : []),
+      ]} />
       {invalidRange && (
         <p className="toast" role="alert">
           {t("invalidPeriod")}

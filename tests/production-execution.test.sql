@@ -179,6 +179,13 @@ begin
     f,source_center,spare_center,'QA unauthorized transfer'),'permission_denied');
   perform set_config('request.jwt.claim.sub',actor::text,true);
   transfer_id:=public.transfer_production(f,source_center,spare_center,'QA valid transfer');
+  -- Output belongs to the borrowing line, not either individual transfer machine.
+  perform public.record_production(f,'line',line_a,item_a,
+    (select id from public.memberships where factory_id=f and user_id=actor),1,0,'QA transfer line output');
+  if not exists(select 1 from public.production_orders where id=item_a and good_quantity=1)
+    or not exists(select 1 from public.production_transfers where id=transfer_id and ended_at is null)
+    or (select order_id from public.work_centers where id=spare_center) is distinct from item_a
+    then raise exception 'recording during transfer changed assignment/lifecycle';end if;
   perform pg_temp.expect_execution_error(format(
     'select public.transfer_production(%L::uuid,%L::uuid,%L::uuid,%L)',
     f,source_center,spare_center,'QA duplicate transfer'),'transfer_already_active');

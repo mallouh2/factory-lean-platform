@@ -151,11 +151,10 @@ export function matchesVisualFilter(filter, state) {
   return false;
 }
 /**
- * Line summary chip. "Running via alternative" only while some transfer branch
- * on this line is effectively flowing; an open transfer whose route is blocked
- * or whose alternative is stopped must show the line's real condition instead —
- * the open row alone says nothing, and such a blocked branch also outranks
- * unrelated upstream machines that are still physically running.
+ * Summarize evaluateFlow verdicts for the supplied route members. A blocked
+ * route outranks physical running and successful reroutes elsewhere on it.
+ * Callers exclude independent machines from a normal line's route summary.
+ * Physical chips and OPEN transfer assignment remain separate truths.
  */
 export function lineVisualStatus(ids, states, branches, borrowedAwayIds = [], flow = {}) {
   const all = (ids || []).map(String);
@@ -163,33 +162,24 @@ export function lineVisualStatus(ids, states, branches, borrowedAwayIds = [], fl
   const borrowedAway = new Set((borrowedAwayIds || []).map(String));
   // The flow engine, not the placeholder's physical status, decides whether
   // an assigned-away machine blocks its home route.
-  if (all.some((id) => borrowedAway.has(id) && flow[id]?.homeState === "blocked"))
+  if (all.some((id) => (borrowedAway.has(id) ? flow[id]?.homeState : flow[id]?.state) === "blocked"))
     return "affected";
+  if (all.some((id) => (borrowedAway.has(id) ? flow[id]?.homeState : flow[id]?.state) === "bufferActive"))
+    return "bufferActive";
   const list = all.filter((id) => !borrowedAway.has(id));
   if (!list.length) return "idle";
   const lineBranches = (branches || []).filter((b) =>
     list.includes(String(b.original.id)),
   );
+  // Assignment or physical stop alone cannot invent blocked flow. The engine
+  // can explicitly keep a non-blocking route clear while its spare is stopped.
   if (lineBranches.some((b) => b.state === "flowing"))
     return "runningViaAlternative";
-  // A blocked transfer branch means this line is not running via the branch —
-  // an unrelated upstream machine still running must not flip the chip back
-  // to "running"; the normal chain below reports the real condition instead.
-  const branchBlocked = lineBranches.some(
-    (b) => b.state === "routeBlocked" || b.state === "alternativeStopped",
-  );
-  if (
-    !branchBlocked &&
-    list.some((id) => states[id] === "running" || states[id] === "alternative")
-  )
+  if (list.some((id) => states[id] === "running" || states[id] === "alternative"))
     return "running";
-  if (
-    list.some((id) => states[id] === "affected" || states[id] === "bufferActive")
-  )
-    return "affected";
+  if (list.some((id) => states[id] === "bufferActive")) return "bufferActive";
   if (list.every((id) => states[id] === "stopped")) return "stopped";
-  // A blocked branch with no other signal is itself an affecting condition.
-  return branchBlocked ? "affected" : "idle";
+  return "idle";
 }
 
 /** Home-line connectors never animate through an assigned-away placeholder. */

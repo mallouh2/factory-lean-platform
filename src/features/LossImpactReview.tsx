@@ -8,19 +8,9 @@ import { formatTime, localName } from "@/components/ui";
 import type { Row } from "@/types";
 import type { FeatureProps } from "./types";
 import styles from "./DowntimeCapture.module.css";
+import { useHistoryData } from "@/hooks/useHistoryData";
+import HistoryQueryState from "@/components/HistoryQueryState";
 
-type Sample = { id: number; event_id: string; captured_at: string;
-  context: Record<string, unknown> };
-type Observation = {
-  work_center_id: unknown; product_id: unknown; readiness: string;
-  recorded_at: unknown;
-  stop_nature: unknown; planned_activity: unknown;
-  scrap_unit: unknown; estimated_total_scrap: number | null;
-  actual_scrap_quantity: number | null; actual_shutdown_scrap: number | null;
-  actual_restart_scrap: number | null;
-};
-const n = (value: unknown) => value === null || value === undefined || value === ""
-  ? null : Number(value);
 function lossDuration(value: number, lang: FeatureProps["lang"],
   t: FeatureProps["t"]) {
   if (value > 0 && value < 10 && !Number.isInteger(value))
@@ -53,22 +43,15 @@ function lossGapText(item: string, t: FeatureProps["t"]) {
   return simple[item] ? t(simple[item]) : item;
 }
 
-function EventImpactDetail(props: FeatureProps & { event: Row; samples: Sample[];
-  observations: Observation[] }) {
-  const { snapshot: s, t, lang, command, can, event, samples, observations } = props;
-  const actual = (s.tables.production_loss_actuals || [])
-    .find((x) => x.event_id === event.id);
-  const corrections = (s.tables.downtime_classification_corrections || [])
-    .filter((x) => x.event_id === event.id)
-    .sort((a, b) => String(b.corrected_at).localeCompare(String(a.corrected_at)));
-  const correction = corrections[0];
+type ReviewData = { event: Row; actual: Row | null; saved: Row | null;
+  correction: Row | null; calculation: ReturnType<typeof calculateProductionLoss>;
+  suggestions: Array<NonNullable<ReturnType<typeof suggestScrapCalibration>>> };
+function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
+  const { snapshot: s, t, lang, command, can, data } = props;
+  const { event, actual, correction, saved, calculation, suggestions } = data;
   const effectiveEvent = { ...event,
     stop_nature: correction?.stop_nature || event.stop_nature,
     planned_activity: correction?.planned_activity || event.planned_activity };
-  const calculation = calculateProductionLoss(effectiveEvent, samples, actual, Date.now(),
-    observations);
-  const saved = (s.tables.production_loss_estimates || [])
-    .find((x) => x.event_id === event.id);
   const estimate = saved?.result && typeof saved.result === "object"
     ? saved.result as typeof calculation : calculation;
   const productId = estimate.assumptions[0]?.product_id;
@@ -106,9 +89,7 @@ function EventImpactDetail(props: FeatureProps & { event: Row; samples: Sample[]
     actual?.scrap_quantity !== null && actual?.scrap_quantity !== undefined &&
     String(actual.scrap_unit) === String(estimate.scrap_unit)
       ? Number(actual.scrap_quantity) - Number(estimate.estimated_total_scrap) : null;
-  const suggestions = (["shutdown", "restart"] as const).map((parameter) =>
-    suggestScrapCalibration(effectiveEvent, estimate, observations,
-      parameter)).filter(Boolean);
+
   async function run(name: string, args: Record<string, unknown>) {
     setBusy(true); setError("");
     try { await command(name, { factory: s.factory?.id, ...args }); return true; }
@@ -318,57 +299,40 @@ function EventImpactDetail(props: FeatureProps & { event: Row; samples: Sample[]
 
 export default function LossImpactReview(props: FeatureProps) {
   const { snapshot: s, t, lang } = props;
-  const allEvents = (s.tables.downtime_events || [])
-    .filter((x) => x.ended_at)
-    .sort((a, b) => String(b.ended_at).localeCompare(String(a.ended_at)));
-  const events = allEvents.slice(0, 30);
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
-  const selected = events.find((x) => String(x.id) === selectedId) || events[0];
-  const samples = (s.tables.production_loss_context_snapshots || []) as unknown as Sample[];
-  const observations: Observation[] = allEvents.flatMap((item) => {
-    if (item.id === selected?.id) return [];
-    const actual = (s.tables.production_loss_actuals || [])
-      .find((x) => x.event_id === item.id);
-    if (!actual) return [];
-    const itemCorrection = (s.tables.downtime_classification_corrections || [])
-      .filter((x) => x.event_id === item.id)
-      .sort((a, b) => String(b.corrected_at).localeCompare(String(a.corrected_at)))[0];
-    const effectiveItem = { ...item,
-      stop_nature: itemCorrection?.stop_nature || item.stop_nature,
-      planned_activity: itemCorrection?.planned_activity || item.planned_activity };
-    const recorded = (s.tables.production_loss_estimates || [])
-      .find((x) => x.event_id === item.id);
-    const estimate = recorded?.result && typeof recorded.result === "object"
-      ? recorded.result as ReturnType<typeof calculateProductionLoss>
-      : calculateProductionLoss(effectiveItem, samples, actual);
-    return [{
-      work_center_id: item.work_center_id,
-      recorded_at: actual.recorded_at,
-      stop_nature: effectiveItem.stop_nature,
-      planned_activity: effectiveItem.planned_activity,
-      product_id: estimate.assumptions[0]?.product_id,
-      readiness: estimate.readiness,
-      scrap_unit: actual.scrap_unit,
-      estimated_total_scrap: estimate.estimated_total_scrap,
-      actual_scrap_quantity: n(actual.scrap_quantity),
-      actual_shutdown_scrap: n(actual.shutdown_scrap_quantity),
-      actual_restart_scrap: n(actual.restart_scrap_quantity),
-    }];
-  });
+  const factory = String(s.factory!.id);
+  const list = useHistoryData<{ rows: Row[]; total: number; pages: number }>(
+    `/api/loss-review?${new URLSearchParams({ factory, page: String(page) })}`, s.fetchedAt);
+  const selected = list.data?.rows.find(row => String(row.id) === selectedId) || list.data?.rows[0];
+  const detail = useHistoryData<ReviewData>(selected
+    ? `/api/loss-review?${new URLSearchParams({ factory, event: String(selected.id) })}` : null, s.fetchedAt);
   const machines = s.tables.work_centers || [];
   return <section className={styles.card}>
     <h3>{t("lossImpact")}</h3>
-    {!events.length ? <p>{t("downtimeReviewEmpty")}</p> : <div className={styles.review}>
-      <div className={styles.reviewList}>
-        {events.map((item) => <button key={String(item.id)} type="button"
-          aria-pressed={item.id === selected?.id}
-          onClick={() => setSelectedId(String(item.id))}>
-          <strong>{localName(machines.find((x) => x.id === item.work_center_id), lang)}</strong>
-          <span>{String(item.started_at).slice(0, 16)}</span>
-        </button>)}
+    <HistoryQueryState {...list} t={t} />
+    {list.data && (!list.data.rows.length ? <p>{t("downtimeReviewEmpty")}</p> : <>
+      <div className={styles.review}>
+        <div className={styles.reviewList}>
+          {list.data.rows.map(item => <button key={String(item.id)} type="button"
+            aria-pressed={item.id === selected?.id}
+            onClick={() => setSelectedId(String(item.id))}>
+            <strong>{localName(machines.find(row => row.id === item.work_center_id), lang)}</strong>
+            <span>{String(item.started_at).slice(0, 16)}</span>
+          </button>)}
+        </div>
+        <div><HistoryQueryState {...detail} t={t} />
+          {detail.data && <EventImpactDetail key={String(detail.data.event.id)}
+            {...props} data={detail.data} />}
+        </div>
       </div>
-      {selected && <EventImpactDetail key={String(selected.id)}
-        {...props} event={selected} samples={samples} observations={observations} />}
-    </div>}
+      <nav className="history-pagination" aria-label={t("lossReviewPages")}>
+        <button disabled={list.loading || page <= 1}
+          onClick={() => { setPage(value => value - 1); setSelectedId(""); }}>{t("previous")}</button>
+        <span>{page.toLocaleString(lang)} / {list.data.pages.toLocaleString(lang)}</span>
+        <button disabled={list.loading || page >= list.data.pages}
+          onClick={() => { setPage(value => value + 1); setSelectedId(""); }}>{t("next")}</button>
+      </nav>
+    </>)}
   </section>;
 }

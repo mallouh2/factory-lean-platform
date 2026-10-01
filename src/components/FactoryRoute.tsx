@@ -7,17 +7,21 @@ export default function FactoryRoute({
   machines,
   renderMachine,
   connectorActive,
+  connectorTone,
   continuationLabel,
   direction = "ltr",
   minimumCardWidth = 180,
+  maximumCardWidth,
   fillLastRow = true,
 }: {
   machines: Row[];
   renderMachine: (machine: Row, index: number) => ReactNode;
   connectorActive: (previous: Row, current: Row) => boolean;
+  connectorTone?: (previous: Row, current: Row) => "blocked" | "borrowed" | undefined;
   continuationLabel: string;
   direction?: "ltr" | "rtl";
   minimumCardWidth?: number;
+  maximumCardWidth?: number;
   fillLastRow?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -47,12 +51,13 @@ export default function FactoryRoute({
                 <span aria-hidden="true">↓</span>
               </div>
             )}
-            <div className="ff2-route-row" style={{ gridTemplateColumns: `repeat(${fillLastRow ? row.length : columns}, minmax(0, 1fr))` }}>
+            <div className="ff2-route-row" style={{ gridTemplateColumns: `repeat(${fillLastRow ? row.length : columns}, minmax(0, 1fr))`,
+              maxWidth: maximumCardWidth ? `${row.length * maximumCardWidth + (row.length - 1) * 34}px` : undefined }}>
               {row.map((machine, index) => (
                 <div className="ff2-flow-item" key={String(machine.id)}>
                   {renderMachine(machine, first + index)}
                   {index < row.length - 1 && (
-                    <FlowConnector active={connectorActive(machine, row[index + 1])} />
+                    <FlowConnector active={connectorActive(machine, row[index + 1])} tone={connectorTone?.(machine, row[index + 1])} />
                   )}
                 </div>
               ))}

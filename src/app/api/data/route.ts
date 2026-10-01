@@ -7,12 +7,27 @@ import {
 } from "@/services/authorization";
 import { hasEveryDefinedPermission } from "@/utils/permission-preview.mjs";
 export async function GET(req: NextRequest) {
+  let stage = "authentication";
   try {
     const { db, user } = await authenticatedClient();
+    stage = "factory_snapshot";
     const { data, error } = await db.rpc("factory_snapshot", {
       factory: req.nextUrl.searchParams.get("factory") || null,
     });
     if (error) throw error;
+    if (data?.factory?.id && data.permissions?.includes("orders:view")) {
+      stage = "production_recording_units";
+      const { data: recording, error: recordingError } = await db.rpc("production_recording_units", { factory: data.factory.id });
+      if (recordingError) throw recordingError;
+      data.tables.production_recording_units = recording.units;
+      data.tables.production_technicians = recording.technicians;
+    }
+    if (data?.factory?.id && (data.permissions?.includes('orders:view') || data.permissions?.includes('settings:view'))) {
+      stage = "production_shifts";
+      const {data: shifts,error: shiftError}=await db.from('production_shifts').select('*').eq('factory_id',data.factory.id).order('created_at');
+      if(shiftError) throw shiftError;
+      data.tables.production_shifts=shifts;
+    }
     return NextResponse.json({
       ...data,
       user: { id: user.id, email: user.email },
@@ -24,12 +39,29 @@ export async function GET(req: NextRequest) {
         hasEveryDefinedPermission(data?.permissions, data?.tables?.permissions),
     });
   } catch (e) {
-    return NextResponse.json(safeError(e), {
-      status: e instanceof Error && e.message === "unauthorized" ? 401 : 403,
-    });
+    // Server diagnostics only; never send database details or credentials to the UI.
+    console.warn("factory_snapshot_failed", { stage,
+      code: e && typeof e === "object" && "code" in e ? e.code : undefined,
+      reason: e && typeof e === "object" && "message" in e ? e.message : "unknown" });
+    const code = e && typeof e === "object" && "code" in e ? e.code : null;
+    if (e instanceof Error && e.message === "unauthorized")
+      return NextResponse.json(safeError(e), { status: 401 });
+    if (code === "42501" || (e instanceof Error && e.message === "permission_denied"))
+      return NextResponse.json({ error: "permissionError" }, { status: 403 });
+    // Loading failures are not permission denials. Keep the existing localized
+    // data warning and internal database details on the server.
+    return NextResponse.json({ error: "dataWarning" }, { status: 503 });
   }
 }
 const commandErrors: Record<string, string> = {
+  shift_invalid: 'shiftInvalid',
+  shift_required: 'shiftRequired',
+  recording_invalid_quantity: "recordingInvalidQuantity",
+  recording_invalid_unit: "recordingInvalidUnit",
+  recording_overproduction_confirmation: "recordingOverproductionConfirm",
+  recording_correction_reason: "recordingCorrectionReason",
+  invalid_operator: "recordingInvalidTechnician",
+  request_conflict: "recordingRequestConflict",
   layout_conflict: "layoutConflict",
   use_transfer_command: "useTransferCommand",
   description_required: "reasonDescriptionRequired",
@@ -90,6 +122,7 @@ const joinErrors: Record<string, string> = {
 };
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
+  configure_production_shift: [['settings','edit']],
   create_production_request: [["orders", "create"]],
   plan_product_item: [["orders", "edit"]],
   revise_product_plan: [["orders", "edit"]],
@@ -119,6 +152,8 @@ const rpcModules: Record<string, [string, string][]> = {
   set_support_by_email: [["support", "edit"]],
   set_daily_target: [["orders", "edit"]],
   record_output: [["orders", "edit"]],
+  record_production: [["orders", "edit"], ["orders", "view"]],
+  correct_production_entry: [["orders", "edit"], ["orders", "view"]],
   record_access: [["reports", "export"]],
   manage_member: [["employees", "approve"]],
   get_join_code: [["settings", "edit"]],

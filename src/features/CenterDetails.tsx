@@ -12,7 +12,6 @@ export default function CenterDetails({
   ...props
 }: FeatureProps & { center: Row; onClose: () => void }) {
   const { snapshot: s, t, lang, command, can } = props;
-  const [outputRequestId] = useState(() => crypto.randomUUID());
   const [status, setStatus] = useState(String(center.status)),
     [busy, setBusy] = useState(false);
   const zone = String(s.factory?.timezone);
@@ -182,54 +181,6 @@ export default function CenterDetails({
             disabled={busy || status === current.status}
           >
             {t("changeStatus")}
-          </button>
-        </form>
-      )}
-      {order?.status === "active" && can("orders", "edit") && (
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            setBusy(true);
-            try {
-              await command("record_output", {
-                factory: s.factory?.id,
-                work_center: current.id,
-                production_order: order.id,
-                request_id: outputRequestId,
-                produced: Number(f.get("produced")),
-                rejected: Number(f.get("rejected")),
-                notes: f.get("notes"),
-              });
-              onClose();
-            } catch {
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <h3>{t("recordOutput")}</h3>
-          <p className="muted">{t("outputHelp")}</p>
-          <div className="form-grid">
-            <Field label={t("produced_quantity")}>
-              <input name="produced" type="number" min="1" step="1" required />
-            </Field>
-            <Field label={t("rejected_quantity")}>
-              <input
-                name="rejected"
-                type="number"
-                min="0"
-                step="1"
-                defaultValue="0"
-                required
-              />
-            </Field>
-          </div>
-          <Field label={t("notes")}>
-            <textarea name="notes" maxLength={2000} />
-          </Field>
-          <button className="primary" disabled={busy}>
-            {t("recordOutput")}
           </button>
         </form>
       )}

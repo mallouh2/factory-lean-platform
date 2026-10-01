@@ -7,6 +7,7 @@ import {
   nextScheduledOrder, orderAttention, requestAttention, requestMatchesFilter,
   requestStatus, sortRequestsForScan,
 } from "@/utils/order-overview.mjs";
+import { productionProgress, entryQuantities } from "@/utils/production-recording.mjs";
 import Configuration from "./Configuration";
 import CreateProductionOrder from "./CreateProductionOrder";
 import type { FeatureProps } from "./types";
@@ -77,7 +78,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
   }
   function itemProgress(item: Row) {
     const target = Number(item.target_quantity);
-    const produced = Number(item.produced_quantity);
+    const produced = productionProgress(item).good;
     if (!Number.isFinite(target) || target <= 0 || !Number.isFinite(produced)) return null;
     return <div className="orders-v2-progress">
       <progress value={Math.min(Math.max(produced, 0), target)} max={target}
@@ -154,6 +155,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
               {statusChip(String(item.status || "planned"), orderAttention(item, now))}
             </div>
             {itemProgress(item)}
+            <dl className="recording-figures">{(["required", "good", "remaining", "scrap", "overproduction"] as const).map(key => <div key={key}><dt>{t({required:"recordingRequired",good:"recordingGoodSoFar",remaining:"recordingRemaining",scrap:"recordingScrap",overproduction:"recordingOverproduction"}[key])}</dt><dd>{quantity(productionProgress(item)[key])} {unitOf(item)}</dd></div>)}<div><dt>{t("orderProgressNow")}</dt><dd>{quantity(productionProgress(item).percent)}%</dd></div></dl>
             <dl className="orders-v2-facts">
               <div><dt>{t("line")}</dt><dd dir="auto">{line ? localName(line, lang) : t("unassigned")}</dd></div>
               {item.start_time && <div><dt>{t("executionPlannedStart")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>}
@@ -174,7 +176,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
             {itemEntries.length > 0 && <details className="orders-v2-item-entries">
               <summary>{t("recentProductionEntries")}</summary>
               <ol>{itemEntries.map((entry) => <li key={String(entry.id)}>
-                {formatTime(entry.created_at, lang, zone)} · +{quantity(entry.produced)} {unitOf(item)}
+                {formatTime(entry.created_at, lang, zone)} · +{quantity(entryQuantities(entry).good)} {unitOf(item)}
               </li>)}</ol>
             </details>}
           </article>;

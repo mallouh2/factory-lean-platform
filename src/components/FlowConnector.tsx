@@ -3,10 +3,10 @@
  * small flow indicator that travels along it (~2s loop) only while production
  * actually flows; interrupted flow renders a static, muted connector.
  */
-export default function FlowConnector({ active }: { active: boolean }) {
+export default function FlowConnector({ active, tone }: { active: boolean; tone?: "blocked" | "borrowed" }) {
   return (
     <span
-      className={`ff2-connector${active ? " ff2-flowing" : ""}`}
+      className={`ff2-connector${active ? " ff2-flowing" : ""}${tone ? ` ff2-connector-${tone}` : ""}`}
       aria-hidden="true"
     >
       <span className="ff2-connector-line" />

@@ -20,6 +20,12 @@ import DowntimeCapture from "@/features/DowntimeCapture";
 import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
 import { previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
+import HistoryLimitWarning from "./HistoryLimitWarning";
+// Floor totals and report tabs own their warnings beside the affected values.
+const pageHistoryTables: Record<string, string[]> = {
+  dashboard: ["production_entries", "downtime_events"],
+  downtime: ["downtime_events", "production_transfers"],
+};
 const primary = [
   "dashboard",
   "lines",
@@ -78,6 +84,7 @@ export default function FactoryApp() {
     [supportFactory, setSupportFactory] = useState(""),
     [center, setCenter] = useState<Row | null>(null);
   const [planningItemId, setPlanningItemId] = useState<string | null>(null);
+  const [loadNotice, setLoadNotice] = useState("");
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
   const commandErrorKey = (value: unknown) =>
@@ -103,17 +110,19 @@ export default function FactoryApp() {
       if (res.status === 401) {
         setSnapshot(null);
         setPreview("full");
+        setLoadNotice("");
         return;
       }
       const body = await res.json();
       if (!res.ok) {
         if (res.status === 403) setSnapshot(null);
-        setNotice(commandErrorKey(body.error));
+        setLoadNotice(commandErrorKey(body.error));
         return;
       }
       setSnapshot(body);
+      setLoadNotice("");
     } catch {
-      setNotice("dataWarning");
+      setLoadNotice("dataWarning");
     } finally {
       setLoading(false);
     }
@@ -218,6 +227,10 @@ export default function FactoryApp() {
           {lang === "en" ? "العربية" : "English"}
         </button>
       </div>
+      {loadNotice && <div role="alert" className="toast">
+        <span>{t(loadNotice)}</span>
+        <button onClick={() => void load()}>{t("refresh")}</button>
+      </div>}
       {loading ? (
         <div className="loading-screen" role="status">
           <div className="loader" />
@@ -454,11 +467,8 @@ export default function FactoryApp() {
               {snapshot.factory.is_demo && (
                 <div className="demo-banner">{t("demo")}</div>
               )}
-              {snapshot.truncatedTables?.length ? (
-                <div className="toast" role="alert">
-                  {t("truncatedData")}
-                </div>
-              ) : null}
+              {can(view) && <HistoryLimitWarning snapshot={snapshot}
+                tables={pageHistoryTables[view] || []} t={t} />}
               {notice && (
                 <div
                   role="status"

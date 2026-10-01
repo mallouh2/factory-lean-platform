@@ -91,8 +91,8 @@ test("line pause masks line success but preserves borrowed flow and physical sta
   assert.equal(branches[0].state, "flowing");
   assert.equal(centers[1].status, "running");
   assert.equal(centers[1].line_id, "H");
-  assert.equal(lineOperationalStatus(lineVisualStatus(["A"], machineVisualStates(centers, flow, transfers), branches, ["A"]), pausedAt), "paused");
-  assert.equal(lineOperationalStatus(lineVisualStatus(["O"], machineVisualStates(centers, flow, transfers), branches), null), "runningViaAlternative");
+  assert.equal(lineOperationalStatus(lineVisualStatus(["A"], machineVisualStates(centers, flow, transfers), branches, ["A"], flow), pausedAt), "paused");
+  assert.equal(lineOperationalStatus(lineVisualStatus(["O"], machineVisualStates(centers, flow, transfers), branches, [], flow), null), "runningViaAlternative");
 });
 import { evaluateFlow } from "../src/utils/production-flow.mjs";
 
@@ -122,9 +122,8 @@ test("downstream impact: root stays stopped, only downstream affected", () => {
   assert.equal(s.D2, "affected");
   assert.equal(s.U1, "running");
   assert.equal(s.U2, "running");
-  // Upstream still producing, so the line itself remains truthfully "running";
-  // the blocked detail is visible on the machine chips.
-  assert.equal(lineVisualStatus(ids, s, []), "running");
+  // A physically running upstream machine cannot mask authoritative blockage.
+  assert.equal(lineVisualStatus(ids, s, [], [], flow), "affected");
 });
 
 test("whole_line impact: every peer affected, root still stopped", () => {
@@ -233,7 +232,7 @@ test("line shows Running via alternative only for an effectively flowing branch"
   assert.equal(branches[0].state, "flowing");
   const s = machineVisualStates(centers, flow, transfers);
   assert.equal(s.A, "alternative");
-  assert.equal(lineVisualStatus(["O", "D1"], s, branches), "runningViaAlternative");
+  assert.equal(lineVisualStatus(["O", "D1"], s, branches, [], flow), "runningViaAlternative");
 });
 
 test("open transfer row alone must NOT produce Running via alternative", () => {
@@ -255,10 +254,10 @@ test("open transfer row alone must NOT produce Running via alternative", () => {
   const s = machineVisualStates(centers, flow, transfers);
   assert.equal(s.A, "affected");
   assert.notEqual(
-    lineVisualStatus(["O", "D1"], s, branches),
+    lineVisualStatus(["O", "D1"], s, branches, [], flow),
     "runningViaAlternative",
   );
-  assert.equal(lineVisualStatus(["O", "D1"], s, branches), "affected");
+  assert.equal(lineVisualStatus(["O", "D1"], s, branches, [], flow), "affected");
 });
 
 test("Alternative active matches the Running filter", () => {
@@ -465,9 +464,9 @@ test("open transfer + unrelated blocked machine: branch visible, line not claimi
   const s = machineVisualStates(blockedRouteLine, flow, blockedRouteTransfers);
   assert.equal(s.A, "affected");
   assert.equal(s.O, "stopped");
-  assert.equal(lineVisualStatus(["O", "B", "C"], s, branches), "affected");
+  assert.equal(lineVisualStatus(["O", "B", "C"], s, branches, [], flow), "affected");
   assert.notEqual(
-    lineVisualStatus(["O", "B", "C"], s, branches),
+    lineVisualStatus(["O", "B", "C"], s, branches, [], flow),
     "runningViaAlternative",
   );
 });
@@ -501,9 +500,9 @@ test("open transfer whose alternative stops: assignment persists, no success sty
   assert.equal(s.A, "stopped"); // physical stopped styling, never success
   assert.equal(s.O, "stopped");
   assert.equal(s.B, "affected");
-  assert.equal(lineVisualStatus(["O", "B"], s, branches), "affected");
+  assert.equal(lineVisualStatus(["O", "B"], s, branches, [], flow), "affected");
   assert.notEqual(
-    lineVisualStatus(["O", "B"], s, branches),
+    lineVisualStatus(["O", "B"], s, branches, [], flow),
     "runningViaAlternative",
   );
 });
@@ -541,7 +540,7 @@ test("blocked transfer branch outranks an unrelated upstream running machine", (
   const s = machineVisualStates(upstreamRunningLine, flow, upstreamRunningTransfers);
   assert.equal(s.A, "affected"); // no successful alternative styling
   // Line status: the blocked branch outranks the running upstream machine.
-  const status = lineVisualStatus(["U", "O", "B", "C"], s, branches);
+  const status = lineVisualStatus(["U", "O", "B", "C"], s, branches, [], flow);
   assert.notEqual(status, "running");
   assert.notEqual(status, "runningViaAlternative");
   assert.equal(status, "affected");
@@ -560,7 +559,7 @@ test("non-blocking original with an open transfer and clear route flows", () => 
   assert.equal(branches[0].state, "flowing");
   const states = machineVisualStates(centers, flow, transfers);
   assert.equal(states.A, "alternative");
-  assert.equal(lineVisualStatus(["O"], states, branches), "runningViaAlternative");
+  assert.equal(lineVisualStatus(["O"], states, branches, [], flow), "runningViaAlternative");
 });
 
 test("successful cross-line transfer leaves only a non-flowing home placeholder", () => {
@@ -575,14 +574,14 @@ test("successful cross-line transfer leaves only a non-flowing home placeholder"
   const home = centers[1];
   const borrowedAwayIds = borrowingLineOf(home, branches, borrowingLines) ? ["A"] : [];
   assert.deepEqual(borrowedAwayIds, ["A"]); // home placeholder remains assigned away
-  assert.equal(lineVisualStatus(["A"], states, branches, borrowedAwayIds), "idle");
+  assert.equal(lineVisualStatus(["A"], states, branches, borrowedAwayIds, flow), "affected");
   assert.equal(
     connectorFlowing({ id: "H" }, home, { ...states, H: "running" }, { ...flow, H: { state: "clear" } }, borrowedAwayIds),
     false,
   );
   assert.equal(branches[0].state, "flowing");
   assert.equal(states.A, "alternative");
-  assert.equal(lineVisualStatus(["O"], states, branches), "runningViaAlternative");
+  assert.equal(lineVisualStatus(["O"], states, branches, [], flow), "runningViaAlternative");
 });
 
 function borrowedHomeFixture(dependency_mode = "blocking", impact_scope = "whole_line") {
@@ -618,7 +617,7 @@ test("resumed home line is blocked by a whole-line machine borrowed elsewhere", 
   assert.equal(states.A1, "alternative");
   assert.equal(flow.B1.state, "transferred");
   assert.equal(flow.B2.state, "clear");
-  assert.equal(lineVisualStatus(["B1", "B2"], states, branches), "runningViaAlternative");
+  assert.equal(lineVisualStatus(["B1", "B2"], states, branches, [], flow), "runningViaAlternative");
   assert.equal(borrowingLineOf(centers[1], branches, [{ id: "HOME" }, { id: "BORROWER" }])?.id, "BORROWER");
 });
 
@@ -653,10 +652,14 @@ test("borrowed-away buffer delays its configured home-line impact", () => {
   const before = evaluateFlow(centers, stops, transfers, Date.parse("2026-09-24T08:20:00Z"));
   assert.equal(before.A1.homeState, "bufferActive");
   assert.equal(before.H0.state, "clear");
+  assert.equal(lineVisualStatus(["A1"], machineVisualStates(centers, before, transfers),
+    transferBranches(centers, before, transfers), ["A1"], before), "bufferActive");
   const after = evaluateFlow(centers, stops, transfers, Date.parse("2026-09-24T08:40:00Z"));
   assert.equal(after.A1.homeState, "blocked");
   assert.equal(after.H0.state, "blocked");
   assert.equal(after.A1.state, "clear");
+  assert.equal(lineVisualStatus(["A1"], machineVisualStates(centers, after, transfers),
+    transferBranches(centers, after, transfers), ["A1"], after), "affected");
 });
 
 test("ending the transfer restores the machine to its unchanged home route", () => {
@@ -693,4 +696,52 @@ test("returned machine does not mask another home-line blocker", () => {
   assert.equal(states.A1, "affected");
   assert.equal(lineVisualStatus(["H0", "A1", "H2"], states, branches, [], flow), "affected");
   assert.equal(branches.length, 0);
+});
+
+test("a final blocking stop outranks healthy upstream physical states", () => {
+  const centers = [
+    {id:"U",line_id:"L",position:0,status:"running",dependency_mode:"blocking",impact_scope:"downstream"},
+    {id:"LAST",line_id:"L",position:1,status:"stopped",dependency_mode:"blocking",impact_scope:"downstream"},
+  ];
+  const flow=evaluateFlow(centers,[],[]);
+  const states=machineVisualStates(centers,flow,[]);
+  assert.equal(states.U,"running");assert.equal(states.LAST,"stopped");
+  assert.equal(flow.LAST.state,"blocked");
+  assert.equal(lineVisualStatus(["U","LAST"],states,[],[],flow),"affected");
+});
+
+test("one successful alternative cannot mask an assigned-away home blocker", () => {
+  const centers = [
+    {id:"O1",line_id:"L",position:0,status:"stopped",dependency_mode:"blocking",impact_scope:"downstream"},
+    {id:"O2",line_id:"L",position:1,status:"running",dependency_mode:"blocking",impact_scope:"downstream"},
+    {id:"A1",line_id:null,status:"running",dependency_mode:"non_blocking",impact_scope:"none"},
+    {id:"B",line_id:"OTHER",position:0,status:"stopped",dependency_mode:"blocking",impact_scope:"downstream"},
+  ];
+  const transfers=[{original_id:"O1",alternative_id:"A1",ended_at:null},{original_id:"B",alternative_id:"O2",ended_at:null}];
+  const before=structuredClone({centers,transfers});
+  const flow=evaluateFlow(centers,[],transfers);
+  const branches=transferBranches(centers,flow,transfers);
+  assert.equal(branches[0].state,"flowing");assert.equal(flow.O2.homeState,"blocked");
+  assert.equal(lineVisualStatus(["O1","O2"],machineVisualStates(centers,flow,transfers),branches,["O2"],flow),"affected");
+  assert.deepEqual({centers,transfers},before);
+});
+
+test("stopped spare assignment does not invent blockage on a non-blocking route", () => {
+  const centers=[
+    {id:"O",line_id:"L",position:0,status:"stopped",dependency_mode:"non_blocking",impact_scope:"none"},
+    {id:"U",line_id:"L",position:1,status:"running",dependency_mode:"blocking",impact_scope:"downstream"},
+    {id:"A",line_id:null,status:"stopped",dependency_mode:"independent",impact_scope:"none"},
+  ];
+  const transfers=[{original_id:"O",alternative_id:"A",ended_at:null}];
+  const flow=evaluateFlow(centers,[],transfers);
+  const branches=transferBranches(centers,flow,transfers);
+  assert.equal(branches[0].state,"alternativeStopped");assert.equal(flow.O.state,"clear");
+  assert.equal(lineVisualStatus(["O","U"],machineVisualStates(centers,flow,transfers),branches,[],flow),"running");
+  assert.equal(transfers[0].ended_at,null);
+});
+
+test("authoritative clear flow is not overridden by a stale presentation signal", () => {
+  const flow=evaluateFlow([{id:"R",status:"running",dependency_mode:"blocking",impact_scope:"downstream"}],[],[]);
+  assert.equal(lineVisualStatus(["R"],{R:"affected"},[],[],flow),"idle");
+  assert.notEqual(lineVisualStatus(["R"],{R:"affected"},[],[],flow),"affected");
 });

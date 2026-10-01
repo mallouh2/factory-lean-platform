@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { FeatureProps } from "./types";
 import { Field, Empty, localName, formatTime } from "@/components/ui";
 import Configuration from "./Configuration";
+import ProductionShifts from './ProductionShifts';
+import AuditHistory from './AuditHistory';
 export default function Administration({
   view,
   ...props
@@ -129,6 +131,7 @@ export default function Administration({
           {calendarError && <p className="planning-warning" role="alert">{t(calendarError)}</p>}
           <button className="primary" disabled={busy || !can("settings", "edit")}>{t("save")}</button>
         </form>
+        <ProductionShifts {...props} />
         <hr />
         <h3>{t("joinCode")}</h3>
         <code className="join-code">{joinCode || "••••••••••"}</code>
@@ -473,69 +476,5 @@ export default function Administration({
         ))}
       </section>
     );
-  return (
-    <section className="panel">
-      <header className="section-head">
-        <h2>{t("audit")}</h2>
-        <input
-          aria-label={t("search")}
-          placeholder={t("search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </header>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              {[
-                "time",
-                "userId",
-                "action",
-                "entity",
-                "oldValue",
-                "newValue",
-              ].map((x) => (
-                <th key={x}>{t(x)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {s.tables.audit_logs
-              ?.filter((x) =>
-                JSON.stringify(x).toLowerCase().includes(search.toLowerCase()),
-              )
-              .map((x) => (
-                <tr key={String(x.id)}>
-                  <td>{formatTime(x.created_at, lang, zone)}</td>
-                  <td>
-                    {String(
-                      s.tables.memberships?.find(
-                        (m) => m.user_id === x.actor_id,
-                      )?.display_name ||
-                        x.actor_id ||
-                        "—",
-                    )}
-                  </td>
-                  <td>{String(x.action)}</td>
-                  <td>{String(x.entity)}</td>
-                  <td>
-                    <details>
-                      <summary>{t("view")}</summary>
-                      <pre>{JSON.stringify(x.old_data, null, 2)}</pre>
-                    </details>
-                  </td>
-                  <td>
-                    <details>
-                      <summary>{t("view")}</summary>
-                      <pre>{JSON.stringify(x.new_data, null, 2)}</pre>
-                    </details>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
+  return <AuditHistory {...props} />;
 }

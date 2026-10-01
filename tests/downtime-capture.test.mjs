@@ -6,12 +6,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { build } from "esbuild";
 import en from "../src/locales/en.json" with { type: "json" };
 import ar from "../src/locales/ar.json" with { type: "json" };
+import { calculateProductionLoss } from "../src/utils/production-loss-impact.mjs";
 
 const require = createRequire(import.meta.url);
 const bundled = await build({
   entryPoints: ["src/features/DowntimeCapture.tsx"], bundle: true,
   platform: "node", format: "cjs", packages: "external", write: false,
   logLevel: "silent", plugins: [{ name: "css-module-stub", setup(build) {
+    build.onResolve({ filter: /hooks\/useHistoryData$/ }, () => ({ path: "test-history", external: true }));
     build.onLoad({ filter: /\.module\.css$/ }, () => ({
       contents: "export default new Proxy({}, {get: (_, key) => String(key)})",
       loader: "js",
@@ -19,8 +21,18 @@ const bundled = await build({
   } }],
 });
 const featureModule = { exports: {} };
+let historyState = "loaded";
 new Function("require", "module", "exports", bundled.outputFiles[0].text)(
-  require, featureModule, featureModule.exports);
+  name => name === "test-history" ? { useHistoryData: url => {
+    if (["loading", "error"].includes(historyState)) return { data: null, loading: historyState === "loading",
+      error: historyState === "error" ? "dataWarning" : "", reload: () => {} };
+    const rows = historyState === "empty" ? [] : snapshot.tables.downtime_events.filter(row => row.ended_at);
+    const event = rows[0];
+    return { loading: false, error: "", reload: () => {}, data: url?.includes("event=") ? {
+      event, actual: null, saved: null, correction: null,
+      calculation: calculateProductionLoss(event, []), suggestions: [],
+    } : { rows, total: rows.length, pages: 1 } };
+  } } : require(name), featureModule, featureModule.exports);
 const DowntimeCapture = featureModule.exports.default;
 
 const snapshot = {
@@ -51,7 +63,8 @@ const snapshot = {
     ],
   },
 };
-function render(lang, permissions) {
+function render(lang, permissions, state = "loaded") {
+  historyState = state;
   const dictionary = lang === "ar" ? ar : en;
   return renderToStaticMarkup(createElement(DowntimeCapture, {
     snapshot, lang, t: (key) => dictionary[key] || key,
@@ -82,6 +95,23 @@ test("downtime page retains review, retroactive entry and fixed configuration in
       assert.match(html, new RegExp(dictionary[key]));
     }
     assert.doesNotMatch(html, /Planned Maintenance|Old reason/);
+  }
+});
+
+test("loss loading/error stay local and do not invent an empty result or hide current downtime in EN/AR", () => {
+  for (const [lang, words] of [["en", en], ["ar", ar]]) {
+    const loading = render(lang, [], "loading");
+    assert.ok(loading.includes(words.historyLoading));
+    assert.ok(loading.includes(words.downtimeActive));
+    assert.ok(!loading.includes(words.lossGapHistorical));
+    const error = render(lang, [], "error");
+    assert.ok(error.includes(words.dataWarning));
+    assert.ok(error.includes(words.refresh));
+    assert.ok(error.includes("ITEM-101"));
+    const empty = render(lang, [], "empty");
+    assert.ok(empty.includes(words.downtimeReviewEmpty));
+    assert.ok(!empty.includes(words.historyLoading));
+    assert.ok(!empty.includes(words.lossGapHistorical));
   }
 });
 
