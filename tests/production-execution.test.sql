@@ -56,6 +56,9 @@ begin
   if f is null then raise exception 'TESTING approved orders:edit member unavailable'; end if;
   perform set_config('request.jwt.claim.sub',actor::text,true);
 
+  -- Execution regression fixtures do not depend on live shift setup; rolled back.
+  update public.production_shifts set archived=true where factory_id=f and not archived;
+
   insert into public.products(factory_id,name,code,unit)
     values(f,prefix||' A',prefix||'-A','piece') returning id into product_a;
   insert into public.products(factory_id,name,code,unit)

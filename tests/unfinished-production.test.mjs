@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { unfinishedOutputValid } from '../src/utils/unfinished-production.mjs';
+import { productionProgress } from '../src/utils/production-recording.mjs';
+import { historyQuery, parseHistoryQuery, scrapPercentage, selectedHistoryValues } from '../src/utils/production-history.mjs';
+import en from '../src/locales/en.json' with {type:'json'};
+import ar from '../src/locales/ar.json' with {type:'json'};
+test('existing good/scrap recording needs no remaining-work note',()=>assert.ok(unfinishedOutputValid(600,20,0,'')));
+test('unfinished-only output is valid without inventing gross production',()=>assert.ok(unfinishedOutputValid(0,0,380,'Printing')));
+test('unfinished requires a real remaining-work note',()=>{for(const note of ['',null,'  ','ab'])assert.equal(unfinishedOutputValid(600,20,380,note),false);});
+test('nonfinite and negative output rejected',()=>{for(const value of [-1,Infinity,NaN])for(let i=0;i<3;i++){const q=[1,1,1];q[i]=value;assert.equal(unfinishedOutputValid(...q,'Printing'),false);}});
+test('zero-output and zero-input operations rejected',()=>{assert.equal(unfinishedOutputValid(0,0,0,''),false);assert.equal(unfinishedOutputValid(1,0,0,'',0,380),false);});
+test('partial lot consumption conserves quantity',()=>assert.ok(unfinishedOutputValid(180,10,10,'Printing',200,380)));
+test('fractional same-unit WIP passes browser rounding without admitting material quantity loss',()=>{
+ assert.ok(unfinishedOutputValid(0.1,0.2,0,'',0.3,1));
+ assert.equal(unfinishedOutputValid(0.1,0.2,0,'',0.31,1),false);
+});
+test('full lot consumption conserves quantity',()=>assert.ok(unfinishedOutputValid(370,10,0,'',380,380)));
+test('stale stock and over-consumption rejected',()=>assert.equal(unfinishedOutputValid(370,10,0,'',380,180),false));
+test('quantity loss and invented quantity rejected',()=>{assert.equal(unfinishedOutputValid(300,20,60,'Printing',400,500),false);assert.equal(unfinishedOutputValid(300,20,60,'Printing',350,500),false);});
+test('unfinished does not advance demand or become scrap',()=>{const p=productionProgress({target_quantity:1000,produced_quantity:620,rejected_quantity:20,unfinished_quantity:380});assert.equal(p.good,600);assert.equal(p.remaining,400);assert.equal(p.scrap,20);});
+test('completion from unfinished advances good once',()=>{const p=productionProgress({target_quantity:1000,produced_quantity:1000,rejected_quantity:30});assert.equal(p.good,970);assert.equal(p.remaining,30);});
+test('physical disposition scrap percentage includes unfinished',()=>assert.equal(scrapPercentage(600,20,380),2));
+test('empty output percentage is undefined',()=>assert.equal(scrapPercentage(0,0,0),null));
+test('shift percentage uses summed output rather than average percentages',()=>{assert.equal(scrapPercentage(900+90,100+0,0),10000/1090);assert.notEqual(scrapPercentage(990,100),(scrapPercentage(900,100)+scrapPercentage(90,0))/2);});
+for(const key of ['request','product','unit','technician','shift','corrected'])test(`${key} multiselect survives server pagination`,()=>{const f={[key]:'first,second'};assert.deepEqual(parseHistoryQuery(new URLSearchParams(historyQuery('f',f,'date','desc',2))).filters,f);});
+for(const key of ['good','scrap','unfinished'])for(const op of ['eq','gte','lte','between'])test(`${key} ${op} uses explicit measurement-unit context`,()=>{const f={measurement_unit:'piece',[key+'_op']:op,[key+'_min']:'10',...(op==='between'?{[key+'_max']:'50'}:{})};assert.deepEqual(parseHistoryQuery(new URLSearchParams(historyQuery('f',f))).filters,f);assert.throws(()=>parseHistoryQuery(new URLSearchParams(historyQuery('f',{...f,measurement_unit:''}))));});
+test('row and shift percentage filters keep unit context',()=>{for(const scope of ['row','shift']){const f={scrap_metric:'percentage',scrap_scope:scope,scrap_op:'gte',scrap_min:'5',measurement_unit:'piece'};assert.deepEqual(parseHistoryQuery(new URLSearchParams(historyQuery('f',f))).filters,f);}});
+test('invalid numeric ranges, metrics and mixed units are rejected',()=>{for(const f of [{good_op:'between',good_min:'50',good_max:'10',measurement_unit:'piece'},{scrap_op:'eq',scrap_min:'NaN',measurement_unit:'piece'},{measurement_unit:'piece,meter'},{scrap_metric:'average'},{scrap_scope:'average'}])assert.throws(()=>parseHistoryQuery(new URLSearchParams(historyQuery('f',f))));});
+test('operational EN/AR unfinished and filter terminology is complete',()=>{for(const key of ['unfinishedQuantity','unfinishedProducts','unfinishedRemainingWork','unfinishedUse','unfinishedConservation','unfinishedAlreadyConsumed','historyScrapPercentage','historyOperator_between','historyApply'])assert.ok(en[key]&&ar[key]);assert.equal(ar.unfinishedQuantity,'الكمية غير الجاهزة');});
+test('categorical search/pagination preserves off-page selections and removes deselected visible values',()=>{
+ assert.deepEqual(selectedHistoryValues(['old-page','visible'],['visible','new'],['new']),['old-page','new']);
+ assert.deepEqual(selectedHistoryValues(['new'],['new'],['new']),['new']);
+ assert.deepEqual(selectedHistoryValues(['visible'],['visible'],[]),[]);
+});

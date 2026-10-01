@@ -4,29 +4,36 @@ import { formatLocalInput } from "@/utils/manufacturing.mjs";
 import { formatDuration } from "@/utils/production-flow.mjs";
 import { executionTiming } from "@/utils/execution-queue.mjs";
 import {
-  nextScheduledOrder, orderAttention, requestAttention, requestMatchesFilter,
+  nextScheduledOrder, orderAttention, requestAttention,
   requestStatus, sortRequestsForScan,
 } from "@/utils/order-overview.mjs";
 import { productionProgress, entryQuantities } from "@/utils/production-recording.mjs";
+import { requestCreators, requestPresentation, requestQueueMatches, requestStatusMatches } from '@/utils/request-queue.mjs';
+import ProductIdentity from '@/components/ProductIdentity';
+import HistoryLimitWarning from '@/components/HistoryLimitWarning';
 import Configuration from "./Configuration";
 import CreateProductionOrder from "./CreateProductionOrder";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 
 type Screen = "list" | "details" | "create" | "edit";
-type Filter = "all" | "active" | "planned" | "delayed" | "completed";
-const filters: Filter[] = ["all", "active", "planned", "delayed", "completed"];
+type Filter = "all" | "active" | "planned" | "delayed" | "completed" | "cancelled";
+const filters: Filter[] = ["all", "active", "planned", "delayed", "completed", "cancelled"];
 
 export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: (itemId: string) => void }) {
   const { snapshot: s, t, lang, can, command } = props;
   const [screen, setScreen] = useState<Screen>("list");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [createDirty, setCreateDirty] = useState(false);
   const [dailyTargetOpen, setDailyTargetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
+  const [productFilter, setProductFilter] = useState('');
+  const [lineFilter, setLineFilter] = useState('');
+  const [creatorFilter, setCreatorFilter] = useState('');
   const headingRef = useRef<HTMLHeadingElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
   const now = Date.now();
@@ -44,13 +51,16 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
   const selected = requests.find((request) => String(request.id) === selectedId);
   const selectedItems = itemsByRequest.get(String(selectedId)) || [];
   const selectedItem = selectedItems.find((item) => String(item.id) === selectedItemId);
+  const matchingRequests = requests.filter(request => requestQueueMatches(request,
+    itemsByRequest.get(String(request.id)) || [], products,
+    { search, product: productFilter, line: lineFilter, creator: creatorFilter }));
   const visible = sortRequestsForScan(
-    requests.filter((request) => requestMatchesFilter(request, itemsByRequest.get(String(request.id)) || [], filter, now)),
+    matchingRequests.filter((request) => requestStatusMatches(request, itemsByRequest.get(String(request.id)) || [], filter, now)),
     items, now,
   );
   const filterCounts = new Map(filters.map((key) => [key,
-    requests.filter((request) => requestMatchesFilter(request, itemsByRequest.get(String(request.id)) || [], key, now)).length]));
-  if (filter === "planned" && createdId)
+    matchingRequests.filter((request) => requestStatusMatches(request, itemsByRequest.get(String(request.id)) || [], [key], now)).length]));
+  if (filter.includes("planned") && createdId)
     visible.sort((a, b) => Number(String(b.id) === createdId) - Number(String(a.id) === createdId));
   const created = requests.find((request) => String(request.id) === createdId);
   const next = s.truncatedTables?.includes("production_orders") ? undefined : nextScheduledOrder(items, now);
@@ -65,14 +75,45 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
   const itemsOf = (request: Row) => itemsByRequest.get(String(request.id)) || [];
   const unitOf = (item: Row) => t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : "legacyUnit");
   const quantity = (value: unknown) => Number(value).toLocaleString(lang);
+  const creators: { id: string; name: string }[] = requestCreators(requests);
+  const activeFilterCount = filter.length + Number(Boolean(search)) + Number(Boolean(productFilter)) +
+    Number(Boolean(lineFilter)) + Number(Boolean(creatorFilter));
+  function statusFilters() {
+    return <div className="orders-v2-filters" role="group" aria-label={t('orderStatusFilters')}>
+      {filters.map(key => <button type="button" key={key}
+        aria-pressed={key === 'all' ? !filter.length : filter.includes(key)}
+        onClick={() => setFilter(current => key === 'all' ? [] : current.includes(key)
+          ? current.filter(value => value !== key) : [...current, key])}>
+        {t(key === 'planned' ? 'plannedWaiting' : key)} ({quantity(filterCounts.get(key) || 0)})
+      </button>)}
+    </div>;
+  }
+  function fieldFilters() {
+    return <div className="requests-filter-bar">
+      <label><span>{t('requestQueueSearch')}</span><input type="search" value={search}
+        placeholder={t('requestQueueSearch')} onChange={event => setSearch(event.target.value)} /></label>
+      <label><span>{t('requestedBy')}</span><select value={creatorFilter} onChange={event => setCreatorFilter(event.target.value)}>
+        <option value="">{t('all')}</option>{creators.map(person => <option key={person.id} value={person.id}>{person.name || t('requestCreatorNotRecorded')}</option>)}
+      </select></label>
+      <label><span>{t('product')}</span><select value={productFilter} onChange={event => setProductFilter(event.target.value)}>
+        <option value="">{t('all')}</option>{products.map(product => <option key={String(product.id)} value={String(product.id)}>{localName(product, lang)}</option>)}
+      </select></label>
+      <label><span>{t('line')}</span><select value={lineFilter} onChange={event => setLineFilter(event.target.value)}>
+        <option value="">{t('all')}</option>{lines.map(line => <option key={String(line.id)} value={String(line.id)}>{localName(line, lang)}</option>)}
+      </select></label>
+      {activeFilterCount > 0 && <button type="button" onClick={() => {
+        setSearch(''); setProductFilter(''); setLineFilter(''); setCreatorFilter(''); setFilter([]);
+      }}>{t('historyClear')}</button>}
+    </div>;
+  }
   function backToList() {
     setScreen("list");
     setDailyTargetOpen(false);
     requestAnimationFrame(() => { if (openerRef.current?.isConnected) openerRef.current.focus(); });
   }
-  function statusChip(status: string, attention: string | null) {
+  function statusChip(status: string, attention: string | null, label = status, state = status) {
     return <span className="orders-v2-chips">
-      <span className={`orders-v2-chip orders-v2-chip-${status}`}><span aria-hidden="true">●</span> {t(status)}</span>
+      <span className={`orders-v2-chip orders-v2-chip-${status}`} data-state={state}><span aria-hidden="true">●</span> {t(label)}</span>
       {attention && <span className="orders-v2-chip orders-v2-chip-delay"><span aria-hidden="true">!</span> {t("delayed")}</span>}
     </span>;
   }
@@ -93,7 +134,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
       setCreateDirty(false);
       return true;
     };
-    return <section className="orders-v2 orders-v2-subscreen">
+    return <section className="orders-v2 orders-v2-subscreen ops-workbench" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <button className="orders-v2-back" onClick={() => {
         if (screen === "edit") { setScreen("details"); return; }
         if (leaveCreate()) backToList();
@@ -108,7 +149,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
       </div></header>
       {screen === "create" ? <CreateProductionOrder {...props} onCancel={() => { if (leaveCreate()) backToList(); }}
         onDirtyChange={setCreateDirty}
-        onCreated={(id) => { setCreatedId(id); setFilter("planned"); backToList(); }} /> :
+        onCreated={(id) => { setCreatedId(id); setFilter(["planned"]); backToList(); }} /> :
         selectedItem && <Configuration key={String(selectedItem.id)} {...props} view="orders"
           standalone={{ record: selectedItem, onSaved: () => setScreen("details"), onCancel: () => setScreen("details") }} />}
     </section>;
@@ -117,7 +158,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
   if (screen === "details" && selected) {
     const attention = requestAttention(selectedItems, now);
     const completed = selectedItems.filter((item) => item.status === "completed").length;
-    return <section className="orders-v2 orders-v2-subscreen">
+    return <section className="orders-v2 orders-v2-subscreen ops-workbench" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <button className="orders-v2-back" onClick={backToList}>
         <span aria-hidden="true" className="orders-v2-back-arrow">←</span> {t("backToOrders")}
       </button>
@@ -150,7 +191,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
             .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5);
           return <article className="orders-v2-surface orders-v2-item" key={String(item.id)}>
             <div className="orders-v2-item-head">
-              <div><h4 dir="auto">{product ? localName(product, lang) : t("notAvailable")}</h4>
+              <div><h4 dir="auto"><ProductIdentity productId={item.product_id} productItemId={item.id}>{product ? localName(product, lang) : t("notAvailable")}</ProductIdentity></h4>
                 <span>{quantity(item.target_quantity)} {unitOf(item)}</span></div>
               {statusChip(String(item.status || "planned"), orderAttention(item, now))}
             </div>
@@ -203,13 +244,14 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
     </section>;
   }
 
-  return <section className="orders-v2">
+  return <section className="orders-v2 ops-workbench" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
     <header className="orders-v2-page-head">
-      <div><h2>{t("orders")}</h2><p>{t("ordersOverviewHelp")}</p></div>
+      <p className="ops-page-subtitle">{t('requestsOperationalSubtitle')}</p>
       {can("orders", "create") && <button className="primary" onClick={(event) => {
         openerRef.current = event.currentTarget; setCreatedId(null); setScreen("create");
       }}>+ {t("createProductionRequest")}</button>}
     </header>
+    <HistoryLimitWarning snapshot={s} tables={['production_requests', 'production_orders']} t={t} />
     {created && <p className="orders-v2-created" role="status">
       {t("requestReadyForPlanning")} · <bdi dir="ltr">{String(created.code)}</bdi>
     </p>}
@@ -218,37 +260,53 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
       <strong><bdi dir="ltr">{String(nextRequest?.code || next.code)}</bdi> · {localName(productOf(next), lang)}</strong>
       <time>{formatTime(next.start_time, lang, zone)}</time>
     </div>}
-    <nav className="orders-v2-filters" aria-label={t("orderStatusFilters")}>
-      {filters.map((key) => <button key={key} aria-pressed={filter === key}
-        onClick={() => setFilter(key)}>{t(key === "planned" ? "plannedWaiting" : key)}
-        ({quantity(filterCounts.get(key) || 0)})</button>)}
-    </nav>
+    <div className="requests-desktop-filters">{statusFilters()}{fieldFilters()}</div>
+    <button type="button" className="requests-mobile-filter" popoverTarget="requests-filter-sheet"
+      aria-haspopup="dialog">{t('historyFilters')}{activeFilterCount > 0 && ` (${quantity(activeFilterCount)})`}</button>
+    <div id="requests-filter-sheet" popover="auto" role="dialog" aria-label={t('historyFilters')}
+      className="requests-filter-sheet" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <header><strong>{t('historyFilters')}</strong><button type="button" popoverTarget="requests-filter-sheet"
+        popoverTargetAction="hide" aria-label={t('close')}>×</button></header>
+      {statusFilters()}{fieldFilters()}
+    </div>
     {visible.length ? <div className="orders-v2-list">
+      <div className="requests-list-head" aria-hidden="true"><span>{t('orders')}</span><span>{t('requestProducts')}</span>
+        <span>{t('planningLineSchedule')}</span><span>{t('requiredBy')}</span><span>{t('status')}</span></div>
       {visible.map((request) => {
         const requestItems = itemsOf(request);
         const attention = requestAttention(requestItems, now);
+        const display = requestPresentation(request, requestItems, now);
         const completed = requestItems.filter((item) => item.status === "completed").length;
-        return <button key={String(request.id)} className={`orders-v2-row${attention ? " orders-v2-row-attention" : ""}`}
+        return <button key={String(request.id)} data-state={display.tone} className={`orders-v2-row${attention ? " orders-v2-row-attention" : ""}`}
           onClick={(event) => { openerRef.current = event.currentTarget; setCreatedId(null); setSelectedId(String(request.id)); setScreen("details"); }}>
           <span className="orders-v2-identity">
             <strong dir="auto">{String(request.name)}</strong>
             <small><bdi dir="ltr">{String(request.code)}</bdi></small>
+            <small className="requests-requester">{t('requestedBy')}: {String(request.requested_by_name || t('requestCreatorNotRecorded'))}</small>
+            <span className="orders-v2-row-progress">{t('itemsCompleted').replace('{completed}', String(completed)).replace('{total}', String(requestItems.length))}</span>
           </span>
           <span className="orders-v2-line"><small>{t("requestProducts")}</small>
             {t(requestItems.length === 1 ? "productCountOne" : "productCount").replace("{count}", String(requestItems.length))}
             <span className="orders-v2-quantities">{requestItems.slice(0, 2).map((item) =>
-              <span key={String(item.id)} dir="auto">{localName(productOf(item), lang)}: {quantity(item.target_quantity)} {unitOf(item)}</span>)}
+              <span key={String(item.id)} dir="auto"><ProductIdentity productId={item.product_id} productItemId={item.id}>{localName(productOf(item), lang)}: {quantity(item.target_quantity)} {unitOf(item)}</ProductIdentity></span>)}
               {requestItems.length > 2 &&
                 <span dir="auto">{t("moreProducts").replace("{count}", String(requestItems.length - 2))}</span>}
             </span>
           </span>
-          <span className="orders-v2-timing"><small>{t("requestedBy")}</small>
-            <span dir="auto">{String(request.requested_by_name || t("notAvailable"))}</span>
-            {request.required_by && <small>{t("requiredBy")}: {formatTime(request.required_by, lang, zone)}</small>}
+          <span className="requests-schedule">{requestItems.slice(0, 2).map(item => <span key={String(item.id)}>
+            <strong dir="auto">{item.line_id ? localName(lineOf(item), lang) :
+              t(item.status === 'planned' ? 'requestAwaitingPlanning' : 'requestScheduleNotRecorded')}</strong>
+            {Boolean(item.line_id && item.start_time) && <span><small>{t('executionPlannedStart')}: {formatTime(item.start_time, lang, zone)}</small>
+              <small>{t('executionPlannedFinish')}: {formatTime(item.expected_finish, lang, zone)}</small></span>}
+            {item.planning_locked_at && <small>🔒 {t('planningLocked')}</small>}
+          </span>)}</span>
+          <span className={'orders-v2-timing' + (display.overdue ? ' requests-due-passed' : '')}>
+            <small className="requests-mobile-label">{t('requiredBy')}</small>
+            <time dateTime={request.required_by ? String(request.required_by) : undefined}>{request.required_by ? formatTime(request.required_by, lang, zone) : t('notSpecified')}</time>
+            {display.overdue && <small>! {t('requestsDeadlinePassed')}</small>}
           </span>
-          <span className="orders-v2-row-progress">{t("itemsCompleted").replace("{completed}", String(completed)).replace("{total}", String(requestItems.length))}</span>
           <span className="orders-v2-row-status">
-            {statusChip(requestStatus(requestItems), attention)}
+            {statusChip(display.status, attention, display.label, display.state)}
             {["high", "urgent"].includes(String(request.priority)) &&
               <small className="orders-v2-priority">! {t(`priority_${request.priority}`)}</small>}
             {attention && <small>{t(attention)}</small>}

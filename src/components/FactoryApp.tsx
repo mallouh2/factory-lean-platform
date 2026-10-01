@@ -11,6 +11,7 @@ import Configuration from "@/features/Configuration";
 import Reports from "@/features/Reports";
 import LineBuilder from "@/features/LineBuilder";
 import FactoryFloorV2 from "@/features/FactoryFloorV2";
+import UnfinishedProducts from '@/features/UnfinishedProducts';
 import ProductionOrdersV2 from "@/features/ProductionOrdersV2";
 import ProductionPlanning from "@/features/ProductionPlanning";
 import PlatformDashboard from "@/features/PlatformDashboard";
@@ -21,6 +22,7 @@ import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
 import { previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
 import HistoryLimitWarning from "./HistoryLimitWarning";
+import { useNavigationOverlay } from './useNavigationOverlay';
 // Floor totals and report tabs own their warnings beside the affected values.
 const pageHistoryTables: Record<string, string[]> = {
   dashboard: ["production_entries", "downtime_events"],
@@ -32,6 +34,7 @@ const primary = [
   "orders",
   "planning",
   "products",
+  "unfinishedProducts",
   "downtime",
   "reports",
 ];
@@ -77,7 +80,7 @@ export default function FactoryApp() {
     [loading, setLoading] = useState(true),
     [notice, setNotice] = useState(""),
     [mobile, setMobile] = useState(false),
-    [sidebarCollapsed, setSidebarCollapsed] = useState(false),
+    [sidebarCollapsed, setSidebarCollapsed] = useState(true),
     [preview, setPreview] = useState("full"),
     [lineManagement, setLineManagement] = useState(false),
     [lineManagementMachineId, setLineManagementMachineId] = useState<string | null>(null),
@@ -85,6 +88,7 @@ export default function FactoryApp() {
     [center, setCenter] = useState<Row | null>(null);
   const [planningItemId, setPlanningItemId] = useState<string | null>(null);
   const [loadNotice, setLoadNotice] = useState("");
+  const navigationOverlay = useNavigationOverlay(mobile, setMobile, setSidebarCollapsed);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
   const commandErrorKey = (value: unknown) =>
@@ -95,7 +99,7 @@ export default function FactoryApp() {
   const can = (module: string, action = "view") =>
     Boolean(
       visiblePermissions.includes(
-        `${module === "products" || module === "planning" ? "orders" : module}:${action}`,
+        `${module === "products" || module === "planning" || module === "unfinishedProducts" ? "orders" : module}:${action}`,
       ),
     );
   const load = useCallback(async () => {
@@ -129,7 +133,6 @@ export default function FactoryApp() {
   }, [supportFactory]);
   useEffect(() => {
     setLang(localStorage.getItem("factory-language") === "ar" ? "ar" : "en");
-    setSidebarCollapsed(localStorage.getItem("factory-sidebar-collapsed") === "1");
     void load();
     const timer = setInterval(() => {
       if (!document.hidden) void load();
@@ -138,7 +141,7 @@ export default function FactoryApp() {
   }, [load]);
   useEffect(() => {
     if (!snapshot?.factory) return;
-    const allowed = (page: string) => visiblePermissions.includes(`${page === "products" || page === "planning" ? "orders" : page}:view`);
+    const allowed = (page: string) => visiblePermissions.includes(`${page === "products" || page === "planning" || page === "unfinishedProducts" ? "orders" : page}:view`);
     if (!allowed(view)) {
       const first = [...primary, ...admin].find(allowed);
       if (first) setView(first);
@@ -155,8 +158,10 @@ export default function FactoryApp() {
     localStorage.setItem("factory-language", lang);
   }, [lang]);
   useEffect(() => {
-    localStorage.setItem("factory-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
-  }, [sidebarCollapsed]);
+    if (notice !== 'saved') return;
+    const timer = setTimeout(() => setNotice(current => current === 'saved' ? '' : current), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   async function command(command: string, args: Record<string, unknown>) {
     setNotice("");
     try {
@@ -281,7 +286,7 @@ export default function FactoryApp() {
             ))}
         </>
       ) : (
-        <div className={`app-shell${sidebarCollapsed ? " nav-collapsed" : ""}`}>
+        <div className="app-shell">
           {mobile && (
             <button
               className="nav-backdrop"
@@ -289,13 +294,12 @@ export default function FactoryApp() {
               onClick={() => setMobile(false)}
             />
           )}
-          <aside className={`sidebar ${mobile ? "is-open" : ""}`}>
-            <button className="sidebar-toggle" title={t(sidebarCollapsed ? "expandNavigation" : "collapseNavigation")}
-              aria-label={t(sidebarCollapsed ? "expandNavigation" : "collapseNavigation")}
-              aria-expanded={!sidebarCollapsed}
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
-              {sidebarCollapsed ? "»" : "«"}
-            </button>
+          <aside id="factory-navigation" ref={navigationOverlay.sidebarRef}
+            className={`sidebar${!sidebarCollapsed ? ' is-expanded' : ''}${mobile ? ' is-open' : ''}`}
+            role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-label={t('menu')}
+            onPointerEnter={navigationOverlay.onPointerEnter} onPointerLeave={navigationOverlay.onPointerLeave}
+            onFocusCapture={navigationOverlay.onFocusCapture} onBlurCapture={navigationOverlay.onBlurCapture}
+            onKeyDown={navigationOverlay.onKeyDown}>
             <button
               className="sidebar-close"
               aria-label={t("close")}
@@ -346,6 +350,7 @@ export default function FactoryApp() {
                       className={view === x ? "nav-active" : ""}
                       title={t(x)}
                       aria-label={t(x)}
+                      aria-current={view === x ? 'page' : undefined}
                       onClick={() => navigate(x)}
                     >
                       <SidebarIcon name={x} />
@@ -371,6 +376,7 @@ export default function FactoryApp() {
                       className={view === x ? "nav-active" : ""}
                       title={t(x)}
                       aria-label={t(x)}
+                      aria-current={view === x ? 'page' : undefined}
                       onClick={() => navigate(x)}
                     >
                       <SidebarIcon name={x} />
@@ -435,13 +441,15 @@ export default function FactoryApp() {
                 className="menu-button"
                 aria-label={t("menu")}
                 aria-expanded={mobile}
+                aria-controls="factory-navigation"
+                ref={navigationOverlay.menuRef}
                 onClick={() => setMobile(!mobile)}
               >
                 ☰
               </button>
               <div>
                 <p className="breadcrumb">{String(snapshot.factory.name)}</p>
-                <h1>{t(view)}</h1>
+                <h1>{t(view === 'lines' && !lineManagement ? 'floor' : view)}</h1>
               </div>
               <div className="topbar-actions">
                 <span className="updated">
@@ -464,15 +472,12 @@ export default function FactoryApp() {
                 <span>{t("previewing")}: <strong>{t(`preview_${previewMode}`)}</strong></span>
                 <button type="button" onClick={() => changePreview("full")}>{t("exitPreview")}</button>
               </div>}
-              {snapshot.factory.is_demo && (
-                <div className="demo-banner">{t("demo")}</div>
-              )}
               {can(view) && <HistoryLimitWarning snapshot={snapshot}
                 tables={pageHistoryTables[view] || []} t={t} />}
               {notice && (
                 <div
-                  role="status"
-                  className={`toast ${notice === "saved" ? "success" : ""}`}
+                  role={notice === 'saved' ? 'status' : 'alert'}
+                  className={notice === 'saved' ? 'save-toast' : 'toast'}
                 >
                   <span>{t(notice)}</span>
                   <button onClick={() => setNotice("")} aria-label={t("close")}>
@@ -482,7 +487,7 @@ export default function FactoryApp() {
               )}
               {props &&
                 (can(view) ? (
-                  view === "dashboard" ? (
+                  view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}

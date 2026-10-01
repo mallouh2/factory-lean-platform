@@ -11,6 +11,7 @@ declare f uuid:='bab9b5da-d78d-4be7-b6d4-bb6afc388c3a'; actor uuid:='d699a3ac-fa
  qa_product uuid;qa_product2 uuid;qa_line uuid;qa_request uuid; foreign_factory uuid;foreign_shift uuid;
 begin
  perform set_config('request.jwt.claim.sub',actor::text,true);
+ update public.production_shifts set archived=true where factory_id=f and not archived;
  select id into tech from public.memberships where factory_id=f and user_id=actor;
  select id into other_tech from public.memberships where factory_id=f and status='approved' and id<>tech limit 1;
 
@@ -26,20 +27,19 @@ begin
  select * into job from public.production_orders where request_id=qa_request and product_id=qa_product;
 
 
- a:=public.configure_production_shift(f,'QA Morning','صباح اختبار');
- b:=public.configure_production_shift(f,'QA Night','ليل اختبار');
+ a:=public.configure_production_shift(f,'QA Morning','صباح اختبار','06:00','14:00');
+ b:=public.configure_production_shift(f,'QA Night','ليل اختبار','14:00','06:00');
  insert into public.factories(name,created_by) values('QA shift isolation',actor) returning id into foreign_factory;
  insert into public.production_shifts(factory_id,name,name_ar,created_by) values(foreign_factory,'Foreign shift','وردية أخرى',actor) returning id into foreign_shift;
  perform pg_temp.expect_history_error(format('select public.record_production(%L,%L,%L,%L,%L,1,0,shift=>%L)',f,'line',job.line_id,job.id,tech,foreign_shift),'shift_invalid');
- perform public.configure_production_shift(f,'QA Morning renamed','صباح معدّل',a,false);
+ perform public.configure_production_shift(f,'QA Morning renamed','صباح معدّل','06:00','14:00',a,false);
  if (select name from public.production_shifts where id=a)<>'QA Morning renamed' then raise exception 'rename failed';end if;
- perform pg_temp.expect_history_error(format('select public.record_production(%L,%L,%L,%L,%L,1,0)',f,'line',job.line_id,job.id,tech),'shift_required');
  perform pg_temp.expect_history_error(format('select public.record_production(%L,%L,%L,%L,%L,1,0,shift=>%L)',f,'line',job.line_id,job.id,tech,gen_random_uuid()),'shift_invalid');
- e:=public.record_production(f,'line',job.line_id,job.id,tech,1,2,'QA history',false,retry,a);
- if public.record_production(f,'line',job.line_id,job.id,tech,1,2,'QA history',false,retry,a)<>e then raise exception 'shift retry changed identity';end if;
+ e:=public.record_production(f,'line',job.line_id,job.id,tech,1,2,'QA history',false,retry,a,'QA delayed history entry');
+ if public.record_production(f,'line',job.line_id,job.id,tech,1,2,'QA history',false,retry,a,'QA delayed history entry')<>e then raise exception 'shift retry changed identity';end if;
  perform pg_temp.expect_history_error(format('select public.record_production(%L,%L,%L,%L,%L,1,2,%L,false,%L,%L)',f,'line',job.line_id,job.id,tech,'QA history',retry,b),'request_conflict');
  for i in 2..65 loop
- perform public.record_production(f,'line',job.line_id,job.id,case when i%2=0 then tech else other_tech end,1,i%5,'QA history',false,gen_random_uuid(),case when i<=35 then a else b end);
+ perform public.record_production(f,'line',job.line_id,job.id,case when i%2=0 then tech else other_tech end,1,i%5,'QA history',false,gen_random_uuid(),case when i<=35 then a else b end,'QA delayed history entry');
  end loop;
  filter:=jsonb_build_object('request',job.request_id,'product',job.product_id,'unit','line:'||job.line_id,'from',to_char(current_timestamp at time zone (select timezone from public.factories where id=f),'YYYY-MM-DD'),'to',to_char(current_timestamp at time zone (select timezone from public.factories where id=f),'YYYY-MM-DD'));
  result:=public.production_history(f,filter,'scrap','desc',1);
@@ -60,16 +60,16 @@ begin
  if not exists(select 1 from public.production_entries where id=e and shift_id=b and original_shift_id=a and good_quantity=1 and effective_good=2) then raise exception 'original shift/output lost';end if;
  if (public.production_history(f,filter||'{"corrected":"yes"}')->>'total')::int<>1 then raise exception 'corrected filter failed';end if;
  if (public.production_history(f,filter,'good','desc')->'rows'->0->>'effective_good')::numeric<>2 then raise exception 'good sort failed';end if;
- perform public.configure_production_shift(f,'QA Night','ليل اختبار',b,true);
+ perform public.configure_production_shift(f,'QA Night','ليل اختبار','14:00','06:00',b,true);
  perform pg_temp.expect_history_error(format('select public.record_production(%L,%L,%L,%L,%L,1,0,shift=>%L)',f,'line',job.line_id,job.id,tech,b),'shift_invalid');
  if (public.production_history(f,filter||jsonb_build_object('shift',b))->>'total')::int<>31 then raise exception 'archived historical shift lost';end if;
- perform public.configure_production_shift(f,'QA Night','ليل اختبار',b,false);
+ perform public.configure_production_shift(f,'QA Night','ليل اختبار','14:00','06:00',b,false);
  if (select archived from public.production_shifts where id=b) then raise exception 'reactivation failed';end if;
  -- Parent request audit includes declarations from another Product Item/unit.
  select * into other_job from public.production_orders where factory_id=f and request_id=job.request_id and status='planned' and line_id=job.line_id order by start_time,id limit 1;
  if other_job.id is null then raise exception 'same request next planned item required';end if;
  perform public.finish_product_item(f,job.id);perform public.start_product_item(f,other_job.id);
- perform public.record_production(f,'line',other_job.line_id,other_job.id,tech,10,1,'QA second item',false,gen_random_uuid(),a);
+ perform public.record_production(f,'line',other_job.line_id,other_job.id,tech,10,1,'QA second item',false,gen_random_uuid(),a,'QA delayed history entry');
  result:=public.production_history(f,jsonb_build_object('request',job.request_id,'from',filter->>'from','to',filter->>'to'));
  if (result->>'total')::int<>66 then raise exception 'request omitted other Product Item';end if;
  if jsonb_array_length(result->'totals')<>2 then raise exception 'units combined';end if;
@@ -80,7 +80,7 @@ begin
  perform set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);
  perform pg_temp.expect_history_error(format('select public.production_history(%L)',f),'permission_denied');
  perform pg_temp.expect_history_error(format('select public.production_history_options(%L)',f),'permission_denied');
- perform pg_temp.expect_history_error(format('select public.configure_production_shift(%L,%L,%L)',f,'Unauthorized','غير مصرح'),'permission_denied');
+ perform pg_temp.expect_history_error(format('select public.configure_production_shift(%L,%L,%L,%L,%L)',f,'Unauthorized','غير مصرح','06:00','14:00'),'permission_denied');
  perform set_config('request.jwt.claim.sub',actor::text,true);
  perform pg_temp.expect_history_error(format('select public.production_history(%L)',gen_random_uuid()),'permission_denied');
  perform pg_temp.expect_history_error(format('select public.production_history(%L)',foreign_factory),'permission_denied');

@@ -22,13 +22,13 @@ function loadModule(bundle,resolve=require){
   return module.exports;
 }
 const realAuth=loadModule(realAuthBundle);
-async function api({failure=null,stage='factory_snapshot',authError=null}={}){
+async function api({failure=null,stage='factory_snapshot',authError=null,shiftOnly=false}={}){
   const calls=[];const warnings=[];
   const snapshot={factory:{id:'F'},membership:{status:'approved'},permissions:['orders:view'],tables:{}};
   const db={rpc:async(name,args)=>{
     calls.push([name,args]);
     if(name===stage && failure) return {data:null,error:failure};
-    return {data:name==='factory_snapshot'?snapshot:{units:[{id:'L'}],technicians:[{id:'T'}]},error:null};
+    return {data:name==='factory_snapshot'?snapshot:name==='production_shift_context'?{shift_id:'SHIFT',timezone:'Asia/Qatar',local_time:'07:30'}:{units:[{id:'L'}],technicians:[{id:'T'}]},error:null};
   },from:()=>({select:()=>({eq:()=>({order:async()=>({data:[{id:'SHIFT'}],error:stage==='production_shifts'?failure:null})})})})};
   const route=loadModule(apiBundle,name=>name==='test-auth'?{...realAuth,
     authenticatedClient:async()=>{if(authError)throw authError;return{db,user:{id:'U',email:'test@example.invalid'}};}
@@ -36,7 +36,7 @@ async function api({failure=null,stage='factory_snapshot',authError=null}={}){
   const originalWarn=console.warn;
   try{
     console.warn=(...args)=>warnings.push(args);
-    const response=await route.GET(new NextRequest('http://localhost:3000/api/data?factory=F'));
+    const response=await route.GET(new NextRequest('http://localhost:3000/api/data?factory=F'+(shiftOnly?'&shift_context=1':'')));
     return{status:response.status,body:await response.json(),calls,warnings};
   }finally{console.warn=originalWarn;}
 }
@@ -59,9 +59,20 @@ test('valid snapshot retains Recording and Shift hydration and factory context',
   assert.deepEqual(result.body.tables.production_technicians,[{id:'T'}]);
   assert.deepEqual(result.body.tables.production_shifts,[{id:'SHIFT'}]);
   assert.equal(result.calls[1][0],'production_recording_units');
+  assert.equal(result.body.tables.production_shift_context[0].shift_id,'SHIFT');
+});
+test('shift preview uses an authenticated server-only read without loading the whole snapshot',async()=>{
+ const result=await api({shiftOnly:true});assert.equal(result.status,200);
+ assert.deepEqual(result.calls,[['production_shift_context',{factory:'F'}]]);
+ assert.deepEqual(result.body,{shift_id:'SHIFT',timezone:'Asia/Qatar',local_time:'07:30'});
+});
+test('shift preview rejects permission denial and expired sessions without leaking database details',async()=>{
+ assert.equal((await api({shiftOnly:true,stage:'production_shift_context',failure:{code:'P0001',message:'permission_denied'}})).status,403);
+ assert.equal((await api({shiftOnly:true,authError:Error('unauthorized')})).status,401);
+ assert.deepEqual((await api({shiftOnly:true,stage:'production_shift_context',failure:{code:'57014',message:'internal detail'}})).body,{error:'dataWarning'});
 });
 test('dependent read failures identify their stage without exposing internals',async()=>{
-  for(const stage of ['production_recording_units','production_shifts']){
+  for(const stage of ['production_recording_units','production_shifts','production_shift_context']){
     const result=await api({stage,failure:{code:'XX000',message:'internal SQL detail'}});
     assert.equal(result.status,503);assert.deepEqual(result.body,{error:'dataWarning'});
     assert.equal(result.warnings[0][1].stage,stage);
@@ -70,16 +81,16 @@ test('dependent read failures identify their stage without exposing internals',a
 function appHarness(lang='en'){
   const snapshot=floorSnapshot('running');snapshot.permissions.push('dashboard:view','factory:view','lines:view');
   const states=[lang,false,'dashboard',snapshot,false,'',false,false,'full',false,null,'',null,null,''];
-  let hook=0;let load;
+  let hook=0;let load;const effects=[];
   const react=require('react');
   const App=loadModule(appBundle,name=>name==='react'?{...react,
     useState:initial=>{const i=hook++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;
       return[states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},
-    useEffect:()=>{},useMemo:fn=>fn(),useCallback:fn=>{load=fn;return fn;}
+    useEffect:fn=>effects.push(fn),useRef:()=>({current:null}),useMemo:fn=>fn(),useCallback:fn=>{load=fn;return fn;}
   }:require(name)).default;
-  function render(){hook=0;return App();}
+  function render(){hook=0;effects.length=0;return App();}
   render();
-  return{states,snapshot,render,refresh:()=>load()};
+  return{states,snapshot,render,effects,refresh:()=>load()};
 }
 async function withFetch(response,fn){const original=globalThis.fetch;try{globalThis.fetch=async()=>response;await fn();}finally{globalThis.fetch=original;}}
 test('failed refresh preserves the loaded factory and recovery clears only the load warning in EN/AR',async()=>{
@@ -110,4 +121,30 @@ test('normal Factory Floor navigation issues no write command or snapshot reques
   try{globalThis.fetch=()=>{throw new Error('navigation must not call an API');};button.props.onClick();}
   finally{globalThis.fetch=original;}
   assert.equal(app.states[2],'lines');assert.equal(app.states[3],app.snapshot);
+});
+test('save notice expires after three seconds, while a subsequent error remains visible',()=>{
+  const app=appHarness();app.states[5]='saved';app.render();
+  const effect=app.effects.find(fn=>fn.toString().includes('setTimeout') && fn.toString().includes('saved'));assert.ok(effect);
+  const originalTimeout=setTimeout,originalClear=clearTimeout;let expire;
+  try {
+    globalThis.setTimeout=(fn,ms)=>{assert.equal(ms,3000);expire=fn;return 1;};
+    globalThis.clearTimeout=()=>{};
+    effect();expire();assert.equal(app.states[5],'');
+    app.states[5]='saved';app.render();app.effects.find(fn=>fn.toString().includes('setTimeout') && fn.toString().includes('saved'))();
+    app.states[5]='permissionError';expire();assert.equal(app.states[5],'permissionError');
+    app.render();expire=null;app.effects.find(fn=>fn.toString().includes('setTimeout') && fn.toString().includes('saved'))();assert.equal(expire,null);
+  } finally {globalThis.setTimeout=originalTimeout;globalThis.clearTimeout=originalClear;}
+});
+
+test('the shared shell never renders Demo/Trial banners on any operational or configuration page in EN/AR',()=>{
+  function hasBanner(node){
+    if(!node||typeof node!=='object')return false;
+    if(node.props?.className==='demo-banner')return true;
+    return [node.props?.children].flat(Infinity).some(hasBanner);
+  }
+  for(const lang of ['en','ar'])for(const view of ['dashboard','lines','planning','orders','unfinishedProducts','downtime','reports','products','employees','roles','settings','support','audit']){
+    const app=appHarness(lang);app.snapshot.factory.is_demo=true;app.states[2]=view;
+    assert.equal(hasBanner(app.render()),false,view);
+    assert.equal(app.snapshot.factory.is_demo,true,'internal seed/preview configuration stays intact');
+  }
 });

@@ -18,6 +18,8 @@ begin
  and exists(select 1 from public.user_permissions p where p.factory_id=m.factory_id and p.user_id=m.user_id and p.module='orders' and p.action='view') limit 1;
  if f is null then raise exception 'approved TESTING person required';end if;
  perform set_config('request.jwt.claim.sub',actor::text,true);
+ -- Isolate quantity/execution tests from the factory's current shift configuration; rolled back.
+ update public.production_shifts set archived=true where factory_id=f and not archived;
 
  insert into public.products(factory_id,name,code,unit) values(f,'QA history pipe','QH-'||substr(gen_random_uuid()::text,1,8),'meter') returning id into qa_product;
  insert into public.products(factory_id,name,code,unit) values(f,'QA history fittings','QH-'||substr(gen_random_uuid()::text,1,8),'piece') returning id into qa_product2;

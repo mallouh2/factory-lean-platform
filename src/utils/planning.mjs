@@ -1,5 +1,6 @@
 /** Planning is derived from existing order fields; no second order status is stored. */
 import { formatLocalInput, localDateTimeToUtc } from "./manufacturing.mjs";
+import { productColor } from "./product-colors.mjs";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -368,25 +369,9 @@ export function groupPlanningRequests(items, requests) {
   return [...groups.values()];
 }
 
-const PRODUCT_TONES = [
-  { surface: "#deebf5", ink: "#224a69", edge: "#5b8db1" },
-  { surface: "#e8e2f3", ink: "#594276", edge: "#9477b2" },
-  { surface: "#dcefee", ink: "#235d5d", edge: "#5c9f9a" },
-  { surface: "#eee4ed", ink: "#694865", edge: "#aa7d9f" },
-  { surface: "#e3eaf6", ink: "#394e79", edge: "#7188b6" },
-  { surface: "#e8edf0", ink: "#405a68", edge: "#7894a1" },
-  { surface: "#ece6f5", ink: "#5d4b7a", edge: "#9a86b9" },
-  { surface: "#dfecf3", ink: "#34566e", edge: "#739bb4" },
-  { surface: "#e6ede9", ink: "#3f6057", edge: "#78a293" },
-  { surface: "#f0e8ee", ink: "#694c61", edge: "#ac8ba1" },
-  { surface: "#e2eaf0", ink: "#3d5b6c", edge: "#7897a9" },
-  { surface: "#e8e8f2", ink: "#4f5274", edge: "#8d90b3" },
-];
-
-/** Stable, collision-free colors for the current catalog; no render-time randomness. */
+/** Catalog lookup compatibility; each tone depends only on that Product's ID. */
 export function planningProductTones(products) {
-  const ids = [...new Set(products.map((product) => String(product.id)))].sort();
-  return new Map(ids.map((id, index) => [id, PRODUCT_TONES[index % PRODUCT_TONES.length]]));
+  return new Map(products.map((product) => [String(product.id), productColor(product.id)]));
 }
 
 /** A drop and its ghost use the same capability, gap, and overlap rules. */

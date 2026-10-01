@@ -17,10 +17,10 @@ const snapshot={user:{id:"actor"},factory:{id:"f",timezone:"UTC"},tables:{
  production_orders:[{id:"item",request_id:"request",product_id:"product",unit:"meter",target_quantity:1000,produced_quantity:570,rejected_quantity:20,good_quantity:550,remaining_quantity:450}],
  production_requests:[{id:"request",code:"PO-42"}],products:[{id:"product",name:"Pipe",name_ar:"أنبوب"}],
  production_lines:[{id:"line",name:"Line 1",name_ar:"الخط ١"}],production_entries:[]}};
-function render(lang="en",edit=true,configure=()=>{}){
+function render(lang="en",edit=true,configure=()=>{},selectedLot){
  const s=structuredClone(snapshot);configure(s);const before=structuredClone(s);
  const dictionary=lang==="ar"?ar:en;
- const html=renderToStaticMarkup(createElement(module.exports.default,{snapshot:s,lang,t:k=>dictionary[k]||k,can:(_,action)=>action==="edit"?edit:true,command:()=>{throw Error("render must not write");}}));
+ const html=renderToStaticMarkup(createElement(module.exports.default,{snapshot:s,lang,t:k=>dictionary[k]||k,can:(_,action)=>action==="edit"?edit:true,selectedLot,command:()=>{throw Error("render must not write");}}));
  assert.deepEqual(s,before);return html;
 }
 test("good output and scrap remain separate across shifts",()=>{
@@ -50,7 +50,7 @@ test("read-only person sees records without recording or correcting actions",()=
  const html=render("en",false);assert.ok(!html.includes(en.recordingSubmit));assert.ok(!html.includes(en.recordingCorrect));
 });
 test("no authoritative active unit blocks recording with actionable guidance",()=>{
- const html=render("en",true,s=>{s.tables.production_recording_units=[];});assert.ok(html.includes(en.recordingNoActive));assert.match(html,/<fieldset disabled/);
+ const html=render("en",true,s=>{s.tables.production_recording_units=[];});assert.ok(html.includes(en.recordingNoActive));assert.match(html,/<button class="primary" disabled/);
 });
 test("only supplied authoritative units enter selector; no normal-machine fallback",()=>{
  const html=render("en",true,s=>{s.tables.work_centers=[{id:"wrong",name:"Normal extruder",line_id:"line",order_id:"item"}];});
@@ -64,10 +64,22 @@ test("history uses its own query rather than rendering capped snapshot entries",
  const html=render("en",true,s=>{s.tables.production_entries=[{id:"entry",order_id:"item",line_id:"line",technician_id:"tech",created_at:"2026-09-30T10:00:00Z",good_quantity:300,scrap_quantity:10,effective_good:300,effective_scrap:10,running_good:300,remaining_quantity:700}];});
   assert.ok(html.includes(en.productionHistory));assert.ok(html.includes(en.historyFilters));assert.ok(!html.includes(en.recordingCorrect));
 });
-test('configured shifts require a selection and archived shifts are excluded',()=>{
- const html=render('en',true,s=>{s.tables.production_shifts=[{id:'day',name:'QA Day',name_ar:'نهار',archived:false},{id:'old',name:'Archived shift',archived:true}];});
- assert.match(html,/QA Day/);assert.doesNotMatch(html,/Archived shift/);assert.match(html,/<select required=""/);
+test('server-detected shift renders without a required shift selector and excludes archived shifts',()=>{
+ const html=render('en',true,s=>{s.tables.production_shifts=[{id:'day',name:'QA Day',name_ar:'نهار',archived:false,start_time:'06:00:00',end_time:'14:00:00'},{id:'old',name:'Archived shift',archived:true}];s.tables.production_shift_context=[{shift_id:'day',timezone:'Asia/Qatar',local_time:'07:30'}];});
+ assert.match(html,/QA Day/);assert.doesNotMatch(html,/Archived shift/);assert.ok(html.includes(en.shiftAutoDetected));assert.match(html,/06:00–14:00/);
+ assert.doesNotMatch(html,/<option value="day"/);
 });
 test('no configured shift permits transitional recording with setup guidance',()=>{
  assert.ok(render().includes(en.shiftSetup));
+});
+test('unfinished input renders original product/item, stock and only authoritative WIP destinations in EN/AR',()=>{
+ const lot={id:'lot',factory_id:'f',item_id:'item',product_name:'Pipe',product_name_ar:'أنبوب',unit:'meter',quantity_available:380,request_code:'PO-42',remaining_work:'Printing',destinations:[{unit_kind:'machine',unit_id:'printer',item_id:'item'}]};
+ for(const lang of ['en','ar']){const words=lang==='ar'?ar:en,html=render(lang,true,s=>{s.tables.work_centers=[{id:'printer',name:'Printer',name_ar:'طابعة'}];},lot);
+  for(const key of ['unfinishedQuantity','unfinishedInputSource','unfinishedProduct','unfinishedAvailable','unfinishedProcess','unfinishedConservationHelp'])assert.ok(html.includes(words[key]));
+  assert.match(html,/380/);assert.match(html,/Printing/);assert.match(html,/value="machine:printer"/);assert.doesNotMatch(html,/value="line:line"/);
+ }
+});
+test('selected WIP from another factory is masked and cannot supply a production unit',()=>{
+ const html=render('en',true,()=>{},{id:'foreign-lot',factory_id:'other',product_name:'Foreign private product',quantity_available:380,destinations:[{unit_kind:'machine',unit_id:'foreign-machine',item_id:'item'}]});
+ assert.ok(!html.includes('Foreign private product'));assert.ok(!html.includes('machine:foreign-machine'));assert.match(html,/<button class="primary" disabled/);
 });

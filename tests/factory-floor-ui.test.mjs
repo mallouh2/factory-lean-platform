@@ -7,6 +7,7 @@ import { build } from "esbuild";
 import en from "../src/locales/en.json" with { type: "json" };
 import ar from "../src/locales/ar.json" with { type: "json" };
 import { floorScenarios, floorSnapshot } from "./fixtures/factory-floor.mjs";
+import {planningProductTones} from '../src/utils/planning.mjs';
 
 const require = createRequire(import.meta.url);
 const bundle = await build({ entryPoints: ["src/features/FactoryFloorV2.tsx"],
@@ -35,6 +36,16 @@ function render(scenario, lang = "en", selected = null, permissions = null, conf
 function machine(html, id, index = 0) {
   return [...html.matchAll(new RegExp(`<button[^>]*data-machine-id="${id}"[\\s\\S]*?</button>`, "g"))][index]?.[0] || "";
 }
+test('Floor uses the full Planning catalog palette at line level without repeating Product context on normal machines',()=>{
+  const tone=planningProductTones(floorSnapshot().tables.products).get('P1');
+  for(const lang of ['en','ar']){
+    const html=render('running',lang);
+    assert.ok(html.includes(`--product-surface:${tone.surface}`));
+    assert.ok(html.includes(`--product-edge:${tone.edge}`));
+    assert.match(html,/data-execution-state="active"/);
+    for(const id of ['M1','M2','M3','M4'])assert.doesNotMatch(machine(html,id),/product-identity|ITEM-041/);
+  }
+});
 test("Factory Floor shows separate physical and flow states in both languages", () => {
   for (const [lang, words] of [["en", en], ["ar", ar]]) {
     const html = render("blocked", lang);

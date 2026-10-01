@@ -2,10 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { formatTime, localName } from "@/components/ui";
 import { formatLocalInput, localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import { formatDuration } from "@/utils/production-flow.mjs";
+import { lineExecutionQueue } from '@/utils/execution-queue.mjs';
+import { productionProgress } from '@/utils/production-recording.mjs';
+import { orderAttention } from '@/utils/order-overview.mjs';
+import { requestPresentation } from '@/utils/request-queue.mjs';
+import ProductIdentity from '@/components/ProductIdentity';
+import { productColor } from '@/utils/product-colors.mjs';
 import {
   capableLines, deadlineStatus, durationMs, finishAfterWorkingMs, firstAvailable, freeGaps, lineCapacity,
   groupPlanningRequests, isScheduled, panViewStart, workingCalendar, workingSegments, wheelViewStart,
-  overlappingItems, planningBoardStatus, planningProductTones, planningWarnings, previewPlacement,
+  overlappingItems, planningBoardStatus, planningWarnings, previewPlacement,
   proposeSchedule, sortedLineSchedule, sortPlanningItems, zoomViewStart,
   suggestPlanningSlots,
 } from "@/utils/planning.mjs";
@@ -62,7 +68,6 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
   const headingRef = useRef<HTMLHeadingElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
-  const progressedListRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const slotPanelRef = useRef<HTMLDivElement>(null);
   const reasonSelectRef = useRef<HTMLSelectElement>(null);
@@ -78,7 +83,6 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
   const lines = s.tables.production_lines || [];
   const centers = s.tables.work_centers || [];
   const capabilities = s.tables.work_center_capabilities || [];
-  const tones = planningProductTones(products);
   const requestById = new Map(requests.map((request) => [String(request.id), request]));
   const active = orders.filter((order) => order.status === "planned");
   const visible = (order: Row) => (!priorityFilter || requestById.get(String(order.request_id))?.priority === priorityFilter) &&
@@ -95,7 +99,8 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     Boolean(order.line_id) && visible(order));
   const editing = orders.find((order) => String(order.id) === editingId);
   const selectedLine = lines.find((line) => String(line.id) === lineId);
-  const availableLines = editing ? capableLines(editing, lines, centers, capabilities) : [];
+  const availableLines = editing ? capableLines(editing, lines, centers, capabilities)
+    .filter((line: Row) => !durationMs(editing, line, centers, capabilities).error) : [];
   const canEdit = can("orders", "edit");
   const editableItem = (order: Row) => canEdit && order.status === "planned" &&
     Number(order.produced_quantity || 0) === 0 && !order.planning_locked_at &&
@@ -112,7 +117,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
   const slotOrder = orders.find((order) => String(order.id) === slotSearch?.itemId);
   const chosenSlot = slotChoice === null ? null : slotSearch?.suggestions[slotChoice] || null;
   const productStyle = (order: Row) => {
-    const tone = tones.get(String(order.product_id)) || { surface: "#e8edf0", ink: "#405a68", edge: "#7894a1" };
+    const tone = productColor(order.product_id, order.id);
     return { "--planning-product-bg": tone.surface, "--planning-product-ink": tone.ink,
       "--planning-product-edge": tone.edge } as React.CSSProperties;
   };
@@ -121,6 +126,20 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     { error: order?.planning_locked_at ? "planningLockedMessage" : "planningAlreadyStarted" };
   const limited = (s.truncatedTables || []).some((table) =>
     ["production_orders", "production_requests", "production_lines", "work_centers", "work_center_capabilities"].includes(table));
+  function dragReason(order: Row) {
+    if (order.planning_locked_at) return "planningLockedMessage";
+    if (order.status !== "planned") return planningBoardStatus(order);
+    if (Number(order.produced_quantity || 0) > 0) return "planningAlreadyStarted";
+    if (isScheduled(order) && Date.parse(String(order.start_time)) <= Date.now()) return "planningPastSchedule";
+    const candidates = capableLines(order, lines, centers, capabilities);
+    const checks = candidates.map((line: Row) => durationMs(order, line, centers, capabilities));
+    if (checks[0]?.error === "planningMissingRate" && !["meter", "piece"].includes(String(order.unit)))
+      return "planningLegacyUnit";
+    return checks.some((check: { error?: string }) => !check.error) ? "" :
+      checks[0]?.error || "planningIncompatibleLine";
+  }
+  const canDragItem = (order: Row) => editableItem(order) && !limited && canSeeResources &&
+    !busy && !savingDropId && !dragReason(order);
   const zoomLevels = [
     { key: "planningZoomHalfDay", span: 12 * 60 * 60_000, tick: 30 * 60_000, snap: 30 * 60_000, minWidth: 1320 },
     { key: "planningZoomDay", span: 24 * 60 * 60_000, tick: 60 * 60_000, snap: 60 * 60_000, minWidth: 1320 },
@@ -143,6 +162,15 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
   const riskOf = (slot: {order: Row; finish: number | null}) => Number.isFinite(slot.finish)
     ? deadlineStatus(slot.finish, requestById.get(String(slot.order.request_id))?.required_by)
     : "planningDeadlineUnknown";
+  const visualState = (order: Row) => {
+    if (['completed', 'cancelled'].includes(String(order.status))) return String(order.status);
+    const due = requestById.get(String(order.request_id))?.required_by;
+    const risk = deadlineStatus(Date.parse(String(order.expected_finish || '')), due);
+    if (orderAttention(order) || Date.parse(String(due || '')) < Date.now() || risk === 'planningLate') return 'delayed';
+    if (order.status === 'active') return 'active';
+    if (risk === 'planningAtRisk') return 'risk';
+    return isScheduled(order) ? 'scheduled' : 'waiting';
+  };
   const summary = { waiting: planningItems.length, planned: plannedSlots.length,
     atRisk: plannedSlots.filter((slot) => riskOf(slot) === "planningAtRisk").length,
     late: plannedSlots.filter((slot) => riskOf(slot) === "planningLate").length };
@@ -212,13 +240,6 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
   useEffect(() => {
     if (slotSearch) slotPanelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [slotSearch]);
-  useEffect(() => {
-    if (!optimistic) return;
-    const requestId = String(orders.find((order) => String(order.id) === optimistic.id)?.request_id || "");
-    const card = [...(progressedListRef.current?.querySelectorAll<HTMLElement>("[data-request-id]") || [])]
-      .find((candidate) => candidate.dataset.requestId === requestId);
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  }, [optimistic]);
   useEffect(() => {
     if (!editing) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -498,29 +519,41 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     finally { setBusy(false); }
   }
 
-  function itemRow(order: Row, section: "waiting" | "progressed") {
-    const canDrag = editableItem(order) && !limited && canSeeResources && !busy && !savingDropId;
-    return <div className="planning-product-entry" key={String(order.id)}><button type="button" className={"planning-product-card" +
+  function itemRow(order: Row, section: "waiting" | "progressed", mobile = false) {
+    const canDrag = canDragItem(order);
+    const blockedReason = canEdit && canSeeResources && order.status === "planned" ? dragReason(order) : "";
+    return <div className="planning-product-entry" key={String(order.id)}><button type="button" className={(mobile ? 'planning-mobile-product ' : '') + "planning-product-card" +
       (draggingId === String(order.id) ? " planning-product-dragging" : "") +
       (rejectedId === String(order.id) ? " planning-product-rejected" : "") +
       (savingDropId === String(order.id) ? " planning-product-saving" : "")}
       onClick={() => openEditor(order)}
-      title={lockInfo(order) || undefined}
-      style={productStyle(order)} disabled={Boolean(savingDropId) || !can("orders", "view")}
+      title={lockInfo(order) || (blockedReason ? t(blockedReason) : undefined)}
+      style={productStyle(order)} data-state={visualState(order)} disabled={Boolean(savingDropId) || !can("orders", "view")}
       draggable={canDrag}
       onPointerDown={() => { if (order.planning_locked_at) setError("planningLockedMessage"); }}
-      onDragStart={(event) => { event.dataTransfer.setData("text/plain", String(order.id));
+      onDragStart={(event) => { if (!canDrag) { event.preventDefault(); return; }
+        event.dataTransfer.setData("text/plain", String(order.id));
         event.dataTransfer.effectAllowed = "move"; draggingRef.current = String(order.id);
         lastHoverRef.current = null;
         setDraggingId(String(order.id)); setError(""); }}
       onDragEnd={() => finishDrag(String(order.id))}
       aria-label={`${localName(productOf(order), lang)} · ${amountOf(order)} · ${t(planningBoardStatus(order))} · ${String(requestOf(order)?.name || requestOf(order)?.code || "")}`}>
-      <strong dir="auto">{localName(productOf(order), lang)}</strong>
+      <strong dir="auto"><ProductIdentity productId={order.product_id} productItemId={order.id}>
+        {localName(productOf(order), lang)}</ProductIdentity></strong>
       <span>{amountOf(order)}</span>
-      <small className="planning-product-state">{order.planning_locked_at &&
+      <small className="planning-product-state" data-state={order.status === 'active' ? 'active' : isScheduled(order) ? 'scheduled' : 'waiting'}>{order.planning_locked_at &&
         <span className="planning-lock-mark" aria-label={t("planningLocked")}>🔒 </span>}
         {t(planningBoardStatus(order))}</small>
-    </button>{section === "waiting" && editableItem(order) && canSeeResources && !limited &&
+      {['delayed', 'risk'].includes(visualState(order)) && <small className="planning-attention-label" data-state={visualState(order)}>! {t(visualState(order) === 'delayed' ? 'delayed' : 'planningAtRisk')}</small>}
+      {mobile && <small className="planning-product-state"><bdi dir="ltr">{String(requestOf(order)?.code || order.code || '')}</bdi></small>}
+      {Boolean(order.line_id && order.start_time) && <span className="planning-product-schedule">
+        <bdi dir="auto">{localName(lines.find(line => line.id === order.line_id), lang)}</bdi>
+        <span>{t('executionPlannedStart')}: {formatTime(order.start_time, lang, zone)}</span>
+        {order.expected_finish && <span>{t('executionPlannedFinish')}: {formatTime(order.expected_finish, lang, zone)}</span>}
+      </span>}
+      {order.status === 'active' && <span className="planning-product-schedule">{t('recordingGoodSoFar')}: {productionProgress(order).good.toLocaleString(lang)} {unitOf(order)}</span>}
+      {blockedReason && <small className="planning-drag-reason">{t(blockedReason)}</small>}
+    </button>{section === "waiting" && canDrag &&
       <button type="button" className="planning-find-slot" disabled={busy || Boolean(savingDropId)}
         onClick={() => findSlots(order)}>{t("planningFindSlot")}</button>}</div>;
   }
@@ -534,16 +567,17 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
       .map(riskOf);
     const risk = requestRisk.includes("planningLate") ? "planningLate" :
       requestRisk.includes("planningAtRisk") ? "planningAtRisk" : null;
-    return <article className="planning-request-card" role="listitem" data-request-id={key} key={key}>
+    const overdue = items.some(item => !['completed', 'cancelled'].includes(String(item.status))) && Date.parse(String(request?.required_by || '')) < Date.now();
+    return <article className="planning-request-card" role="listitem" data-request-id={key} data-state={overdue ? 'delayed' : risk === 'planningLate' ? 'delayed' : risk === 'planningAtRisk' ? 'risk' : section === 'waiting' ? 'waiting' : requestPresentation(request || {}, items).tone} key={key}>
       <header className="planning-request-head"><div><small><bdi dir="ltr">{String(request?.code || items[0].code)}</bdi></small>
-        <h4 dir="auto">{String(request?.name || request?.code || items[0].code)}</h4></div>
+        {section !== 'waiting' && <h4 dir="auto">{String(request?.name || request?.code || items[0].code)}</h4>}</div>
         <span className={"planning-request-priority planning-priority-" + String(request?.priority || "normal")}>
           {request?.priority === "unspecified" ? t("notSpecified") : t(`priority_${request?.priority || "normal"}`)}</span></header>
       <div className="planning-request-meta">
-        {request?.required_by && <span>{t("requiredBy")}: {formatTime(request.required_by, lang, zone)}</span>}
+        {(request?.required_by || section === 'waiting') && <span>{t("requiredBy")}: {request?.required_by ? formatTime(request.required_by, lang, zone) : t('notSpecified')}</span>}
+        {overdue && <span className="planning-attention-label" data-state="delayed">! {t('requestsDeadlinePassed')}</span>}
         {risk && <span className={"planning-request-risk " + risk}>{t(risk)}</span>}
-        <span>{section === "waiting" ? `${items.length} ${t("planningWaitingCount")}` :
-          `${items.length} / ${total} ${t("planningProgressedCount")}`}</span></div>
+        <span>{section === 'waiting' ? `${items.length} ${t('planningWaitingCount')}` : `${items.length} / ${total} ${t("planningProgressedCount")}`}</span></div>
       <div className="planning-request-items">{items.map((item) => itemRow(item, section))}</div>
     </article>;
   }
@@ -554,7 +588,8 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     setZoomIndex(bounded);
   }
 
-  return <section className="planning-page">
+  return <section className="planning-page ops-workbench" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <p className="ops-page-subtitle">{t('planningOperationalSubtitle')}</p>
     <div className="planning-filters">
       <label>{t("line")} <select value={lineFilter} onChange={(event) => setLineFilter(event.target.value)}>
         <option value="">{t("all")}</option>{lines.filter((line) => !line.archived).map((line) =>
@@ -574,6 +609,15 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     {!canSeeResources && <p className="planning-warning-banner" role="status">{t("planningResourcesPermission")}</p>}
     {error && !editing && <p className="planning-warning-banner" role="alert">{t(error)}</p>}
     <div className="planning-workspace">
+    <section className="planning-section planning-requests-waiting" aria-labelledby="planning-needs-title">
+      <header><h3 id="planning-needs-title">{t("planningWaitingTitle")} <span>{waitingGroups.length}</span></h3>
+        </header>
+      {waitingGroups.length ? <div className="planning-list" role="list">{waitingGroups.map((group) => requestCard(group, "waiting"))}</div> :
+        <p className="planning-empty">{t("planningQueueEmpty")}</p>}
+    </section>
+    <section className="planning-section planning-gantt" aria-labelledby="planning-scheduled-title">
+      <header><h3 id="planning-scheduled-title">{t("scheduled")} <span>{scheduled.length}</span></h3>
+        </header>
     <section className="planning-summary" aria-label={t("planningSummary")}>
       <dl>
         <div><dt>{t("planningSummaryWaiting")}</dt><dd>{formatQuantity(summary.waiting)}</dd></div>
@@ -581,17 +625,8 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
         <div><dt>{t("planningSummaryAtRisk")}</dt><dd>{formatQuantity(summary.atRisk)}</dd></div>
         <div><dt>{t("planningSummaryLate")}</dt><dd>{formatQuantity(summary.late)}</dd></div>
       </dl>
-      <p>{t("planningSummaryScope")}</p>
+      <small title={t('planningSummaryScope')}>{t('planningVisibleScope')}</small>
     </section>
-    <section className="planning-section planning-requests-waiting" aria-labelledby="planning-needs-title">
-      <header><h3 id="planning-needs-title">{t("planningWaitingTitle")} <span>{waitingGroups.length}</span></h3>
-        <p>{t("planningNeedsHelp")}</p></header>
-      {waitingGroups.length ? <div className="planning-list" role="list">{waitingGroups.map((group) => requestCard(group, "waiting"))}</div> :
-        <p className="planning-empty">{t("planningQueueEmpty")}</p>}
-    </section>
-    <section className="planning-section planning-gantt" aria-labelledby="planning-scheduled-title">
-      <header><h3 id="planning-scheduled-title">{t("scheduled")} <span>{scheduled.length}</span></h3>
-        <p>{t("planningGanttHelp")}</p></header>
       {slotSearch && slotOrder && <div className="planning-slot-panel" ref={slotPanelRef} role="region"
         aria-label={t("planningSlotSuggestions")}>
         <div className="planning-slot-heading"><div><strong>{t("planningSlotSuggestions")}</strong>
@@ -677,8 +712,15 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
               " planning-drop-invalid" : " planning-drop-valid" : "";
             return <div className={"planning-lane" + dropClass +
               (linePreview ? " planning-drop-hover" : "")} key={String(line.id)}>
-              <strong className="planning-line-label" dir="auto">
+              <strong className="planning-line-label" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
                 <span className="planning-line-name">{localName(line, lang)}</span>
+                {line.paused_at && <small>{t('planningLinePaused')}</small>}
+                {lineExecutionQueue(orders, line.id).current?.status === 'active' && <small className="planning-current-label">● {t('active')}</small>}
+                {([['executionCurrentReady', lineExecutionQueue(orders, line.id).current],
+                  ['executionNext', lineExecutionQueue(orders, line.id).next]] as const).map(([label, item]) => item &&
+                  <small className="planning-line-job" key={label}><span>{t(label)}</span>
+                    <bdi dir="auto"><ProductIdentity productId={item.product_id} productItemId={item.id}>{localName(productOf(item), lang)}</ProductIdentity></bdi>
+                    <bdi dir="ltr">{String(requestOf(item)?.code || item.code)}</bdi></small>)}
                 {load && <><span className="planning-line-load" dir="ltr"
                   title={load.incomplete ? t("planningLoadIncomplete") : t("planningLoadDetail")}>{load.percent === null
                     ? t("planningLoadNoCapacity") : `${formatQuantity(load.percent)}%`} · {formatDuration(load.bookedMinutes, lang)} / {formatDuration(load.availableMinutes, lang)}{load.incomplete ? " *" : ""}</span>
@@ -735,9 +777,12 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
                   const setupFinish = !breakdown.error && breakdown.setupMs > 0 && slot.finish !== null
                     ? finishAfterWorkingMs(slot.start, breakdown.setupMs, calendar, zone) : slot.start;
                   return <button type="button" key={String(order.id)}
+                    data-state={conflicts.has(String(order.id)) ? 'blocked' : visualState(order)}
                     className={"planning-gantt-block" + (dueState === "planningLate" ? " planning-gantt-late" :
                       dueState === "planningAtRisk" ? " planning-gantt-risk" : "") +
                       (hasRisk ? " planning-has-risk" : "") +
+                      (order.status === 'active' ? ' planning-gantt-active' : '') +
+                      (order.planning_locked_at ? ' planning-gantt-locked' : '') +
                       (conflicts.has(String(order.id)) ? " planning-gantt-conflict" : "") +
                       (blockWidth < 6 ? " planning-gantt-compact" : "") +
                       (settlingId === String(order.id) ? " planning-gantt-settling" : "") +
@@ -746,9 +791,10 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
                       width: blockWidth + "%",
                       ...productStyle(order) }}
                     disabled={!can("orders", "view")}
-                    draggable={editableItem(order) && !limited && canSeeResources && !savingDropId}
+                    draggable={canDragItem(order)}
                     onPointerDown={() => { if (order.planning_locked_at) setError("planningLockedMessage"); }}
-                    onDragStart={(event) => { event.dataTransfer.setData("text/plain", String(order.id));
+                    onDragStart={(event) => { if (!canDragItem(order)) { event.preventDefault(); return; }
+                      event.dataTransfer.setData("text/plain", String(order.id));
                       event.dataTransfer.effectAllowed = "move"; draggingRef.current = String(order.id);
                       lastHoverRef.current = null;
                       setDraggingId(String(order.id)); setError(""); }}
@@ -760,8 +806,13 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
                         " · " + t("planningTotalWorking") + ": " + formatDuration(Math.ceil(breakdown.totalMs / 60_000), lang) : "") +
                       " · " + formatTime(new Date(slot.start).toISOString(), lang, zone) +
                       " – " + (slot.finish ? formatTime(new Date(slot.finish).toISOString(), lang, zone) : t("planningUnknownFinish")) +
+                      (request?.required_by ? ' · ' + t('requiredBy') + ': ' + formatTime(request.required_by, lang, zone) : '') +
                       (order.planning_locked_at ? " · " + lockInfo(order) : "")}
                     aria-label={String(request?.code || order.code) + " · " + localName(productOf(order), lang) +
+                      ' · ' + amountOf(order) + ' · ' + t('executionPlannedStart') + ': ' + formatTime(order.start_time, lang, zone) +
+                      ' · ' + t('executionPlannedFinish') + ': ' + formatTime(order.expected_finish, lang, zone) +
+                      (visualState(order) === 'delayed' ? ' · ' + t('delayed') : '') +
+                      (conflicts.has(String(order.id)) ? ' · ' + t('planningOverlap') : '') +
                       (hasRisk ? " · " + t(dueState) : "") +
                       (order.planning_locked_at ? " · " + t("planningLocked") : "")}>
                     {setupFinish > slot.start && setupFinish < finish &&
@@ -772,6 +823,8 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
                     {hasRisk && <span className={"planning-risk-mark " + dueState} aria-hidden="true"
                       title={t(dueState)}>!</span>}
                     <small><bdi dir="ltr">{String(request?.code || order.code)}</bdi>
+                      {' · '}{amountOf(order)}{order.status === 'active' ? ' · ' + t('active') : ''}
+                      {visualState(order) === 'delayed' ? ' · ! ' + t('delayed') : visualState(order) === 'risk' ? ' · ! ' + t('planningAtRisk') : ''}
                       {slot.finish === null ? " · ?" : ""}{["urgent", "high"].includes(String(request?.priority)) ?
                         " · " + t(`priority_${request?.priority}`) : ""}</small>
                   </button>;
@@ -802,11 +855,29 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
           })}
         </div>
       </div>
+      <div className="planning-mobile-lines" aria-label={t('planningLineSchedule')}>
+        {visibleLines.map(line => {
+          const queue = lineExecutionQueue(orders, line.id);
+          const slots = lineSchedules.get(String(line.id)) || [];
+          const additional = slots.filter((slot: { order: Row }) => ![queue.current?.id, queue.next?.id].includes(slot.order.id));
+          return <article className="planning-mobile-line" key={String(line.id)}>
+            <header><h4 dir="auto">{localName(line, lang)}</h4>
+              {line.paused_at && <span>{t('planningLinePaused')}</span>}</header>
+            {([['executionCurrentReady', queue.current], ['executionNext', queue.next]] as const).map(([label, item]) => item &&
+              <div className="planning-mobile-job" key={label}><small>{t(label)}</small>
+                {itemRow(item, 'progressed', true)}</div>)}
+            {additional.length > 0 ? <details><summary>{t('planningLineSchedule')} · {additional.length}</summary>
+              {additional
+                .map((slot: { order: Row }) => <div className="planning-mobile-job" key={String(slot.order.id)}>{itemRow(slot.order, 'progressed', true)}</div>)}
+            </details> : !queue.current && <p className="planning-empty">{t('planningScheduleEmpty')}</p>}
+          </article>;
+        })}
+      </div>
     </section>
     <section className="planning-section planning-requests-progressed" aria-labelledby="planning-progressed-title">
       <header><h3 id="planning-progressed-title">{t("planningProgressedTitle")} <span>{progressedGroups.length}</span></h3>
-        <p>{t("planningProgressedHelp")}</p></header>
-      {progressedGroups.length ? <div className="planning-list" role="list" ref={progressedListRef}>{progressedGroups.map((group) =>
+        </header>
+      {progressedGroups.length ? <div className="planning-list" role="list">{progressedGroups.map((group) =>
         requestCard(group, "progressed"))}</div> :
         <p className="planning-empty">{t("planningScheduleEmpty")}</p>}
     </section>
@@ -830,7 +901,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
           {availableLines.map((line: Row) => <option key={String(line.id)} value={String(line.id)}>{localName(line, lang)}</option>)}
         </select></label>
         {!canSeeResources ? <p className="planning-warning">{t("planningResourcesPermission")}</p> :
-          !availableLines.length && <p className="planning-warning">{t("planningNoCapableLine")}</p>}
+          !availableLines.length && <p className="planning-warning">{t(dragReason(editing) || "planningNoCapableLine")}</p>}
         <label className="planning-field"><span>{t("start_time")} ({zone})</span>
           <input type="datetime-local" required value={start} disabled={!editableItem(editing)}
             onChange={(event) => setStart(event.target.value)} /></label>

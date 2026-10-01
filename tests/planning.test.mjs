@@ -70,6 +70,62 @@ const snapshot = { factory: { id: "F", timezone: "UTC" }, tables: {
   production_lines: lines, work_centers: centers, work_center_capabilities: capabilities,
 } };
 
+test('compact line view uses the same persisted current/next jobs and labelled planned timestamps in EN/AR', () => {
+  for (const [lang, dictionary] of [['en', en], ['ar', ar]]) {
+    const data = structuredClone(snapshot);
+    data.tables.production_orders[1].expected_finish = '2026-10-08T10:00:00Z';
+    const before = JSON.stringify(data);
+    const html = renderToStaticMarkup(createElement(ProductionPlanning, {
+      snapshot: data, lang, t: key => dictionary[key] || key, can: () => true, command: async () => {},
+    }));
+    const compact = html.split('class="planning-mobile-lines"')[1].split('class="planning-section planning-requests-progressed"')[0];
+    assert.ok(compact.includes(dictionary.executionCurrentReady));
+    assert.ok(compact.includes('PO-2'));
+    assert.ok(compact.includes(dictionary.executionPlannedStart));
+    assert.ok(compact.includes(dictionary.executionPlannedFinish));
+    assert.ok(html.indexOf('planning-section planning-requests-waiting') < html.indexOf('planning-section planning-gantt'));
+    assert.equal(JSON.stringify(data), before);
+  }
+});
+
+test('one compact unscheduled queue precedes desktop Gantt and mobile schedules in EN/AR', () => {
+  for (const [lang, dictionary] of [['en', en], ['ar', ar]]) {
+    const data = structuredClone(snapshot);
+    data.tables.production_requests = Array.from({ length: 12 }, (_, i) => ({ ...requests[0], id: `R${i}`, code: `PO-${i}` }));
+    data.tables.production_orders = data.tables.production_requests.map((r, i) => ({ ...orders[0], id: `ITEM${i}`, request_id: r.id }));
+    const before = structuredClone(data);
+    const html = renderToStaticMarkup(createElement(ProductionPlanning, { snapshot: data, lang,
+      t: key => dictionary[key] || key, can: () => true, command: () => { throw Error('layout must not write'); } }));
+    assert.equal((html.match(/class="planning-section planning-requests-waiting"/g) || []).length, 1);
+    const waitingIndex = html.indexOf('planning-section planning-requests-waiting');
+    assert.ok(waitingIndex < html.indexOf('planning-section planning-gantt'));
+    assert.ok(waitingIndex < html.indexOf('planning-mobile-lines'));
+    const waiting = html.slice(waitingIndex, html.indexOf('planning-section planning-gantt'));
+    assert.equal((waiting.match(/data-request-id=/g) || []).length, 12, 'scrolling never hides demand from the DOM');
+    assert.match(waiting, /<span>12<\/span>/);
+    assert.doesNotMatch(waiting, /<h4/, 'large request titles stay out of the source queue');
+    assert.ok(waiting.includes(dictionary.requiredBy));
+    assert.deepEqual(data, before);
+  }
+});
+
+test('current execution remains green with a separate deadline-risk marker and retains planned timings on mobile',()=>{
+  const now=Date.now(),stamp=minutes=>new Date(now+minutes*60000).toISOString();
+  const data=structuredClone(snapshot);
+  data.tables.production_requests[1].required_by=stamp(120);
+  Object.assign(data.tables.production_orders[1],{status:'active',start_time:stamp(-30),expected_finish:stamp(30),actual_start:stamp(-25)});
+  const before=JSON.stringify(data);
+  for(const [lang,words] of [['en',en],['ar',ar]]){
+    const html=renderToStaticMarkup(createElement(ProductionPlanning,{snapshot:data,lang,t:key=>words[key]||key,can:()=>true,command:()=>{throw Error('render cannot write');}}));
+    assert.match(html,/data-state="active" class="planning-gantt-block[^"\n]*planning-gantt-active/);
+    assert.match(html,/planning-risk-mark planningAtRisk/);
+    const compact=html.split('class="planning-mobile-lines"')[1].split('class="planning-section planning-requests-progressed"')[0];
+    assert.ok(compact.includes(words.executionPlannedStart));assert.ok(compact.includes(words.executionPlannedFinish));
+    assert.ok(compact.includes(words.planningInProduction));
+  }
+  assert.equal(JSON.stringify(data),before);
+});
+
 test("planner sees both request sections and focused fields in English and Arabic", () => {
   for (const [lang, dictionary, queueLabel] of [["en", en, "Waiting for planning"], ["ar", ar, "بانتظار التخطيط"]]) {
     const html = renderToStaticMarkup(createElement(ProductionPlanning, { snapshot,
@@ -328,7 +384,7 @@ function interactivePlanner(testSnapshot, initial = {}, command = async () => {}
     (name) => name === "react" ? fakeReact : require(name), moduleWithHooks, moduleWithHooks.exports);
   return { tree: moduleWithHooks.exports.default({ snapshot: testSnapshot,
     t: (key) => (initial.lang === "ar" ? ar : en)[key] || key,
-    lang: initial.lang ?? "en", can: () => true, command }), updates };
+    lang: initial.lang ?? "en", can: initial.can ?? (() => true), command }), updates };
 }
 function allNodes(node, predicate) {
   if (!node || typeof node !== "object") return [];
@@ -501,6 +557,7 @@ test("clicking or dragging an item targets only its own product and quantity", (
   const multi = { ...snapshot, tables: { ...snapshot.tables,
     production_orders: [orders[0], other],
     products: [...snapshot.tables.products, { id: "Q", name: "Second product" }],
+    work_center_capabilities: [...capabilities, { ...capabilities[0], product_id: "Q" }],
   } };
   const { tree, updates } = interactivePlanner(multi);
   const cards = allNodes(tree, (node) => node.type === "button" &&
@@ -550,6 +607,71 @@ test("drop rejects an incompatible line and directly saves only the dragged item
   } }]);
   assert.ok(!updates.some((update) => update.position === 0 && update.value === "O1"));
   assert.ok(prevented >= 2);
+});
+
+test("real TESTING HDPE meter item is draggable, while legacy unit item explains its rejection in EN/AR", () => {
+  const good = { ...orders[0], id: "e7662901-96d1-468b-9caf-a90b7a044c70", code: "PO-0000032",
+    product_id: "bf6a9de2-16d6-5fa6-b637-85b214706608", target_quantity: 50, unit: "meter" };
+  const legacy = { ...good, id: "47600b62-c465-4444-9430-7fc38a2c3f69", code: "PO-0000007",
+    target_quantity: 56, unit: "unit" };
+  const rates = [{ ...capabilities[0], product_id: good.product_id, rate: 200, rate_unit: "meter", setup_minutes: 45 }];
+  const visual = { ...snapshot, tables: { ...snapshot.tables, production_orders: [good, legacy],
+    products: [{ id: good.product_id, name: "HDPE Pipe 32 mm", name_ar: "أنبوب HDPE 32 مم" }],
+    work_center_capabilities: rates } };
+  const before = structuredClone(visual);
+  for (const lang of ["en", "ar"]) {
+    const { tree } = interactivePlanner(visual, { lang });
+    const cards = allNodes(tree, node => node.props?.className?.startsWith("planning-product-card"));
+    assert.equal(cards[0].props.draggable, true);
+    assert.equal(cards[1].props.draggable, false);
+    assert.equal(cards[1].props.disabled, false, 'invalid items remain inspectable');
+    assert.equal(cards[1].props.title, (lang === 'ar' ? ar : en).planningLegacyUnit);
+    assert.equal(allNodes(cards[1], node => node.props?.className === "planning-drag-reason").length, 1);
+    let prevented = false;
+    cards[1].props.onDragStart({ preventDefault: () => { prevented = true; },
+      dataTransfer: { setData: () => assert.fail('invalid item must not create a drag payload') } });
+    assert.equal(prevented, true);
+    assert.equal(allNodes(tree, node => node.props?.className === "planning-find-slot").length, 1);
+  }
+  assert.equal(durationMs(legacy, lines[0], centers, rates).error, 'planningMissingRate');
+  assert.ok(!durationMs(good, lines[0], centers, rates).error);
+  assert.deepEqual(visual, before);
+});
+
+test("drag affordance and editor lines reuse capability, unit and rate validation", () => {
+  const item = { ...orders[0], unit: "piece" };
+  for (const [rates, reason] of [
+    [[], "planningIncompatibleLine"],
+    [[{ ...capabilities[0], rate_unit: "meter" }], "planningMissingRate"],
+    [[{ ...capabilities[0], rate: 0 }], "planningMissingRate"],
+  ]) {
+    const visual = { ...snapshot, tables: { ...snapshot.tables, production_orders: [item], work_center_capabilities: rates } };
+    const { tree } = interactivePlanner(visual, { item: "O1" });
+    const card = allNodes(tree, node => node.props?.className?.startsWith("planning-product-card"))[0];
+    assert.equal(card.props.draggable, false);
+    assert.equal(card.props.title, en[reason]);
+    assert.equal(durationMs(item, lines[0], centers, rates).error, reason);
+    const drawer = allNodes(tree, node => node.props?.className === 'planning-drawer')[0];
+    assert.equal(allNodes(drawer, node => node.type === 'option' && node.props.value === 'L').length, 0,
+      'invalid typed line is not offered by the editor');
+  }
+});
+
+test("valid drag respects real permissions and completed/cancelled items cannot enter planning", async () => {
+  const item = { ...orders[0], unit: "piece" };
+  for (const can of [(area, action) => action !== 'edit', area => area !== 'centers', area => area !== 'lines']) {
+    const visual = { ...snapshot, tables: { ...snapshot.tables, production_orders: [item] } };
+    const { tree } = interactivePlanner(visual, { can });
+    assert.equal(allNodes(tree, node => node.props?.className?.startsWith("planning-product-card"))[0].props.draggable, false);
+  }
+  for (const status of ['completed', 'cancelled']) {
+    const visual = { ...snapshot, tables: { ...snapshot.tables, production_orders: [{ ...item, status }] } };
+    const { tree } = interactivePlanner(visual, { dragging: 'O1' }, () => assert.fail('terminal item must not schedule'));
+    const cards = allNodes(tree, node => node.props?.className?.startsWith("planning-product-card"));
+    assert.ok(cards.every(card => !card.props.draggable));
+    const lane = allNodes(tree, node => node.props?.className === 'planning-lane-track')[0];
+    await lane.props.onDrop({ preventDefault: () => {}, dataTransfer: { getData: () => 'O1' } });
+  }
 });
 
 test("meter and piece rates schedule independent items without shifting existing jobs", () => {
@@ -788,7 +910,7 @@ test("board status uses stored item state and disables started or completed drag
   assert.equal(planningBoardStatus({ ...orders[1], status: "active" }), "planningInProduction");
   assert.equal(planningBoardStatus({ ...orders[1], status: "completed" }), "planningCompleted");
   const visual = { ...snapshot, tables: { ...snapshot.tables, production_orders: [
-    orders[0], orders[1], { ...orders[1], id: "ACTIVE", status: "active" },
+    { ...orders[0], unit: "piece" }, orders[1], { ...orders[1], id: "ACTIVE", status: "active" },
     { ...orders[1], id: "DONE", status: "completed" },
   ] } };
   const { tree } = interactivePlanner(visual);

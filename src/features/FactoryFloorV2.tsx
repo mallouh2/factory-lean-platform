@@ -30,6 +30,7 @@ import type { Row } from "@/types";
 import ProductionRecording from "./ProductionRecording";
 import { productionProgress, entryQuantities } from "@/utils/production-recording.mjs";
 import HistoryLimitWarning from "@/components/HistoryLimitWarning";
+import ProductIdentity from '@/components/ProductIdentity';
 /**
  * Factory Floor V2. Renders the SAME snapshot through the
  * SAME logic as V1: physical status comes from work_centers.status, computed
@@ -133,13 +134,13 @@ export default function FactoryFloorV2(
     const unit = t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : "legacyUnit");
     const variance = (minutes: number) => minutes === 0 ? t("executionOnTime")
       : `${formatDuration(Math.abs(minutes), lang)} ${t(minutes > 0 ? "executionLate" : "executionEarly")}`;
-    return <div className={`ff2-queue-job${ready ? " ff2-queue-ready" : ""}`} key={String(item.id)} data-product-item-id={String(item.id)}>
+    return <div className={`ff2-queue-job${ready ? " ff2-queue-ready" : ""}`} key={String(item.id)} data-product-item-id={String(item.id)} data-execution-state={String(item.status)}>
       <div className="ff2-queue-job-head">
         <strong>{label}</strong>
         <span>{item.status === "active" ? t("executionInProduction") : ready ? t("executionReady") : t("executionWaiting")}</span>
       </div>
       <div className="ff2-job-identity"><bdi className="ff2-job-order">{String(request?.code || item.code || "")}</bdi>
-        <div className="ff2-queue-product" dir="auto">{product ? localName(product, lang) : t("notAvailable")}</div></div>
+        <div className="ff2-queue-product" dir="auto"><ProductIdentity productId={item.product_id} productItemId={item.id}>{product ? localName(product, lang) : t("notAvailable")}</ProductIdentity></div></div>
       <dl className="recording-figures">
         {(["required", "good", "remaining"] as const).map(key => <div key={key}><dt>{t(key === "required" ? "recordingRequired" : key === "good" ? "recordingGoodSoFar" : "recordingRemaining")}</dt><dd>{productionProgress(item)[key].toLocaleString(lang)} {unit}</dd></div>)}
         {productionProgress(item).overproduction > 0 && <div><dt>{t("recordingOverproduction")}</dt><dd>{productionProgress(item).overproduction.toLocaleString(lang)} {unit}</dd></div>}
@@ -331,7 +332,7 @@ export default function FactoryFloorV2(
           <span className="sr-only">{t("flowSummary")}: </span>{t(compactFlow)}
           {compactFlow !== flowKey && <span className="sr-only"> · {t(flowKey)}</span>}
         </span> : <span className="sr-only">{t("flowSummary")}: {t(flowKey)}</span>}
-        {!c.line_id && !assignment && job && <span className="ff2-node-production"><strong dir="auto">{product ? localName(product, lang) : String(job.code || "")}</strong>
+        {!c.line_id && !assignment && job && <span className="ff2-node-production"><strong dir="auto"><ProductIdentity productId={job.product_id} productItemId={job.id}>{product ? localName(product, lang) : String(job.code || "")}</ProductIdentity></strong>
           <bdi>{String(requests.find(request => request.id === job.request_id)?.code || job.code || "")}</bdi>
           <span>{t("recordingRemaining")}: {productionProgress(job).remaining.toLocaleString(lang)} {t(job.unit === "meter" ? "meterShort" : job.unit === "piece" ? "pieceShort" : "legacyUnit")}</span></span>}
         {state === "stopped" && stop && <span className={`ff2-node-stop${stop.stop_nature === "planned" ? " ff2-stop-planned" : ""}`}>
@@ -754,7 +755,6 @@ export default function FactoryFloorV2(
   return (
     <section className="ff2 ff2-engineer" dir={lang === "ar" ? "rtl" : "ltr"} data-motion-paused={motionPaused}>
       <header className="ff2-head">
-        <div><p className="ff2-eyebrow">{t("ffOperations")}</p><h2>{t("floor")}</h2></div>
         {(can("lines", "edit") || can("centers", "edit") || can("lines", "create") || can("centers", "create")) &&
           <button className="ff2-manage" onClick={() => props.onManage()}>{t("manageLinesMachines")}</button>}
       </header>
@@ -1031,7 +1031,7 @@ export default function FactoryFloorV2(
                   )}
                 </section>
               )}
-              {flowNotice && <p role="status" className="notice">{t(flowNotice)}</p>}
+              {flowNotice && flowNotice !== 'saved' && <p role="alert" className="notice">{t(flowNotice)}</p>}
             </div>
             {(can("centers", "view") || can("centers", "edit")) && (
               <footer className="ff2-drawer-foot">

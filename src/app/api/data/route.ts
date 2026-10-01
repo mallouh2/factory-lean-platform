@@ -10,6 +10,12 @@ export async function GET(req: NextRequest) {
   let stage = "authentication";
   try {
     const { db, user } = await authenticatedClient();
+    if(req.nextUrl.searchParams.get('shift_context')==='1'){
+      stage='production_shift_context';
+      const {data: context,error: contextError}=await db.rpc('production_shift_context',{factory:req.nextUrl.searchParams.get('factory')});
+      if(contextError)throw contextError;
+      return NextResponse.json(context);
+    }
     stage = "factory_snapshot";
     const { data, error } = await db.rpc("factory_snapshot", {
       factory: req.nextUrl.searchParams.get("factory") || null,
@@ -27,6 +33,10 @@ export async function GET(req: NextRequest) {
       const {data: shifts,error: shiftError}=await db.from('production_shifts').select('*').eq('factory_id',data.factory.id).order('created_at');
       if(shiftError) throw shiftError;
       data.tables.production_shifts=shifts;
+      stage = 'production_shift_context';
+      const {data: context,error: contextError}=await db.rpc('production_shift_context',{factory:data.factory.id});
+      if(contextError)throw contextError;
+      data.tables.production_shift_context=[context];
     }
     return NextResponse.json({
       ...data,
@@ -46,7 +56,7 @@ export async function GET(req: NextRequest) {
     const code = e && typeof e === "object" && "code" in e ? e.code : null;
     if (e instanceof Error && e.message === "unauthorized")
       return NextResponse.json(safeError(e), { status: 401 });
-    if (code === "42501" || (e instanceof Error && e.message === "permission_denied"))
+    if (code === "42501" || (e && typeof e==='object' && 'message' in e && e.message === "permission_denied"))
       return NextResponse.json({ error: "permissionError" }, { status: 403 });
     // Loading failures are not permission denials. Keep the existing localized
     // data warning and internal database details on the server.
@@ -56,6 +66,10 @@ export async function GET(req: NextRequest) {
 const commandErrors: Record<string, string> = {
   shift_invalid: 'shiftInvalid',
   shift_required: 'shiftRequired',
+  shift_window_invalid: 'shiftWindowInvalid',
+  shift_overlap: 'shiftOverlap',
+  shift_no_match: 'shiftNoMatch',
+  shift_override_reason: 'shiftOverrideReasonRequired',
   recording_invalid_quantity: "recordingInvalidQuantity",
   recording_invalid_unit: "recordingInvalidUnit",
   recording_overproduction_confirmation: "recordingOverproductionConfirm",
@@ -75,6 +89,12 @@ const commandErrors: Record<string, string> = {
   category_in_use: "categoryInUse",
   category_alternative_conflict: "categoryAlternativeConflict",
   incompatible_alternative: "incompatibleAlternative",
+  unfinished_invalid: "unfinishedInvalid",
+  unfinished_invalid_lot: "unfinishedInvalidLot",
+  unfinished_insufficient: "unfinishedInsufficient",
+  unfinished_conservation: "unfinishedConservation",
+  unfinished_already_consumed: "unfinishedAlreadyConsumed",
+  history_unit_required: "historyUnitRequired",
   planning_already_started: "planningAlreadyStarted",
   planning_invalid_start: "planningInvalidStart",
   planning_incompatible_line: "planningIncompatibleLine",

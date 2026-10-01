@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { build } from "esbuild";
 import en from "../src/locales/en.json" with { type: "json" };
 import ar from "../src/locales/ar.json" with { type: "json" };
+import {planningProductTones} from '../src/utils/planning.mjs';
 
 const require = createRequire(import.meta.url);
 const bundled = await build({
@@ -54,6 +55,85 @@ const snapshot = {
     roles: [{ id: "R", name: "Sales Engineer", name_ar: "مهندس مبيعات" }],
   },
 };
+
+test('Requests share Planning Product identity while lifecycle tint and creator/mobile controls remain separate in EN/AR',()=>{
+  const tone=planningProductTones(snapshot.tables.products).get('P');
+  for(const [lang,dictionary] of [['en',en],['ar',ar]]){
+    const html=renderToStaticMarkup(createElement(ProductionOrdersV2,{
+      snapshot,t:key=>dictionary[key]||key,lang,can:()=>false,command:async()=>{},
+    }));
+    assert.ok(html.includes(`--product-surface:${tone.surface}`));
+    assert.ok(html.includes(`--product-edge:${tone.edge}`));
+    assert.match(html,/data-state="delayed"/);
+    assert.match(html,/data-state="waiting"/);
+    assert.match(html,/data-product-id="P"/);
+    assert.ok(html.includes(dictionary.requestedBy));
+    assert.match(html,/value="U"/);
+    assert.match(html,/popover="auto" role="dialog"/);
+    assert.match(html,/popoverTarget="requests-filter-sheet"|popovertarget="requests-filter-sheet"/);
+    assert.doesNotMatch(html,/Sales Owner|demo-banner/);
+  }
+});
+
+test('request filters share desktop/mobile state and survive a retained-snapshot refresh without commands',()=>{
+  const data=structuredClone(snapshot);data.tables.production_requests[1].requested_by='U2';
+  data.tables.production_requests[1].requested_by_name='Another requester';
+  const states=[];let hook=0;
+  const react=require('react'),mod={exports:{}};
+  new Function('require','module','exports',bundled.outputFiles[0].text)(name=>name==='react'?{...react,
+    useState:initial=>{const i=hook++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;
+      return[states[i],next=>{states[i]=typeof next==='function'?next(states[i]):next;}];},
+    useRef:()=>({current:null}),useEffect:()=>{},
+  }:require(name),mod,mod.exports);
+  function all(node){if(!node||typeof node!=='object')return[];if(Array.isArray(node))return node.flatMap(all);
+    return[node,...all(node.props?.children)];}
+  function render(){hook=0;return all(mod.exports.default({snapshot:data,lang:'en',t:key=>en[key]||key,
+    can:()=>false,command:()=>{throw Error('filters must not write');}}));}
+  const rows=nodes=>nodes.filter(node=>node.type==='button'&&node.props['data-state']);
+  let nodes=render();assert.equal(rows(nodes).length,2);
+  nodes.find(node=>node.type==='button'&&node.props.children?.[0]===en.plannedWaiting).props.onClick();
+  nodes=render();assert.equal(rows(nodes).length,1);
+  const creator=nodes.find(node=>node.type==='label'&&node.props.children?.[0]?.props.children===en.requestedBy).props.children[1];
+  creator.props.onChange({target:{value:'U2'}});
+  data.fetchedAt='new retained snapshot';nodes=render();assert.equal(rows(nodes).length,1);
+  const copies=nodes.filter(node=>node.type==='label'&&node.props.children?.[0]?.props.children===en.requestedBy);
+  assert.equal(copies.length,2);for(const label of copies)assert.equal(label.props.children[1].props.value,'U2');
+  nodes.find(node=>node.type==='button'&&node.props.children===en.historyClear).props.onClick();
+  assert.equal(rows(render()).length,2);
+});
+
+test('active request rows retain labelled planned timestamps without reclassifying the execution item',()=>{
+  const data=structuredClone(snapshot);data.tables.production_orders[0].start_time='2026-09-01T00:00:00Z';
+  const before=JSON.stringify(data);
+  for(const [lang,words] of [['en',en],['ar',ar]]){
+    const html=renderToStaticMarkup(createElement(ProductionOrdersV2,{snapshot:data,lang,t:key=>words[key]||key,can:()=>false,command:async()=>{}}));
+    assert.ok(html.includes(words.executionPlannedStart));assert.ok(html.includes(words.executionPlannedFinish));
+    assert.ok(html.includes(words.executionInProduction));
+  }
+  assert.equal(JSON.stringify(data),before);
+});
+
+test('request work queue distinguishes a recorded schedule from waiting without rewriting lifecycle facts in EN/AR', () => {
+  for (const [lang, dictionary] of [['en', en], ['ar', ar]]) {
+    const data = structuredClone(snapshot);
+    data.tables.production_orders[0] = { ...data.tables.production_orders[0], status: 'planned',
+      start_time: '2026-10-08T08:00:00Z', expected_finish: '2026-10-08T09:00:00Z' };
+    data.tables.production_orders[1] = { ...data.tables.production_orders[1], status: 'planned',
+      start_time: '2026-10-08T09:00:00Z', expected_finish: '2026-10-08T10:00:00Z' };
+    const before = JSON.stringify(data);
+    const html = renderToStaticMarkup(createElement(ProductionOrdersV2, {
+      snapshot: data, t: key => dictionary[key] || key, lang, can: () => false, command: async () => {},
+    }));
+    assert.ok(html.includes(dictionary.requestScheduled));
+    assert.ok(html.includes(dictionary.requestAwaitingPlanning));
+    assert.ok(html.includes(dictionary.executionPlannedStart));
+    assert.ok(html.includes(dictionary.executionPlannedFinish));
+    assert.ok(html.includes(dictionary.requestQueueSearch));
+    assert.ok(html.includes(lang === 'ar' ? 'الخط الأول' : 'Line one'));
+    assert.equal(JSON.stringify(data), before);
+    assert.doesNotMatch(html, /historyClearAll|notRecorded/);
+  }
+});
 
 test("English request scan shows one header for multiple products and item count", () => {
   const html = renderToStaticMarkup(createElement(ProductionOrdersV2, {
