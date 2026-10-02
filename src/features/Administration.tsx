@@ -131,6 +131,15 @@ export default function Administration({
           {calendarError && <p className="planning-warning" role="alert">{t(calendarError)}</p>}
           <button className="primary" disabled={busy || !can("settings", "edit")}>{t("save")}</button>
         </form>
+        <hr /><h3>{t('deliveryBuffer')}</h3><p className="muted">{t('deliveryBufferHelp')}</p>
+        <form onSubmit={async event => {
+          event.preventDefault(); const days = Number(new FormData(event.currentTarget).get('delivery_buffer_days'));
+          setBusy(true); setLocalError('');
+          try { await command('configure_delivery_buffer', { factory: factory.id, days }); }
+          catch (cause) { setLocalError(cause instanceof Error ? cause.message : 'error'); }
+          finally { setBusy(false); }
+        }}><Field label={t('planningDays')}><input name="delivery_buffer_days" type="number" required min="0" max="90" defaultValue={String(factory.delivery_buffer_days ?? 2)} /></Field>
+          <button className="primary" disabled={busy || !can('settings', 'edit')}>{t('save')}</button></form>
         <ProductionShifts {...props} />
         <hr />
         <h3>{t("joinCode")}</h3>

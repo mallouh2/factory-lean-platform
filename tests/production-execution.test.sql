@@ -84,7 +84,7 @@ begin
   insert into public.work_center_capabilities(factory_id,work_center_id,product_id,rate,rate_unit)
     values(f,spare_center,product_a,100,'piece');
   perform public.configure_center_alternatives(f,source_center,array[spare_center]);
-  req_id:=public.create_production_request(f,prefix||' request','normal',null,'',
+  req_id:=public.create_production_request(f,prefix||' request','normal',null,'QA internal production reason',
     jsonb_build_array(
       jsonb_build_object('product_id',product_a,'quantity',10,'unit','piece'),
       jsonb_build_object('product_id',product_b,'quantity',10,'unit','piece'),

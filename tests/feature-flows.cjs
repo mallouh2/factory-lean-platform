@@ -38,7 +38,7 @@ module.exports = async function featureFlows(owner, browser, credentials, origin
   const spare = await save('centers', { name: stamp + ' spare', name_ar: 'آلة بديلة للاختبار', code: stamp + '-SPARE', type: 'assembly_table', category_id: category.id, area_id: area });
   checks.push('Create area, line, production cell, child manual table and idle spare machine');
   const product = await save('products', { name: stamp + ' pipe', name_ar: 'أنبوب اختبار', code: stamp + '-P', unit: 'unit', diameter: 25, length: 6, standard_rate: 300 });
-  const request = await call(owner, 'create_production_request', { request_name: stamp + ' request', request_priority: 'normal', request_required_by: null, request_notes: '', request_items: [{ product_id: product, quantity: 100, unit: 'piece' }] });
+  const request = await call(owner, 'create_production_request', { request_name: stamp + ' request', request_priority: 'normal', request_required_by: null, request_notes: 'QA internal production reason', request_items: [{ product_id: product, quantity: 100, unit: 'piece' }] });
   const order = (await get(owner)).tables.production_orders.find(o => o.request_id === request).id;
   const operator = initial.tables.memberships.find(m => m.display_name === 'Omar Khalil');
   await save('centers', { order_id: order, operator_id: operator.id }, center);

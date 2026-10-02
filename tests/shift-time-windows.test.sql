@@ -46,7 +46,7 @@ begin
  insert into public.production_lines(factory_id,name,code) values(f,'QA shift line','QS-'||substr(gen_random_uuid()::text,1,8)) returning id into line;
  insert into public.work_centers(factory_id,name,code,line_id,category_id)
  select f,'QA shift center','QS-'||substr(gen_random_uuid()::text,1,8),line,category_id from public.work_centers where factory_id=f and category_id is not null limit 1;
- request:=public.create_production_request(f,'QA shifts','normal',null,'',jsonb_build_array(jsonb_build_object('product_id',product,'quantity',1000,'unit','meter')));
+ request:=public.create_production_request(f,'QA shifts','normal',null,'QA internal production reason',jsonb_build_array(jsonb_build_object('product_id',product,'quantity',1000,'unit','meter')));
  update public.production_orders set line_id=line,start_time=now()-interval '1 hour',expected_finish=now()+interval '1 hour' where request_id=request;
  perform public.start_product_item(f,(select id from public.production_orders where request_id=request));
  select * into job from public.production_orders where request_id=request;

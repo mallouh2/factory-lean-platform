@@ -54,7 +54,7 @@ begin
     (f,center_a,product_a,60,'piece',30),
     (f,center_a,product_b,60,'piece',30);
 
-  new_request:=public.create_production_request(f,prefix || ' request','normal',null,'',
+  new_request:=public.create_production_request(f,prefix || ' request','normal',null,'QA internal production reason',
     jsonb_build_array(
       jsonb_build_object('product_id',product_a,'quantity',60,'unit','piece'),
       jsonb_build_object('product_id',product_b,'quantity',60,'unit','piece')));

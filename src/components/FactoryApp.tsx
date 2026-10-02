@@ -12,6 +12,8 @@ import Reports from "@/features/Reports";
 import LineBuilder from "@/features/LineBuilder";
 import FactoryFloorV2 from "@/features/FactoryFloorV2";
 import UnfinishedProducts from '@/features/UnfinishedProducts';
+import SalesOrders from '@/features/SalesOrders';
+import Warehouse from '@/features/Warehouse';
 import ProductionOrdersV2 from "@/features/ProductionOrdersV2";
 import ProductionPlanning from "@/features/ProductionPlanning";
 import PlatformDashboard from "@/features/PlatformDashboard";
@@ -20,7 +22,7 @@ import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import DowntimeCapture from "@/features/DowntimeCapture";
 import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
-import { previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
+import { permissionModule, previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
 import HistoryLimitWarning from "./HistoryLimitWarning";
 import { useNavigationOverlay } from './useNavigationOverlay';
 // Floor totals and report tabs own their warnings beside the affected values.
@@ -29,6 +31,8 @@ const pageHistoryTables: Record<string, string[]> = {
   downtime: ["downtime_events", "production_transfers"],
 };
 const primary = [
+  "sales",
+  "warehouse",
   "dashboard",
   "lines",
   "orders",
@@ -40,9 +44,7 @@ const primary = [
 ];
 const admin = ["employees", "roles", "settings", "support", "audit"];
 const future = [
-  "warehouse",
   "purchasing",
-  "sales",
   "quality",
   "maintenance",
   "lean",
@@ -54,6 +56,8 @@ const sidebarIconPaths: Record<string, string[]> = {
   platform: ["M3 21h18", "M5 21V7l7-4 7 4v14", "M9 10h.01", "M15 10h.01", "M9 14h.01", "M15 14h.01", "M10 21v-4h4v4"],
   dashboard: ["M3 3h8v8H3z", "M13 3h8v8h-8z", "M3 13h8v8H3z", "M13 13h8v8h-8z"],
   lines: ["M2 9h5v6H2z", "M10 9h5v6h-5z", "M18 9h4v6h-4z", "M7 12h3", "M15 12h3"],
+  sales: ["M5 3h14v18H5z", "M8 7h8", "M8 11h8", "M8 15h5"],
+  warehouse: ["M3 10 12 3l9 7v11H3z", "M8 21v-8h8v8", "M8 17h8"],
   orders: ["M8 4h8", "M9 3h6v3H9z", "M7 5H5v16h14V5h-2", "M8 11h8", "M8 15h8", "M8 19h5"],
   planning: ["M3 5h18v16H3z", "M3 10h18", "M8 3v4", "M16 3v4", "M7 15h4", "M14 15h3"],
   products: ["M3 7 12 3l9 4v10l-9 4-9-4z", "M3 7l9 4 9-4", "M12 11v10"],
@@ -99,7 +103,7 @@ export default function FactoryApp() {
   const can = (module: string, action = "view") =>
     Boolean(
       visiblePermissions.includes(
-        `${module === "products" || module === "planning" || module === "unfinishedProducts" ? "orders" : module}:${action}`,
+        `${permissionModule(module)}:${action}`,
       ),
     );
   const load = useCallback(async () => {
@@ -141,7 +145,7 @@ export default function FactoryApp() {
   }, [load]);
   useEffect(() => {
     if (!snapshot?.factory) return;
-    const allowed = (page: string) => visiblePermissions.includes(`${page === "products" || page === "planning" || page === "unfinishedProducts" ? "orders" : page}:view`);
+    const allowed = (page: string) => visiblePermissions.includes(`${permissionModule(page)}:view`);
     if (!allowed(view)) {
       const first = [...primary, ...admin].find(allowed);
       if (first) setView(first);
@@ -487,7 +491,7 @@ export default function FactoryApp() {
               )}
               {props &&
                 (can(view) ? (
-                  view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}

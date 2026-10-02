@@ -15,6 +15,7 @@ import Configuration from "./Configuration";
 import CreateProductionOrder from "./CreateProductionOrder";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
+import { requestOriginLabel } from '@/utils/request-origin.mjs';
 
 type Screen = "list" | "details" | "create" | "edit";
 type Filter = "all" | "active" | "planned" | "delayed" | "completed" | "cancelled";
@@ -172,12 +173,14 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
       {attention && <p className="orders-v2-attention" role="status">{t(attention)}</p>}
       <section className="orders-v2-surface orders-v2-request-facts" aria-label={t("requestDetails")}>
         <dl className="orders-v2-facts">
-          <div><dt>{t("requestedBy")}</dt><dd dir="auto">{String(selected.requested_by_name || t("notAvailable"))}</dd></div>
+          <div><dt>{t('requestOrigin')}</dt><dd>{t(requestOriginLabel(selected.request_type))}</dd></div>
+          <div><dt>{t(selected.request_type === 'INTERNAL_PRODUCTION' ? 'internalCreatedBy' : 'requestedBy')}</dt><dd dir="auto">{String(selected.requested_by_name || t("requestCreatorNotRecorded"))}</dd></div>
+          <div><dt>{t('internalCreatedAt')}</dt><dd>{formatTime(selected.created_at,lang,String(s.factory?.timezone || 'UTC'))}</dd></div>
           <div><dt>{t("priority")}</dt>
             <dd className={["high", "urgent"].includes(String(selected.priority)) ? "orders-v2-priority" : undefined}>
               {t(`priority_${selected.priority || "normal"}`)}</dd></div>
           {selected.required_by && <div><dt>{t("requiredBy")}</dt><dd>{formatTime(selected.required_by, lang, zone)}</dd></div>}
-          {selected.notes && <div><dt>{t("notes")}</dt><dd dir="auto">{String(selected.notes)}</dd></div>}
+          {selected.notes && <div><dt>{t(selected.request_type === 'INTERNAL_PRODUCTION' ? 'internalProductionReason' : 'notes')}</dt><dd dir="auto">{String(selected.notes)}</dd></div>}
         </dl>
       </section>
       <section className="orders-v2-items" aria-label={t("requestProducts")}>
@@ -282,7 +285,8 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
           <span className="orders-v2-identity">
             <strong dir="auto">{String(request.name)}</strong>
             <small><bdi dir="ltr">{String(request.code)}</bdi></small>
-            <small className="requests-requester">{t('requestedBy')}: {String(request.requested_by_name || t('requestCreatorNotRecorded'))}</small>
+            <small>{t(requestOriginLabel(request.request_type))}</small>
+            <small className="requests-requester">{t(request.request_type === 'INTERNAL_PRODUCTION' ? 'internalCreatedBy' : 'requestedBy')}: {String(request.requested_by_name || t('requestCreatorNotRecorded'))}</small>
             <span className="orders-v2-row-progress">{t('itemsCompleted').replace('{completed}', String(completed)).replace('{total}', String(requestItems.length))}</span>
           </span>
           <span className="orders-v2-line"><small>{t("requestProducts")}</small>

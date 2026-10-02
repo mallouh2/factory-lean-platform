@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { localName } from "@/components/ui";
 import { localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import type { FeatureProps } from "./types";
+import { internalReasonValid } from '@/utils/request-origin.mjs';
 
 type Item = { key: number; productId: string; quantity: string; unit: string; query: string; open: boolean; active: number };
 type ItemError = { product?: string; quantity?: string; unit?: string };
 const blank = (key: number): Item => ({ key, productId: "", quantity: "", unit: "", query: "", open: false, active: -1 });
 
-export default function CreateProductionOrder({ snapshot, t, lang, command, onCreated, onCancel, onDirtyChange }: FeatureProps & {
+export default function CreateProductionOrder({ snapshot, t, lang, command, can, onCreated, onCancel, onDirtyChange }: FeatureProps & {
   onCreated: (id: string) => void; onCancel: () => void; onDirtyChange?: (dirty: boolean) => void;
 }) {
   const products = snapshot.tables.products || [];
@@ -16,7 +17,7 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
   const [priority, setPriority] = useState("normal");
   const [requiredBy, setRequiredBy] = useState("");
   const [notes, setNotes] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; items?: string; rows?: Record<number, ItemError>; requiredBy?: string; submit?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; items?: string; rows?: Record<number, ItemError>; requiredBy?: string; reason?: string; submit?: string }>({});
   const [busy, setBusy] = useState(false);
   const nextKey = useRef(1);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -46,6 +47,7 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
+    if (!can('orders','create')) { setErrors({submit:'permissionError'}); return; }
     const rows: Record<number, ItemError> = {};
     const selected = new Set<string>();
     for (const item of items) {
@@ -63,10 +65,12 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
       name: name.trim() ? undefined : "orderNameRequired",
       items: items.length ? undefined : "orderItemsRequired",
       rows,
+      reason: internalReasonValid(notes) ? undefined : 'internalReasonRequired',
     };
     setErrors(nextErrors);
     if (nextErrors.name) { nameRef.current?.focus(); return; }
     if (nextErrors.items) { addRef.current?.focus(); return; }
+    if (nextErrors.reason) { document.getElementById('request-notes')?.focus(); return; }
     const firstError = items.find((item) => rows[item.key]);
     if (firstError) {
       const field = rows[firstError.key].product ? "product" : rows[firstError.key].quantity ? "quantity" : "unit";
@@ -206,7 +210,7 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
 
     <div className="orders-v2-create-extras">
       <div className="orders-v2-create-field">
-        <label htmlFor="request-requester">{t("requestedBy")}</label>
+        <label htmlFor="request-requester">{t("internalCreatedBy")}</label>
         <input id="request-requester" value={title ? `${requester} · ${title}` : requester} readOnly aria-readonly="true" />
       </div>
       <div className="orders-v2-create-field">
@@ -226,9 +230,11 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, onCr
           : <p id="request-required-by-hint" className="orders-v2-field-hint">{t("requiredByHint")}</p>}
       </div>
       <div className="orders-v2-create-field orders-v2-notes">
-        <label htmlFor="request-notes">{t("notes")}</label>
-        <textarea id="request-notes" rows={2} maxLength={2000} value={notes}
-          onChange={(event) => setNotes(event.target.value)} />
+        <label htmlFor="request-notes">{t("internalProductionReason")} <span aria-hidden="true">*</span></label>
+        <textarea id="request-notes" rows={2} maxLength={2000} value={notes} required
+          aria-invalid={Boolean(errors.reason)} aria-describedby={errors.reason ? 'request-reason-error' : undefined}
+          onChange={(event) => {setNotes(event.target.value);setErrors(current=>({...current,reason:undefined}));}} />
+        {errors.reason && <p id="request-reason-error" className="orders-v2-field-error" role="alert">{t(errors.reason)}</p>}
       </div>
     </div>
     {errors.submit && <p className="orders-v2-field-error" role="alert">{t(errors.submit)}</p>}

@@ -30,7 +30,7 @@ begin
  select f,'WIP QA secondary machine','WIP-'||substr(gen_random_uuid()::text,1,8),line2,category_id from public.work_centers where id=normal;
  insert into public.work_center_capabilities(factory_id,work_center_id,product_id,rate,rate_unit)
  select f,id,product,100,'piece' from public.work_centers where line_id=line2;
- request:=public.create_production_request(f,'WIP QA request','normal',null,'',jsonb_build_array(jsonb_build_object('product_id',product,'quantity',1000,'unit','piece'),jsonb_build_object('product_id',product2,'quantity',1000,'unit','piece')));
+ request:=public.create_production_request(f,'WIP QA request','normal',null,'QA internal production reason',jsonb_build_array(jsonb_build_object('product_id',product,'quantity',1000,'unit','piece'),jsonb_build_object('product_id',product2,'quantity',1000,'unit','piece')));
  select id into item from public.production_orders where request_id=request and product_id=product;
  select id into other_item from public.production_orders where request_id=request and product_id=product2;
  update public.production_orders set line_id=line1,start_time=now()-interval '1 hour',expected_finish=now()+interval '1 hour' where id=item;

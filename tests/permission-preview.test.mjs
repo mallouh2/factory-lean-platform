@@ -28,6 +28,7 @@ test("preview masks only presentation grants and never changes real grants", () 
 test("all employee previews use only defined permission keys", () => {
   const defined = new Set([
     "factory:view", "dashboard:view", "orders:view", "orders:create", "orders:edit",
+    "sales_orders:view", "sales_orders:create", "sales_orders:edit", "warehouse:view",
     "lines:view", "centers:view", "centers:edit", "machine_status:edit",
     "downtime:view", "downtime:create", "downtime:edit",
     "employees:view", "employees:create", "employees:edit", "employees:approve",

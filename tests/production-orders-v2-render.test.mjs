@@ -233,7 +233,7 @@ test("generic order editor no longer exposes a create button", () => {
 // instead of silently saving a missing deadline. A complete value converts to
 // UTC and reaches create_production_request unchanged; empty stays null.
 // ---------------------------------------------------------------------------
-function createSubmitHarness({ requiredBy = "", badInput = false, command } = {}) {
+function createSubmitHarness({ requiredBy = "", badInput = false, reason = "QA internal reason", allowed = true, command } = {}) {
   const created = [];
   const bag = {};
   const commandImpl = command ?? (async (name, args) => {
@@ -245,7 +245,7 @@ function createSubmitHarness({ requiredBy = "", badInput = false, command } = {}
     [{ key: 0, productId: "P", quantity: "100", unit: "meter", query: "", open: false, active: -1 }],
     "normal",
     requiredBy,
-    "",
+    reason,
     {},
     false,
   ];
@@ -259,7 +259,7 @@ function createSubmitHarness({ requiredBy = "", badInput = false, command } = {}
   new Function("require", "module", "exports", createBundle.outputFiles[0].text)(
     (name) => name === "react" ? fakeReact : require(name), moduleWithHooks, moduleWithHooks.exports);
   const tree = moduleWithHooks.exports.default({ snapshot,
-    t: (key) => en[key] || key, lang: "en", can: () => true, command: commandImpl,
+    t: (key) => en[key] || key, lang: "en", can: () => allowed, command: commandImpl,
     onCreated: (id) => created.push(id), onCancel: () => {} });
   const form = (function find(node) {
     if (!node || typeof node !== "object") return null;
@@ -280,6 +280,40 @@ function createSubmitHarness({ requiredBy = "", badInput = false, command } = {}
   };
 }
 
+test('internal creation rejects missing, whitespace and oversized reasons before calling the server', async () => {
+  for (const reason of ['', ' \t\n ', 'x'.repeat(2001)]) {
+    const harness = createSubmitHarness({reason});
+    await harness.submit();
+    assert.equal(harness.bag.saved, undefined);
+    assert.equal(harness.updates.find(update => update.position === 5).value.reason, 'internalReasonRequired');
+  }
+});
+
+test('internal creation checks person permission even when the form is called directly', async () => {
+  const harness = createSubmitHarness({allowed:false});
+  await harness.submit();
+  assert.equal(harness.bag.saved, undefined);
+  assert.deepEqual(harness.updates[0].value, {submit:'permissionError'});
+});
+
+test('internal creation trims its reason and submits no browser actor or demand type', async () => {
+  const harness = createSubmitHarness({reason:'  Engineering trial  '});
+  await harness.submit();
+  assert.equal(harness.bag.saved.args.request_notes,'Engineering trial');
+  assert.equal('request_type' in harness.bag.saved.args,false);
+  assert.equal('requested_by' in harness.bag.saved.args,false);
+});
+
+test('EN/AR internal request form has required reason and renamed manual action', () => {
+  for (const [lang, dictionary] of [['en',en],['ar',ar]]) {
+    const html=renderToStaticMarkup(createElement(CreateProductionOrder,{snapshot,t:key=>dictionary[key]||key,lang,can:()=>true,command:async()=>{},onCreated:()=>{},onCancel:()=>{}}));
+    assert.ok(html.includes(dictionary.createProductionRequest));
+    assert.ok(html.includes(dictionary.internalProductionReason));
+    assert.match(html,/<textarea[^>]*id="request-notes"[^>]*required/);
+    assert.ok(html.includes(dictionary.internalCreatedBy));
+  }
+});
+
 test("a filled Required By reaches the create command converted to UTC", async () => {
   const harness = createSubmitHarness({ requiredBy: "2026-10-05T15:00" });
   await harness.submit();
@@ -288,7 +322,7 @@ test("a filled Required By reaches the create command converted to UTC", async (
     request_name: "Required By path verification",
     request_priority: "normal",
     request_required_by: "2026-10-05T15:00:00.000Z",
-    request_notes: "",
+    request_notes: "QA internal reason",
     request_items: [{ product_id: "P", quantity: 100, unit: "meter" }],
   } });
   assert.deepEqual(harness.created, ["REQ-NEW"]);

@@ -7,6 +7,9 @@ import { productionProgress } from '@/utils/production-recording.mjs';
 import { orderAttention } from '@/utils/order-overview.mjs';
 import { requestPresentation } from '@/utils/request-queue.mjs';
 import ProductIdentity from '@/components/ProductIdentity';
+import DeliveryContext from '@/components/DeliveryContext';
+import RequestOrigin from '@/components/RequestOrigin';
+import { useFulfillment, type ProductionDemand } from './useFulfillment';
 import { productColor } from '@/utils/product-colors.mjs';
 import {
   capableLines, deadlineStatus, durationMs, finishAfterWorkingMs, firstAvailable, freeGaps, lineCapacity,
@@ -65,6 +68,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
   const [slotSearch, setSlotSearch] = useState<{ itemId: string; suggestions: SlotSuggestion[];
     reason: string | null; horizonDays: number } | null>(null);
   const [slotChoice, setSlotChoice] = useState<number | null>(null);
+  const fulfillment = useFulfillment<{ rows: ProductionDemand[] }>(s, 'production', 1, can('orders'));
   const headingRef = useRef<HTMLHeadingElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
@@ -485,10 +489,34 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     askReason({ source: "unschedule", item: String(editing.id), target_line: null, planned_start: null });
   }
 
-  function findSlots(order: Row) {
+  async function findSlots(order: Row) {
     const now = Date.now();
     const result = suggestPlanningSlots(order, requestOf(order), lines, orders, centers, capabilities,
       { now: Math.ceil(now / 900_000) * 900_000, horizonDays: 28, limit: 3, calendar, zone });
+    const linked = fulfillment.data?.rows.some(row => row.item_id === String(order.id) && row.target_ready) || requestOf(order)?.request_type === 'SALES_PRODUCTION';
+    if (linked) {
+      setBusy(true);
+      try {
+        const response = await fetch('/api/fulfillment?' + new URLSearchParams({ factory: String(s.factory?.id), mode: 'slot', item: String(order.id) }), { cache: 'no-store' });
+        const candidate = await response.json();
+        if (!response.ok) throw Error(candidate.error || 'dataWarning');
+        const line = candidate && lines.find(row => String(row.id) === candidate.line);
+        if (line) {
+          const check: any = proposeSchedule(order, line, Date.parse(candidate.start), orders, centers, capabilities, now, calendar, zone);
+          const knownTarget = Math.min(...(fulfillment.data?.rows || []).filter(row => row.item_id === String(order.id) && row.target_ready).map(row => Date.parse(row.target_ready!)));
+          const target = Number.isFinite(knownTarget) ? knownTarget : Date.parse(candidate.finish);
+          if (!check.error && check.finish <= target) {
+            const schedule = sortedLineSchedule(line, orders, centers, capabilities, String(order.id), calendar, zone);
+            result.suggestions = [{ lineId: String(line.id), start: check.start, finish: check.finish, setupMs: check.setupMs,
+              productionMs: check.productionMs, totalMs: check.durationMs, rate: check.rate,
+              deadline: deadlineStatus(check.finish, new Date(target).toISOString(), now),
+              load: lineCapacity(schedule, now, now + 7 * 86400000, calendar, zone) }];
+            result.reason = 'salesBackwardAdvisory';
+          } else result.reason = 'salesTargetNoSlot';
+        } else result.reason = 'salesTargetNoSlot';
+      } catch (cause) { setError(cause instanceof Error ? cause.message : 'dataWarning'); setBusy(false); return; }
+      finally { setBusy(false); }
+    }
     setSlotSearch({ itemId: String(order.id), ...result });
     setSlotChoice(null);
     setError("");
@@ -546,12 +574,14 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
         {t(planningBoardStatus(order))}</small>
       {['delayed', 'risk'].includes(visualState(order)) && <small className="planning-attention-label" data-state={visualState(order)}>! {t(visualState(order) === 'delayed' ? 'delayed' : 'planningAtRisk')}</small>}
       {mobile && <small className="planning-product-state"><bdi dir="ltr">{String(requestOf(order)?.code || order.code || '')}</bdi></small>}
+      {requestOf(order)?.request_type === 'INTERNAL_PRODUCTION' && <RequestOrigin request={requestOf(order)} t={t} lang={lang} zone={zone} />}
       {Boolean(order.line_id && order.start_time) && <span className="planning-product-schedule">
         <bdi dir="auto">{localName(lines.find(line => line.id === order.line_id), lang)}</bdi>
         <span>{t('executionPlannedStart')}: {formatTime(order.start_time, lang, zone)}</span>
         {order.expected_finish && <span>{t('executionPlannedFinish')}: {formatTime(order.expected_finish, lang, zone)}</span>}
       </span>}
       {order.status === 'active' && <span className="planning-product-schedule">{t('recordingGoodSoFar')}: {productionProgress(order).good.toLocaleString(lang)} {unitOf(order)}</span>}
+      {requestOf(order)?.request_type !== 'INTERNAL_PRODUCTION' && <DeliveryContext rows={fulfillment.data?.rows || []} item={order.id} t={t} lang={lang} zone={zone} />}
       {blockedReason && <small className="planning-drag-reason">{t(blockedReason)}</small>}
     </button>{section === "waiting" && canDrag &&
       <button type="button" className="planning-find-slot" disabled={busy || Boolean(savingDropId)}
@@ -633,6 +663,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
           <span dir="auto">{localName(productOf(slotOrder), lang)} · {amountOf(slotOrder)}</span></div>
           <button type="button" aria-label={t("close")} onClick={() => {
             setSlotSearch(null); setSlotChoice(null); setError(""); }}>×</button></div>
+        {slotSearch.reason && slotSearch.suggestions.length > 0 && <p className="planning-warning" role="status">{t(slotSearch.reason)}</p>}
         {slotSearch.suggestions.length ? <div className="planning-slot-list">
           {slotSearch.suggestions.map((slot, index) => {
             const line = lines.find((candidate) => String(candidate.id) === slot.lineId);
@@ -933,6 +964,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
             </button>)}
         </div>}
         <dl className="planning-editor-facts">
+          <div><dt>{t('requestOrigin')}</dt><dd><RequestOrigin request={requestOf(editing)} t={t} lang={lang} zone={zone} details /></dd></div>
           <div><dt>{t("priority")}</dt><dd>{requestOf(editing)?.priority === "unspecified" ? t("notSpecified") : t(`priority_${requestOf(editing)?.priority || "normal"}`)}</dd></div>
           <div><dt>{t("requiredBy")}</dt><dd>{requestOf(editing)?.required_by ? formatTime(requestOf(editing)?.required_by, lang, zone) : t("notSpecified")}</dd></div>
         </dl>

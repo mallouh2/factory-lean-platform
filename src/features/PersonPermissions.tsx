@@ -15,7 +15,7 @@ export default function PersonPermissions({
   const modules = [
     ...new Set((s.tables.permissions || []).map((p) => String(p.module))),
   ];
-  const actions = ["view", "create", "edit", "delete", "approve", "export"];
+  const actions = ["view", "create", "edit", "delete", "approve", "export", "issue"];
   const members = s.tables.memberships || [];
   const group = (m: string) =>
     [
@@ -149,7 +149,7 @@ export default function PersonPermissions({
                         <td key={a}>
                           <input
                             type="checkbox"
-                            aria-label={`${t(m)} ${t(a)}`}
+                            aria-label={m === 'orders' && a === 'create' ? t('createProductionRequest') : `${t(m)} ${t(a)}`}
                             disabled={!can("roles", "edit") || !can(m, a)}
                             checked={selected.includes(key)}
                             onChange={(e) =>
@@ -160,6 +160,7 @@ export default function PersonPermissions({
                               )
                             }
                           />
+                          {m === 'orders' && a === 'create' && <small>{t('createProductionRequest')}</small>}
                         </td>
                       );
                     })}

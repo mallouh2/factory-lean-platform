@@ -26,7 +26,7 @@ begin
  insert into public.production_lines(factory_id,name,code) values(f,'QA history line','QH-'||substr(gen_random_uuid()::text,1,8)) returning id into qa_line;
  insert into public.work_centers(factory_id,name,code,line_id,category_id)
  select f,'QA history center','QH-'||substr(gen_random_uuid()::text,1,8),qa_line,category_id from public.work_centers where factory_id=f and category_id is not null limit 1;
- qa_request:=public.create_production_request(f,'QA history request','normal',null,'',jsonb_build_array(jsonb_build_object('product_id',qa_product,'quantity',1000,'unit','meter'),jsonb_build_object('product_id',qa_product2,'quantity',1000,'unit','piece')));
+ qa_request:=public.create_production_request(f,'QA history request','normal',null,'QA internal production reason',jsonb_build_array(jsonb_build_object('product_id',qa_product,'quantity',1000,'unit','meter'),jsonb_build_object('product_id',qa_product2,'quantity',1000,'unit','piece')));
  update public.production_orders set line_id=qa_line,start_time=now()-interval '2 hours',expected_finish=now()-interval '1 hour' where request_id=qa_request and product_id=qa_product;
  update public.production_orders set line_id=qa_line,start_time=now()-interval '1 hour',expected_finish=now() where request_id=qa_request and product_id=qa_product2;
  perform public.start_product_item(f,(select id from public.production_orders where request_id=qa_request and product_id=qa_product));

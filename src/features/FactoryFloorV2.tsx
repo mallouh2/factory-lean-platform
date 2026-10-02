@@ -31,6 +31,8 @@ import ProductionRecording from "./ProductionRecording";
 import { productionProgress, entryQuantities } from "@/utils/production-recording.mjs";
 import HistoryLimitWarning from "@/components/HistoryLimitWarning";
 import ProductIdentity from '@/components/ProductIdentity';
+import DeliveryContext from '@/components/DeliveryContext';
+import { useFulfillment, type ProductionDemand } from './useFulfillment';
 /**
  * Factory Floor V2. Renders the SAME snapshot through the
  * SAME logic as V1: physical status comes from work_centers.status, computed
@@ -96,6 +98,7 @@ export default function FactoryFloorV2(
   const [stopReason, setStopReason] = useState("");
   const [stopDetail, setStopDetail] = useState("");
   const [motionPaused, setMotionPaused] = useState(false);
+  const fulfillment = useFulfillment<{ rows: ProductionDemand[] }>(s, 'production', 1, can('orders'));
   const drawerRef = useRef<HTMLElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
@@ -141,6 +144,7 @@ export default function FactoryFloorV2(
       </div>
       <div className="ff2-job-identity"><bdi className="ff2-job-order">{String(request?.code || item.code || "")}</bdi>
         <div className="ff2-queue-product" dir="auto"><ProductIdentity productId={item.product_id} productItemId={item.id}>{product ? localName(product, lang) : t("notAvailable")}</ProductIdentity></div></div>
+      <DeliveryContext rows={fulfillment.data?.rows || []} item={item.id} t={t} lang={lang} zone={zone} />
       <dl className="recording-figures">
         {(["required", "good", "remaining"] as const).map(key => <div key={key}><dt>{t(key === "required" ? "recordingRequired" : key === "good" ? "recordingGoodSoFar" : "recordingRemaining")}</dt><dd>{productionProgress(item)[key].toLocaleString(lang)} {unit}</dd></div>)}
         {productionProgress(item).overproduction > 0 && <div><dt>{t("recordingOverproduction")}</dt><dd>{productionProgress(item).overproduction.toLocaleString(lang)} {unit}</dd></div>}

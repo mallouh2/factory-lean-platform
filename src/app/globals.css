@@ -3685,3 +3685,35 @@ details.panel > summary {
   .requests-filter-sheet { inset: auto 0 12px; margin-inline: auto; }
   .requests-filter-sheet .requests-filter-bar { gap: 10px; }
 }
+
+/* Sales fulfillment: product identity and operational status remain separate. */
+.fulfillment-page { display: grid; gap: 14px; min-width: 0; }
+.fulfillment-tools, .fulfillment-pagination, .fulfillment-order header, .fulfillment-order footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fulfillment-tools p { margin: 0; flex: 1 1 280px; }
+.fulfillment-orders, .finished-stock-list { display: grid; gap: 12px; }
+.fulfillment-order, .finished-stock-row { border: 1px solid var(--border, #d8e4e8); border-radius: 12px; padding: 16px; background: var(--surface, #fff); min-width: 0; }
+.fulfillment-order header { justify-content: space-between; }
+.fulfillment-order header p { margin: 4px 0; overflow-wrap: anywhere; }
+.fulfillment-status { padding: 4px 8px; background: #edf3f5; border-radius: 6px; font-size: .85rem; }
+.fulfillment-dates, .finished-stock-row dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-block: 12px; }
+.fulfillment-dates dt, .finished-stock-row dt { font-size: .8rem; color: var(--muted, #516672); }
+.fulfillment-dates dd, .finished-stock-row dd { margin: 4px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.fulfillment-lines { display: grid; gap: 8px; margin-block: 12px; }
+.fulfillment-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding-block: 8px; border-block-start: 1px solid var(--border, #d8e4e8); font-size: .875rem; }
+.fulfillment-line .product-identity { flex: 1 1 180px; }
+.fulfillment-form { border: 0; padding: 0; min-width: 0; display: grid; gap: 12px; }
+.fulfillment-line-editor { display: grid; grid-template-columns: minmax(150px, 2fr) 1fr 1fr; align-items: end; gap: 10px; padding: 12px; border: 1px solid var(--border, #d8e4e8); border-radius: 8px; }
+.fulfillment-line-editor .check { grid-column: 1 / -1; }
+.delivery-context { display: grid; gap: 4px; white-space: normal; }
+.delivery-signal { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: .8rem; color: #405969; border-inline-start: 3px solid #78909b; padding-inline-start: 8px; }
+.delivery-signal[data-risk='late'] { color: #9b2424; border-color: #b63636; }
+.delivery-signal[data-risk='at_risk'], .delivery-signal[data-risk='unknown'] { color: #785116; border-color: #a56e1b; }
+.delivery-signal[data-risk='on_time'] { color: #20694f; border-color: #348363; }
+.fulfillment-pagination { justify-content: center; }
+@media (max-width: 600px) {
+ .fulfillment-order, .finished-stock-row { padding: 12px; }
+ .fulfillment-line-editor { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+ .fulfillment-line-editor > :first-child { grid-column: 1 / -1; }
+ .fulfillment-dates { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+ .fulfillment-form input, .fulfillment-form select { width: 100%; min-width: 0; }
+}

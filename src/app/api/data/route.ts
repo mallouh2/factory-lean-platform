@@ -64,6 +64,14 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  internal_reason_required: 'internalReasonRequired',
+  fulfillment_invalid: 'fulfillmentInvalid',
+  fulfillment_product: 'fulfillmentProduct',
+  fulfillment_state: 'fulfillmentState',
+  fulfillment_hold: 'fulfillmentHold',
+  fulfillment_not_ready: 'fulfillmentNotReady',
+  fulfillment_stock_committed: 'fulfillmentStockCommitted',
+  fulfillment_planner_decision: 'fulfillmentPlannerDecision',
   shift_invalid: 'shiftInvalid',
   shift_required: 'shiftRequired',
   shift_window_invalid: 'shiftWindowInvalid',
@@ -142,6 +150,13 @@ const joinErrors: Record<string, string> = {
 };
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
+  create_sales_order: [['sales_orders', 'create']],
+  approve_sales_order: [['sales_orders', 'approve']],
+  change_sales_order: [['sales_orders', 'edit']],
+  dispatch_sales_order: [['warehouse', 'issue']],
+  configure_product_stock: [['warehouse', 'edit']],
+  adjust_finished_stock: [['warehouse', 'edit']],
+  configure_delivery_buffer: [['settings', 'edit']],
   configure_production_shift: [['settings','edit']],
   create_production_request: [["orders", "create"]],
   plan_product_item: [["orders", "edit"]],
@@ -192,6 +207,9 @@ export async function POST(req: NextRequest) {
     const { db } = context;
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
+    if (command === 'create_production_request' && Object.keys(args).some((key) =>
+      !['factory', 'request_name', 'request_priority', 'request_required_by', 'request_notes', 'request_items'].includes(key)))
+      throw new Error('invalid_input');
     if (command === "save_record") {
       if (
         ![
