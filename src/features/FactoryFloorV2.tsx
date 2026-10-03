@@ -33,6 +33,7 @@ import HistoryLimitWarning from "@/components/HistoryLimitWarning";
 import ProductIdentity from '@/components/ProductIdentity';
 import DeliveryContext from '@/components/DeliveryContext';
 import { useFulfillment, type ProductionDemand } from './useFulfillment';
+import MaintenanceContext from './MaintenanceRequest';
 /**
  * Factory Floor V2. Renders the SAME snapshot through the
  * SAME logic as V1: physical status comes from work_centers.status, computed
@@ -916,6 +917,7 @@ export default function FactoryFloorV2(
                 </section>
               )}
 
+              <MaintenanceContext {...props} key={String(selected.id)} machine={selected} />
               <section className="ff2-operational-section" aria-labelledby="ff2-flow-summary">
                 <h4 id="ff2-flow-summary">{t("flowSummary")}</h4>
                 <p className="ff2-flow-summary" dir="auto">

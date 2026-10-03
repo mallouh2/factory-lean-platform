@@ -1,6 +1,6 @@
 # Factory Lean — Product Differentiators
 
-Research and repository review: **2026-10-02, Asia/Riyadh**. Development base: `c494df9f6556bc925ccf75219a528c161e956028`, including the legitimate uncommitted Sales/Warehouse V1 work. This is the product-level evidence record, not a release certificate or marketing page. Repository code takes precedence; [HANDOFF.md](../HANDOFF.md) supplies dated verification and acceptance boundaries.
+Research and repository review: **2026-10-03, Asia/Riyadh**. Maintenance Requests V1 checkpoint prepared on `development` from `b18c1543440b2f9ddb5e3883a7aa36ebc95384d5`; read Git for the resulting checkpoint SHA and push state. Maintenance is implemented and TESTING-verified; Sales/Warehouse and Internal Production remain retained from the preceding checkpoint. This is the product-level evidence record, not a release certificate or marketing page. Repository code takes precedence; [HANDOFF.md](../HANDOFF.md) supplies dated verification and acceptance boundaries.
 
 ## Purpose and durable maintenance rule
 
@@ -42,6 +42,10 @@ Current strength is connecting persisted demand, execution, machine dependencies
 
 The initial documentation review reused preceding evidence. The subsequent Internal Production implementation ran **390/390 Node tests**, **22/22 focused Internal/Requests tests**, eleven rollback SQL suites, TypeScript and an isolated production build. Local/TESTING are now 61 aligned; DEV 11 remains historical and was not connected. Existing-account live creation, required-reason rejection, Planning inspection, reload and EN/AR details passed. Sales/Warehouse acceptance below reflects the user’s explicit acceptance of the seven earlier live scenarios, not a claim of a new full manual fulfillment replay.
 
+The 2026-10-03 Maintenance extension supersedes those current totals: **401/401 Node**, **11/11 focused Maintenance**, thirteen rollback SQL suites, TypeScript and isolated production build passed. **Local/TESTING 62** aligned; all 61 earlier migration hashes preserved; DEV 11 historical, not connected. Existing-account TESTING creation, downtime link, duplicate prevention, assignment, completion/independent verification, reload and desktop/390px EN/AR checks passed as detailed in HANDOFF. Omar's completion used the real SQL RPC with his existing user subject; no separate browser login as Omar is claimed. User freeze and real-device acceptance remain separate.
+
+The subsequent state-independent correction and authorized checkpoint supersede those test totals: fresh **407/407 Node**, **17/17 focused Maintenance**, TypeScript and isolated production build passed. Every **Local/TESTING 62** version/name pair was reverified read only; all 62 applied migration hashes are preserved and DEV 11 remains historical without connection. The correction's **96/96** combined focused run and updated Maintenance rollback SQL passed during implementation; SQL/live database QA was not rerun during checkpointing. Running-machine MANUAL creation, unchanged machine/Downtime/Loss truth, reload and separate-problem confirmation were live-verified and exact QA cleanup retained genuine Audit. Maintenance remains parity (C); no predictive or measured-value claim is added.
+
 Classifications:
 
 - **A. STRONG DIFFERENTIATOR:** a meaningfully distinctive implemented combination for the target workflow; provisional comparative judgment, never global uniqueness.
@@ -51,7 +55,7 @@ Classifications:
 
 ## Competitive matrix
 
-Seventeen implemented capability groups are reviewed below: **3 A / 5 B / 9 C**. Overlapping groups are different aspects of the same workflow, not seventeen independent inventions. Competitor references resolve in the dated source register.
+Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**. Overlapping groups are different aspects of the same workflow, not eighteen independent inventions. Competitor references resolve in the dated source register.
 
 | ID / capability | Factory Lean state | Competitor examples | Classification | Comparison boundary |
 | --- | --- | --- | --- | --- |
@@ -62,7 +66,7 @@ Seventeen implemented capability groups are reviewed below: **3 A / 5 B / 9 C**.
 | 5 Immutable estimates versus actuals | V; manual calibration A | MachineMetrics, Evocon | B | Assumptions/actuals remain distinguishable; no proven savings. |
 | 6 Unit-safe full-result History | A | MachineMetrics, Tulip | B | Physical disposition denominator and weighted shift/unit totals. |
 | 7 Engineer-oriented Factory Floor | A | MachineMetrics, Tulip, Odoo | B | Job facts belong to line; physical/flow/assignment are separate. |
-| 8 Delivery risk with retained promises/manual Planning | V; live-verified TESTING, uncommitted | MRPeasy, Katana | B | Explicit date semantics and bounded advisory decisions. |
+| 8 Delivery risk with retained promises/manual Planning | V; live-verified TESTING | MRPeasy, Katana | B | Explicit date semantics and bounded advisory decisions. |
 | 9 Configurable flow/dependencies | V | Sepasoft | C | Enterprise tools already model complex lines. |
 | 10 Good-only demand progress | A | Odoo, Siemens | C | Good quantity completion differs from execution Finish. |
 | 11 Planned versus actual execution | V | MRPeasy, Odoo | C | Preserve plan; single active normal item per line. |
@@ -70,10 +74,11 @@ Seventeen implemented capability groups are reviewed below: **3 A / 5 B / 9 C**.
 | 13 Server/timezone shift attribution | A | MachineMetrics, Tulip | C | Overnight windows and historical IDs preserved. |
 | 14 Per-person authorization | V | Odoo | C | Titles/View As cannot confer authority. |
 | 15 Lightweight reads/lazy histories | V; scale monitoring open | Tulip, MachineMetrics | C | Engineering quality, not a proven market differentiator. |
-| 16 Sales → FG → shortage → dispatch; Min/Max | V; live-verified TESTING, uncommitted | MRPeasy, Katana, Odoo, Daftra | C | Already implemented here; common MRP functionality. |
+| 16 Sales → FG → shortage → dispatch; Min/Max | V; live-verified TESTING | MRPeasy, Katana, Odoo, Daftra | C | Already implemented here; common MRP functionality. |
 | 17 EN/AR operational presentation | V; real-device acceptance open | Daftra | C | Arabic is expected regionally; no unique-localization claim. |
+| 18 Stop-linked Maintenance Requests and independent repair verification | V; TESTING-verified, user freeze outstanding | MaintainX, Limble, Fiix | C | Authoritative stop → response → verified repair; no preventive scheduling or measured recurrence claim. |
 | Corrective action → verified improvement | P/I | Tulip CAPA, Odoo Quality | D | The intended loop is not yet complete. |
-| Maintenance requests/planning | P | Odoo Maintenance | D | Stop reason/history is not a maintenance workflow. |
+| Maintenance planning / preventive schedules | P | Odoo Maintenance | D | Requests exist; capacity-aware service windows and preventive scheduling remain deferred. |
 
 ## Validated capabilities and comparison
 
@@ -197,7 +202,7 @@ Seventeen implemented capability groups are reviewed below: **3 A / 5 B / 9 C**.
 
 **Operational value:** Sales can see uncertainty, planners retain control, and managers see a deadline risk without a fabricated new promise.
 
-**Implementation status:** V, implemented and live-verified on TESTING, uncommitted. The user accepted the seven recorded fulfillment scenarios; reload and EN/AR mobile checks passed. Bounded 180-day search/minute precision, not a global optimizer or guarantee.
+**Implementation status:** V, implemented and live-verified on TESTING. The user accepted the seven recorded fulfillment scenarios; reload and EN/AR mobile checks passed. Bounded 180-day search/minute precision, not a global optimizer or guarantee.
 
 **Competitive context:** MRPeasy documents delivery buffers/backward scheduling [S9]; Katana links priorities, allocation and manufacturing [S10].
 
@@ -327,7 +332,7 @@ Seventeen implemented capability groups are reviewed below: **3 A / 5 B / 9 C**.
 
 **Internal demand extension:** Authorized manual creation now records `INTERNAL_PRODUCTION`, a required reason, authenticated creator/display name and server timestamp. `orders:create` remains explicit per-person authority, with a clear Internal Production label. Existing legacy origins remain unrecorded. Sales shortage and Min/Max demand stay automatic-only, and Planning remains manual. This is operational completeness/parity (C), consistent with established MRP manual manufacturing capabilities (S8/S16), not a new Strong Differentiator. The useful combination is keeping Customer Demand, Stock Replenishment and Internal Production distinct.
 
-**Implementation status:** V, implemented and live-verified on TESTING, uncommitted; the user accepted all seven recorded scenarios, with reload, EN/AR mobile and concurrency/regression checks. Single-factory balances, one Product occurrence per order, m/pcs, no arbitrary partial dispatch or historical opening-stock inference.
+**Implementation status:** V, implemented and live-verified on TESTING; the user accepted all seven recorded scenarios, with reload, EN/AR mobile and concurrency/regression checks. Single-factory balances, one Product occurrence per order, m/pcs, no arbitrary partial dispatch or historical opening-stock inference.
 
 **Competitive context:** MRPeasy reserves stock/incoming and creates missing manufacturing [S8]; Katana allocates stock by priority [S10]; Odoo documents Min/Max [S16]; Daftra links sales and production [S15].
 
@@ -351,12 +356,28 @@ Seventeen implemented capability groups are reviewed below: **3 A / 5 B / 9 C**.
 
 **Evidence:** [Arabic](../src/locales/ar.json), [English](../src/locales/en.json), Floor/History/Planning tests and HANDOFF visual evidence; S14/S15, 2026-10-02.
 
+### 18. Stop-linked Maintenance Requests and independent repair verification — C
+
+**Factory problem:** A stop reason alone does not say who will repair the machine or whether reported completion actually resolved the problem.
+
+**Factory Lean approach:** MANUAL and DOWNTIME requests retain stable machine/event IDs, explicit priority, same-factory assignment, per-person permissions, server actor/time evidence and existing Audit history. Own assignees can progress their work without broad management access. COMPLETED awaits independent verification; a failed check returns work for correction. Machine drawers show existing active work and permit separately confirmed manual problems regardless of physical state, including running machines. Only explicit Downtime-context creation links the event; machine reporting does not stop production. This is early human reporting, not predictive maintenance. Downtime remains unchanged; any saved loss context is read only.
+
+**Operational value:** Connects operational problem → captured downtime → responsible maintenance response → verified repair within the existing factory workflow. Stable IDs/history provide a foundation for later Lean effectiveness measurement, not proof that recurrence or money saved has been measured.
+
+**Implementation status:** V for source, focused/rollback tests and the recorded existing-account TESTING lifecycle/reload/EN/AR/mobile checks. Disposable QA requests were safely removed with genuine Audit rows retained. User freeze and real-device acceptance remain open. No preventive schedules, service windows, spare parts, costing or Lean Analysis.
+
+**Competitive context:** MaintainX documents request review and conversion to work orders [S20]; Limble documents asset-linked requests and assigned-work views [S21]; Fiix documents mobile request assets, priority and status [S22]. Those establish expected maintenance capability. Factory Lean deliberately uses one small request lifecycle; these sources do not establish an identical independent-verifier rule or a unique integration claim.
+
+**Differentiation:** C — parity/expected functionality. The stop-linked response opportunity is materially implemented, while the full corrective-action/value-measurement loop remains unfinished. Basic requests are not automatically a Strong Differentiator.
+
+**Evidence:** [forward migration](../supabase/migrations/20261003065917_maintenance_requests_v1.sql), [Maintenance page](../src/features/Maintenance.tsx), [workflow/detail](../src/features/MaintenanceRequest.tsx), [exact Downtime reference](../src/features/DowntimeReference.tsx), [Floor V2](../src/features/FactoryFloorV2.tsx), [Node tests](../tests/maintenance.test.mjs), [rollback SQL](../tests/maintenance.test.sql), HANDOFF live evidence; S20–S22, 2026-10-03.
+
 ## Candidate / planned differentiators
 
-Keep these separate from the seventeen implemented groups:
+Keep these separate from the eighteen implemented groups:
 
 - **P — Complete improvement loop:** root cause → responsible action → verified effectiveness → measured operational/financial value. Current capture/estimate/actual review is not a completed CAPA system. Lean data foundations do not prove an implemented end-user workflow.
-- **P — Maintenance Requests/Gantt and financial analysis:** explicitly unimplemented in HANDOFF. Maintenance as a stop reason/history is not preventive scheduling; loss quantities are not demonstrated money saved.
+- **P — Maintenance planning/Gantt, preventive schedules and financial analysis:** Maintenance Requests V1 is implemented in section 18. Repair workflow is not preventive/capacity scheduling; loss quantities are not demonstrated money saved.
 - **I — Automated machine signals, structured quality checks, advance WIP-operation planning, selected external integrations:** current research candidates only; no roadmap approval or completed implementation asserted.
 - **Not future:** Sales reservation/shortage/dispatch/Min-Max/backward suggestions now exist and are listed under verified implementation, live-accepted on TESTING. Do not duplicate them as proposals.
 
@@ -367,7 +388,7 @@ Apply the core loop before prioritizing. Recommendations require discovery, user
 | Opportunity / present gap | Official reference | Factory problem and strategy fit | Product priority / reason |
 | --- | --- | --- | --- |
 | Responsible corrective action, due date, evidence and effectiveness review — P/I | Tulip CAPA [S17]; Odoo continuous improvement [S18] | Stops recur when diagnosis never produces accountable verified action. Directly completes Find cause → Action → Verify. | **HIGH:** close the existing loop before adding unrelated modules; retain a small factory workflow. |
-| Stop-linked corrective/preventive maintenance, capacity-aware downtime window — P | Odoo requests/calendar [S19] | Engineers need a repair task and an intentional service window. Connect Capture loss → Action → Plan. | **HIGH:** implement narrowly around machines/events; avoid a full enterprise asset system. |
+| Stop-linked response — V; preventive maintenance/capacity-aware window — P | MaintainX/Limble/Fiix [S20–S22]; Odoo calendar [S19] | Stop-linked requests now provide responsible repair and independent verification. Planned service windows still need separate discovery. | **HIGH remaining opportunity:** intentional capacity-aware windows when justified; avoid a full enterprise asset system. |
 | Selected machine signals with operator reason confirmation — I | Tulip OPC UA/app capture [S6]; MachineMetrics monitoring [S2/S3] | Manual capture can miss short stops and delay reliable observations. Improves evidence for Capture loss/Verify. | **MEDIUM:** pilot a few compatible machines only after integration/cost discovery; never claim current automatic collection. |
 | Small structured quality checks tied to Recording/WIP — I | Odoo checks [S12]; Tulip defects [S7] | Disposition alone does not explain why output was rejected. Add reason/measurement evidence for Find cause. | **MEDIUM:** concentrate on pipe defects/checks; avoid certification/compliance scope without demand. |
 | Transparent loss-value assumptions and before/after savings review — P/I | MRPeasy costs [S8]; MachineMetrics improvement analytics [S2] | Owners need a defensible value estimate, not minutes multiplied by an invented universal cost. Completes Measure value. | **MEDIUM:** validate factory-specific costs, attribution and counterfactuals first; no automatic ROI promise. |
@@ -387,7 +408,7 @@ This is an evidence bank, not polished copy. Confidence concerns implemented beh
 | Only Good output reduces remaining production demand; Scrap and Unfinished remain separate. | Sections 4/10 quantity/SQL checks | **High** implementation evidence; execution Finish is a separate action. |
 | Execution retains planned times and records actual Start/Finish with server time. | Section 11 execution guards/tests | **High** for implementation; no automatic equipment capture claim. |
 | Shift and History results preserve recorded attribution and separate unlike measurement units. | Sections 6/13 resolver/full-result tests | **High** implementation evidence; manual acceptance outstanding. |
-| Approved Sales demand uses available finished stock and incoming commitments before creating the remaining production shortage. | Section 16 fulfillment/SQL/live scenarios | **High** TESTING evidence; live-verified and user-accepted, uncommitted. |
+| Approved Sales demand uses available finished stock and incoming commitments before creating the remaining production shortage. | Section 16 fulfillment/SQL/live scenarios | **High** TESTING evidence; live-verified and user-accepted. |
 | Delivery forecasts remain separate from requested/promised dates and advisory slots require planner confirmation. | Section 8 forecasts/UI/live delay scenario | **High** TESTING evidence; bounded feasibility and unknown completion limitations remain. |
 
 ### Claims intentionally rejected
@@ -424,6 +445,9 @@ All entries researched **2026-10-02 (Asia/Riyadh)**. Official documentation/help
 | S17 | [Tulip Library — CAPA Management](https://library.tulip.co/apps/capa-management) | Official indexed app description: root cause, actions, evidence, due dates and assignees. Useful candidate pattern; library description is not proof of effectiveness or automatic savings. |
 | S18 | [Odoo 19 — Continuous Product Improvement](https://www.odoo.com/documentation/19.0/applications/inventory_and_mrp/manufacturing/workflows/continuous_improvement.html) | Official indexed guidance: Quality/Helpdesk problem identification and quality alerts. Does not establish an exact Factory Lean loss-to-value loop. |
 | S19 | [Odoo 19 — Maintenance Requests](https://www.odoo.com/documentation/19.0/applications/inventory_and_mrp/maintenance/maintenance_requests.html) and [Maintenance Calendar](https://www.odoo.com/documentation/19.0/applications/inventory_and_mrp/maintenance/maintenance_calendar.html) | Official indexed help: corrective/preventive requests, responsibility, duration, work-center blocking and calendar. Direct requests fetch timed out; narrow maintenance pattern only. |
+| S20 | [MaintainX — Approve or Decline Work Requests](https://help.getmaintainx.com/approve-or-decline-work-requests) | Official help reviewed 2026-10-03: request list/detail, review/approval into work orders, decline reasons and mobile flows. Useful operational pattern; Factory Lean does not add a separate CMMS work-order layer. |
+| S21 | [Limble — Work Requests Overview](https://help.limblecmms.com/en/articles/2982723-work-requests-overview) and [Managing Work in Limble](https://help.limblecmms.com/en/articles/2986177-managing-work-in-limble) | Official help reviewed 2026-10-03: asset-linked request context and assigned-work views. Supports clear ownership and small own-work surfaces; not an identical authorization architecture. |
+| S22 | [Fiix — View and Edit a Work Request](https://helpdesk.fiixsoftware.com/hc/en-us/articles/4413567996180-View-and-edit-a-work-request) | Official help reviewed 2026-10-03: mobile request assets, priority and status. No full CMMS equivalence or uniqueness claim. |
 
 Older [architecture.md](architecture.md) and [phase-one-improvements.md](phase-one-improvements.md) retain foundation/future labels from earlier phases. Use their invariant explanations, not their historical feature/migration counts, to judge the current product. The newest HANDOFF and forward migrations establish current Planning, WIP, Shift and Sales implementation.
 
@@ -433,3 +457,4 @@ Older [architecture.md](architecture.md) and [phase-one-improvements.md](phase-o
 | --- | --- | --- |
 | 2026-10-02 | Initial evidence record: 17 implemented groups, 3 Strong Differentiators / 5 Competitive Advantages / 9 Parity; 8 future opportunities. Sales V1 is implemented, live-verified and user-accepted on TESTING; uncommitted. Calibration/WIP/real-device limits retained. | Reviewed nine competitor offerings: Siemens Opcenter, Tulip, MachineMetrics, Evocon, Sepasoft on Ignition, MRPeasy, Katana, Odoo and Daftra. Sepasoft flow modeling and established MRP fulfillment narrowed uniqueness claims. |
 | 2026-10-02 | Corrected Sales/Warehouse and Delivery Risk to implemented and live-verified on TESTING after explicit user acceptance. Added authorized Internal Production as parity within section 16, preserving the three distinct origins and legacy history. | Existing official MRPeasy/Odoo manual-manufacturing references support operational completeness; no new uniqueness claim or unrelated research change. |
+| 2026-10-03 | Added stop-linked Maintenance Requests V1 as parity (C): 18 groups, 3 A / 5 B / 10 C. Response/independent verification now implemented and TESTING-verified; preventive/Gantt/costing/Lean effectiveness remain deferred. | Reviewed current official MaintainX, Limble and Fiix request/assignment/mobile guidance. Preserved conservative claims; no automatic Strong Differentiator promotion. |

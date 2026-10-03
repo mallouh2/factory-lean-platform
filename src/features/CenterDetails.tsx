@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Badge, Dialog, Field, formatTime, localName } from "@/components/ui";
 import type { Row } from "@/types";
 import type { FeatureProps } from "./types";
+import MaintenanceContext from './MaintenanceRequest';
 export default function CenterDetails({
   center,
   onClose,
@@ -185,6 +186,7 @@ export default function CenterDetails({
         </form>
       )}
       <ProductionTransfers {...props} center={current} />
+      <MaintenanceContext {...props} key={String(current.id)} machine={current} />
       <h3>{t("history")}</h3>
       <ol className="timeline">
         {history.map((e) => (

@@ -6,6 +6,7 @@ import {
   safeError,
 } from "@/services/authorization";
 import { hasEveryDefinedPermission } from "@/utils/permission-preview.mjs";
+import { maintenanceCommandValid } from '@/utils/maintenance.mjs';
 export async function GET(req: NextRequest) {
   let stage = "authentication";
   try {
@@ -64,6 +65,16 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  maintenance_invalid: 'maintenanceInvalid',
+  maintenance_machine: 'maintenanceInvalidMachine',
+  maintenance_downtime: 'maintenanceInvalidDowntime',
+  maintenance_assignee: 'maintenanceInvalidAssignee',
+  maintenance_state: 'maintenanceInvalidState',
+  maintenance_conflict: 'maintenanceConflict',
+  maintenance_note: 'maintenanceNoteRequired',
+  maintenance_missing: 'noResults',
+  maintenance_existing: 'maintenanceExistingProblem',
+  maintenance_independent_verifier: 'maintenanceIndependentVerifier',
   internal_reason_required: 'internalReasonRequired',
   fulfillment_invalid: 'fulfillmentInvalid',
   fulfillment_product: 'fulfillmentProduct',
@@ -150,6 +161,7 @@ const joinErrors: Record<string, string> = {
 };
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
+  create_maintenance_request: [['factory','view'],['maintenance','create']],
   create_sales_order: [['sales_orders', 'create']],
   approve_sales_order: [['sales_orders', 'approve']],
   change_sales_order: [['sales_orders', 'edit']],
@@ -207,6 +219,8 @@ export async function POST(req: NextRequest) {
     const { db } = context;
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
+    if (['create_maintenance_request','change_maintenance_request'].includes(command)
+      && !maintenanceCommandValid(command,args)) throw new Error('invalid_input');
     if (command === 'create_production_request' && Object.keys(args).some((key) =>
       !['factory', 'request_name', 'request_priority', 'request_required_by', 'request_notes', 'request_items'].includes(key)))
       throw new Error('invalid_input');
@@ -250,6 +264,9 @@ export async function POST(req: NextRequest) {
         } else await authorize(args.factory,
           command === "update_downtime" ? "downtime" : "centers", "edit", context);
       }
+    } else if (command === 'change_maintenance_request') {
+      // The scoped RPC authorizes the manager OR the current assignee for progress only.
+      await authorize(args.factory,'factory','view',context);
     } else if (rpcModules[command]) {
       for (const [module, action] of rpcModules[command])
         await authorize(args.factory, module, action, context);

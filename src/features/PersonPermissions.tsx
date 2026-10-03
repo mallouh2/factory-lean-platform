@@ -25,6 +25,7 @@ export default function PersonPermissions({
       "machine_status",
       "orders",
       "downtime",
+      "maintenance",
       "reports",
     ].includes(m)
       ? "productionGroup"
@@ -149,7 +150,7 @@ export default function PersonPermissions({
                         <td key={a}>
                           <input
                             type="checkbox"
-                            aria-label={m === 'orders' && a === 'create' ? t('createProductionRequest') : `${t(m)} ${t(a)}`}
+                            aria-label={m === 'maintenance' && a === 'edit' ? t('maintenanceManage') : m === 'orders' && a === 'create' ? t('createProductionRequest') : `${t(m)} ${t(a)}`}
                             disabled={!can("roles", "edit") || !can(m, a)}
                             checked={selected.includes(key)}
                             onChange={(e) =>
@@ -161,6 +162,7 @@ export default function PersonPermissions({
                             }
                           />
                           {m === 'orders' && a === 'create' && <small>{t('createProductionRequest')}</small>}
+                          {m === 'maintenance' && a === 'edit' && <small>{t('maintenanceManage')}</small>}
                         </td>
                       );
                     })}

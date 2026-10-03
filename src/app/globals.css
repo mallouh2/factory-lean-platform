@@ -3688,6 +3688,72 @@ details.panel > summary {
 
 /* Sales fulfillment: product identity and operational status remain separate. */
 .fulfillment-page { display: grid; gap: 14px; min-width: 0; }
+.mr-page { display: grid; gap: 16px; min-width: 0; }
+.mr-tools, .mr-actions, .mr-pagination, .mr-detail-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mr-tools { justify-content: space-between; }
+.mr-tools > p { margin: 0; color: var(--muted); flex: 1 1 280px; }
+.mr-counts { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 8px; }
+.mr-counts button { display: grid; text-align: start; gap: 6px; border-inline-start: 3px solid #5a83b3; padding: 12px; }
+.mr-counts strong { font-size: 1.35rem; }
+.mr-counts span { font-size: .875rem; }
+.mr-counts button[aria-pressed='true'] { background: #eaf2fb; border-color: #467caf; }
+.mr-counts button[data-status='COMPLETED'] { border-inline-start-color: #bb7a1f; }
+.mr-counts button[data-status='VERIFIED'] { border-inline-start-color: #36846a; }
+.mr-filters { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.mr-filters summary { cursor: pointer; font-weight: 600; }
+.mr-filter-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; margin-block-start: 12px; }
+.mr-list { display: grid; gap: 10px; }
+.mr-row { background: var(--surface); border: 1px solid var(--border); border-inline-start: 4px solid #5984b5; border-radius: 9px; padding: 14px 16px; min-width: 0; }
+.mr-row[data-status='COMPLETED'] { border-inline-start-color: #bb7a1f; }
+.mr-row[data-status='VERIFIED'] { border-inline-start-color: #36846a; }
+.mr-row[data-status='CANCELLED'] { border-inline-start-color: #8794a0; }
+.mr-row header { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.mr-open { display: flex; text-align: start; flex-wrap: wrap; gap: 8px 14px; border: 0; padding: 0; min-height: 44px; background: transparent; min-width: 0; }
+.mr-open bdi { color: #225b91; font-weight: 700; flex-shrink: 0; }
+.mr-open strong { overflow-wrap: anywhere; }
+.mr-row dl { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 12px; margin-block: 12px 4px; }
+.mr-row dt, .mr-facts dt { color: var(--muted); font-size: .8rem; margin-block-end: 5px; }
+.mr-row dd, .mr-facts dd { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
+.mr-status, .mr-priority { display: inline-block; font-size: .8rem; font-weight: 600; border-radius: 6px; padding: 5px 8px; }
+.mr-status { background: #eaf2fb; color: #255986; }
+.mr-status[data-status='COMPLETED'] { background: #fff0d2; color: #7c4d0a; }
+.mr-status[data-status='VERIFIED'] { background: #e6f4ed; color: #24684f; }
+.mr-status[data-status='CANCELLED'] { background: #eef0f2; color: #52616d; }
+.mr-priority { background: #eef1f4; color: #52616d; }
+.mr-priority[data-priority='HIGH'] { background: #fff0d2; color: #7c4d0a; }
+.mr-priority[data-priority='URGENT'] { background: #fde7e7; color: #982929; }
+.mr-linked, .mr-source { font-size: .8rem; color: #526c83; }
+.mr-pagination { justify-content: center; }
+.mr-form, .mr-form fieldset, .mr-detail, .mr-workflow { display: grid; gap: 14px; min-width: 0; }
+.mr-form fieldset { border: 0; padding: 0; margin: 0; }
+.mr-form .field, .mr-workflow .field, .mr-filter-grid .field { margin: 0; min-width: 0; }
+.mr-form input, .mr-form select, .mr-form textarea, .mr-workflow textarea, .mr-workflow select { width: 100%; }
+.mr-form textarea, .mr-workflow textarea { min-height: 100px; resize: vertical; }
+.mr-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 0; }
+.mr-detail h3, .mr-detail h4, .mr-detail p { margin: 0; overflow-wrap: anywhere; }
+.mr-note, .mr-problem-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.mr-timeline { display: grid; gap: 12px; padding-inline-start: 22px; margin: 0; }
+.mr-timeline li > span { display: block; color: var(--muted); font-size: .8rem; margin-block-start: 4px; }
+.mr-linked-stop, .mr-context, .mr-workflow { border-block-start: 1px solid var(--border); padding-block-start: 14px; }
+.mr-linked-stop, .mr-context { display: grid; gap: 10px; }
+.mr-context { margin-block: 10px; }
+.mr-context > h4, .mr-context > p { margin: 0; }
+.mr-context button { text-align: start; }
+.mr-warning { background: #fff4df; color: #79510b; border-inline-start: 3px solid #bb7a1f; padding: 12px; border-radius: 6px; }
+.mr-workflow form { display: grid; gap: 10px; min-width: 0; }
+.mr-history { margin-block-start: 16px; }
+.mr-history li { padding-block: 8px; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .mr-row dl { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 600px) {
+ .mr-counts { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .mr-row { padding: 12px; }
+ .mr-row header { flex-direction: column; gap: 6px; }
+ .mr-row dl { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .mr-filter-grid { grid-template-columns: minmax(0,1fr); }
+ .mr-open { flex-direction: column; gap: 6px; }
+ .mr-tools .mr-actions { width: 100%; }
+ .mr-tools .primary { flex: 1; }
+}
 .fulfillment-tools, .fulfillment-pagination, .fulfillment-order header, .fulfillment-order footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .fulfillment-tools p { margin: 0; flex: 1 1 280px; }
 .fulfillment-orders, .finished-stock-list { display: grid; gap: 12px; }

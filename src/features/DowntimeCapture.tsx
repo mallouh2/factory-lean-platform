@@ -7,8 +7,12 @@ import type { Row } from "@/types";
 import type { FeatureProps } from "./types";
 import styles from "./DowntimeCapture.module.css";
 import LossImpactReview from "./LossImpactReview";
+import MaintenanceContext from './MaintenanceRequest';
+import DowntimeReference from './DowntimeReference';
 
-export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: FeatureProps) {
+export default function DowntimeCapture({ snapshot: s, t, lang, command, can, initialEventId, onReferenceClose }: FeatureProps & {
+  initialEventId?: string | null; onReferenceClose?: () => void;
+}) {
   const [now, setNow] = useState(() => Date.now());
   const [initialEvent, setInitialEvent] = useState("");
   const [initialReason, setInitialReason] = useState("");
@@ -73,6 +77,8 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
     finally { setBusy(false); }
   }
   return <section className={styles.page} aria-label={t("downtimeCaptureTitle")}>
+    {initialEventId && <DowntimeReference snapshot={s} t={t} lang={lang} command={command} can={can}
+      id={initialEventId} onClose={onReferenceClose || (() => {})} />}
     <header className={styles.heading}>
       <div><h2>{t("downtimeCaptureTitle")}</h2><p>{t("downtimeCaptureHelp")}</p></div>
       <div className={styles.metrics}>
@@ -90,6 +96,8 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
           <p>{context(event)}</p>
           <p>{t("lossStopType")}: <strong>{stopName(event)}</strong></p>
           <small>{formatTime(event.started_at, lang, zone)}</small>
+          {machine(event.work_center_id) && <MaintenanceContext snapshot={s} t={t} lang={lang} command={command} can={can}
+            machine={machine(event.work_center_id)!} downtime={event} lazy />}
           {canOperate && <div className={styles.actions}>
             {!event.reason_id && event.stop_nature !== "planned" &&
               <button disabled={busy} onClick={() => {
@@ -163,6 +171,8 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can }: 
         </div>
         {focused && <div className={styles.reviewDetail} key={String(focused.id)}>
           <h4>{localName(machine(focused.work_center_id), lang)}</h4>
+          {machine(focused.work_center_id) && <MaintenanceContext snapshot={s} t={t} lang={lang} command={command} can={can}
+            key={String(focused.id)} machine={machine(focused.work_center_id)!} downtime={focused} />}
           <p>{context(focused)}</p>
           <dl>
             <div><dt>{t("downtimeStarted")}</dt><dd>{formatTime(focused.started_at, lang, zone)}</dd></div>

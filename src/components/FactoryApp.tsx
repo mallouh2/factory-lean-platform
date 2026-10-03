@@ -20,6 +20,7 @@ import PlatformDashboard from "@/features/PlatformDashboard";
 import PersonPermissions from "@/features/PersonPermissions";
 import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import DowntimeCapture from "@/features/DowntimeCapture";
+import Maintenance from '@/features/Maintenance';
 import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
 import { permissionModule, previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
@@ -40,13 +41,13 @@ const primary = [
   "products",
   "unfinishedProducts",
   "downtime",
+  "maintenance",
   "reports",
 ];
 const admin = ["employees", "roles", "settings", "support", "audit"];
 const future = [
   "purchasing",
   "quality",
-  "maintenance",
   "lean",
   "safety",
   "costing",
@@ -62,6 +63,7 @@ const sidebarIconPaths: Record<string, string[]> = {
   planning: ["M3 5h18v16H3z", "M3 10h18", "M8 3v4", "M16 3v4", "M7 15h4", "M14 15h3"],
   products: ["M3 7 12 3l9 4v10l-9 4-9-4z", "M3 7l9 4 9-4", "M12 11v10"],
   downtime: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M10 9v6", "M14 9v6"],
+  maintenance: ['M14 6a5 5 0 0 0-6 6L3 17a3 3 0 0 0 4 4l5-5a5 5 0 0 0 6-6l-3 3-4-4z'],
   reports: ["M4 20V10h4v10", "M10 20V5h4v15", "M16 20v-8h4v8", "M3 20h18"],
   employees: ["M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M2 20v-2a7 7 0 0 1 14 0v2", "M17 5a4 4 0 0 1 0 7", "M19 14a6 6 0 0 1 3 5v1"],
   roles: ["M5 4h14v16H5z", "M9 9a2 2 0 1 0 4 0 2 2 0 0 0-4 0z", "M8 16a3 3 0 0 1 6 0", "M16 9h1", "M16 13h1"],
@@ -92,6 +94,7 @@ export default function FactoryApp() {
     [center, setCenter] = useState<Row | null>(null);
   const [planningItemId, setPlanningItemId] = useState<string | null>(null);
   const [loadNotice, setLoadNotice] = useState("");
+  const [downtimeEventId,setDowntimeEventId] = useState<string | null>(null);
   const navigationOverlay = useNavigationOverlay(mobile, setMobile, setSidebarCollapsed);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
   const t = (key: string) => dictionary[key] || key;
@@ -102,7 +105,8 @@ export default function FactoryApp() {
     ? previewPermissions(snapshot.permissions, previewMode) : [], [snapshot, previewMode]);
   const can = (module: string, action = "view") =>
     Boolean(
-      visiblePermissions.includes(
+      (module === 'maintenance' && action === 'view' && snapshot?.membership?.status === 'approved'
+        && visiblePermissions.includes('factory:view')) || visiblePermissions.includes(
         `${permissionModule(module)}:${action}`,
       ),
     );
@@ -145,7 +149,7 @@ export default function FactoryApp() {
   }, [load]);
   useEffect(() => {
     if (!snapshot?.factory) return;
-    const allowed = (page: string) => visiblePermissions.includes(`${permissionModule(page)}:view`);
+    const allowed = (page: string) => can(page);
     if (!allowed(view)) {
       const first = [...primary, ...admin].find(allowed);
       if (first) setView(first);
@@ -203,6 +207,14 @@ export default function FactoryApp() {
     setMobile(false);
     setNotice("");
   };
+  useEffect(() => {
+    const open = (event: Event) => {
+      if (!can('downtime')) return;
+      setDowntimeEventId(String((event as CustomEvent).detail));navigate('downtime');
+    };
+    window.addEventListener('factory-downtime-open',open);
+    return () => window.removeEventListener('factory-downtime-open',open);
+  });
   const changePreview = (next: string) => {
     if (dirtyLayout && !confirm(t("discardChanges"))) return;
     setPreview(next);
@@ -491,7 +503,7 @@ export default function FactoryApp() {
               )}
               {props &&
                 (can(view) ? (
-                  view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}
@@ -499,7 +511,7 @@ export default function FactoryApp() {
                     />
                   ) : view === "downtime" ? (
                     <>
-                      <DowntimeCapture {...props} />
+                      <DowntimeCapture {...props} initialEventId={downtimeEventId} onReferenceClose={() => setDowntimeEventId(null)} />
                       <details className="panel"><summary>{t("impactRankedDowntime")}</summary>
                         <DowntimeAnalysis {...props} />
                       </details>
