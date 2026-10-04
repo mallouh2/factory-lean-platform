@@ -5,11 +5,14 @@ import { Field, Empty, localName, formatTime } from "@/components/ui";
 import Configuration from "./Configuration";
 import ProductionShifts from './ProductionShifts';
 import AuditHistory from './AuditHistory';
+import MemberPackageApproval from './MemberPackageApproval';
+import type { Row } from '@/types';
 export default function Administration({
   view,
   ...props
 }: FeatureProps & { view: string }) {
   const { snapshot: s, t, lang, command, can } = props;
+  const [approvingMember, setApprovingMember] = useState<Row | null>(null);
   const [joinCode, setJoinCode] = useState(""),
     [role, setRole] = useState(""),
     [selected, setSelected] = useState<string[]>([]),
@@ -254,6 +257,7 @@ export default function Administration({
                             className="row-actions"
                             onSubmit={async (e) => {
                               e.preventDefault();
+                              if (can('roles','edit')) { setApprovingMember(member); return; }
                               const form = new FormData(e.currentTarget);
                               await safeCommand("manage_member", {
                                 factory: factory.id,
@@ -263,7 +267,7 @@ export default function Administration({
                               });
                             }}
                           >
-                            <select
+                            {!can('roles','edit') && <select
                               name="role"
                               aria-label={t("role")}
                               required
@@ -275,8 +279,8 @@ export default function Administration({
                                   {localName(r, lang)}
                                 </option>
                               ))}
-                            </select>
-                            <button type="submit">{t("approve")}</button>
+                            </select>}
+                            <button type="submit">{t(can('roles','edit') ? 'packageApprove' : 'approve')}</button>
                             <button
                               type="button"
                               onClick={() => {
@@ -300,6 +304,7 @@ export default function Administration({
             </table>
           </div>
         )}
+        {approvingMember && <MemberPackageApproval key={String(approvingMember.id)} {...props} member={approvingMember} onClose={() => setApprovingMember(null)} />}
       </section>
     );
   if (view === "roles")

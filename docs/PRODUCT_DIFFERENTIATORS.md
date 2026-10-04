@@ -1,6 +1,6 @@
 # Factory Lean — Product Differentiators
 
-Research and repository review: **2026-10-04, Asia/Riyadh**. Products/formulas, coherent Warehouse quantities, explicit material flow and Purchasing V1 now extend the TESTING-verified inventory workflows, uncommitted on `development` at `f5896f1e354554641768ea35f6a78d42f1bde17e`. Maintenance and the prior Sales/Warehouse/Internal Production checkpoints remain intact. This is the product-level evidence record, not a release certificate or marketing page. Repository code takes precedence; [HANDOFF.md](../HANDOFF.md) supplies dated verification and acceptance boundaries.
+Research and repository review: **2026-10-04, Asia/Riyadh**. Permission Packages V1 extends administration parity, uncommitted on `development` from checkpoint `9fa3354869249548502dc0cbfaa8ad2acdbc55af`. That checkpoint preserves Products/formulas, coherent Warehouse quantities, explicit material flow and Purchasing V1. Maintenance and prior Sales/Warehouse/Internal Production remain intact. This is the product-level evidence record, not a release certificate or marketing page. Repository code takes precedence; [HANDOFF.md](../HANDOFF.md) supplies dated verification and acceptance boundaries.
 
 ## Purpose and durable maintenance rule
 
@@ -296,17 +296,17 @@ Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**.
 
 **Factory problem:** Titles and preview modes can be mistaken for permission to change production.
 
-**Factory Lean approach:** Explicit factory/person module-action grants authorize commands and reads; role templates are configuration aids. View As cannot elevate actual grants. Membership and database checks remain authoritative.
+**Factory Lean approach:** Explicit effective factory/person module-action grants authorize commands and reads. Permission Packages V1 provides eight broad, factory-local starting templates, multiple functions per member and optional direct additions. A single database resolver unions grants, preserves overlaps, and keeps titles and legacy role templates outside authorization. Package edits/assignments use protected transactional commands and existing Audit; View As cannot elevate actual grants. Membership, grant ceilings and existing platform access windows remain authoritative.
 
 **Operational value:** Managers can grant concrete operational actions without relying on title assumptions.
 
 **Implementation status:** V; person/factory isolation tests and normal audited TESTING grant setup recorded. No production security certification or complete release-hardening claim. Owner permission backfill is not implemented by this work.
 
-**Competitive context:** Odoo documents user access, groups and record rules [S13]. Sophisticated authorization exists elsewhere; different configuration models do not prove superiority.
+**Competitive context:** Odoo documents user access, groups and record rules [S13]. Tulip documents user/role administration [S29], and MRPeasy documents user rights [S30]. Their broad function-first setup and optional rights detail informed the simpler assignment screen. Reusable packages and audited individual authorization remain expected administration parity, with no superiority claim.
 
 **Differentiation:** Expected security capability, with explicit semantics useful to this product.
 
-**Evidence:** [person permissions](../src/features/PersonPermissions.tsx), [preview intersection](../src/utils/permission-preview.mjs), [snapshot authorization tests](../tests/snapshot-authorization.test.sql), [architecture](architecture.md); S13, 2026-10-02.
+**Evidence:** [person permissions](../src/features/PersonPermissions.tsx), [package administration](../src/features/PermissionPackages.tsx), [Permission Packages verification](permission-packages-verification.md), [snapshot authorization tests](../tests/snapshot-authorization.test.sql), [architecture](architecture.md); S13/S29/S30, reviewed 2026-10-04. Package live adoption checks were restored; factory manual freeze and real-device acceptance remain separate. V1 has no individual deny overrides or independent Planning/Production permission split.
 
 ### 15. Operational reads separated from large histories — C
 
@@ -462,6 +462,8 @@ All entries researched **2026-10-02 (Asia/Riyadh)**. Official documentation/help
 | S26 | [Odoo 18 — Reordering Rules](https://www.odoo.com/documentation/18.0/applications/inventory_and_mrp/inventory/warehouses_storage/replenishment/reordering_rules.html) | Official indexed documentation reviewed 2026-10-03: manual trigger lists replenishment needs for human review. Direct fetch failed; narrow workflow reference, no equivalent source/permission claim. |
 | S27 | [Autodesk Fusion Operations — Material Requests](https://help.fusionoperations.autodesk.com/en/articles/4004268-material-requests-in-the-back-office) | Official help reviewed 2026-10-04: request/stock movement handoffs inform explicit requester and Warehouse responsibility; no identical workflow claim. |
 | S28 | [Autodesk Fusion Operations — Real Consumptions and Lot Traceability](https://help.fusionoperations.autodesk.com/en/articles/435903-real-consumptions-and-lot-traceability) | Official help reviewed 2026-10-04: actual consumed quantities and lots stay distinct from theoretical requirements; no full genealogy equivalence. |
+| S29 | [Tulip — Add and Manage Users](https://support.tulip.co/docs/add-and-manage-users) | Official help reviewed 2026-10-04: protected user/role administration and inspectable rights informed broad function selection. No identical package-union or market superiority claim. |
+| S30 | [MRPeasy — Users](https://www.mrpeasy.com/resources/user-manual/settings/human-resources/users/) | Official manual reviewed 2026-10-04: user rights and administration are expected industrial product capabilities. |
 
 Older [architecture.md](architecture.md) and [phase-one-improvements.md](phase-one-improvements.md) retain foundation/future labels from earlier phases. Use their invariant explanations, not their historical feature/migration counts, to judge the current product. The newest HANDOFF and forward migrations establish current Planning, WIP, Shift and Sales implementation.
 
@@ -474,3 +476,4 @@ Older [architecture.md](architecture.md) and [phase-one-improvements.md](phase-o
 | 2026-10-03 | Added stop-linked Maintenance Requests V1 as parity (C): 18 groups, 3 A / 5 B / 10 C. Response/independent verification now implemented and TESTING-verified; preventive/Gantt/costing/Lean effectiveness remain deferred. | Reviewed current official MaintainX, Limble and Fiix request/assignment/mobile guidance. Preserved conservative claims; no automatic Strong Differentiator promotion. |
 | 2026-10-03 | Optional requested targets/read-only historic promises and exact Planning guidance extend section 8 (B); opening/external stock, three supply sources and raw/semi receipts extend section 16 as parity (C). 18 groups and 3 A / 5 B / 10 C unchanged. New manual acceptance remains outstanding. | Reviewed official MRPeasy item and stock-movement manuals; kept sourcing/receipt claims conservative and separate from Purchasing/BOM/ERP. |
 | 2026-10-04 | Products/formulas, one Product inventory row, stored WIP locations, explicit material issue/receipt and Purchasing/suppliers extend section 16 as parity (C); classification counts unchanged. Manual freeze remains open. | Official MRPeasy item definitions and Autodesk request/actual-consumption references informed simple human handoffs. No uniqueness, enterprise genealogy, MRP, price/accounting or savings claim. |
+| 2026-10-04 | Permission Packages V1 extends section 14 as parity (C); eight broad starting functions, factory customization, multiple packages and preserved direct grants. Classification counts unchanged; manual freeze remains open. | Official Tulip user/role administration and MRPeasy user-rights guidance support function-first selection and optional rights detail. |

@@ -553,7 +553,7 @@ export default function FactoryApp() {
                     <>
                       <PersonPermissions {...props} />
                       <details className="panel">
-                        <summary>{t("permissionTemplates")}</summary>
+                        <summary>{t("packageLegacyTemplates")}</summary>
                         <Administration {...props} view="roles" />
                       </details>
                     </>

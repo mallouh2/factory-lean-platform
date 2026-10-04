@@ -3869,3 +3869,16 @@ details.panel > summary {
  .supply-page select,.supply-page input,.supply-page textarea { max-width:100%; min-width:0; }
  .supply-page .section-head>input { width:100%; }
 }
+/* Permission administration keeps function assignment primary; details remain optional. */
+.permission-package-choices { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,230px),1fr)); gap: 12px; margin-block: 16px; padding: 16px; }
+.permission-package-choices .check { align-items: start; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin: 0; }
+.permission-package-choices small, .permission-effective small { display: block; color: var(--muted); font-size: .85em; }
+.permission-details { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: 12px; margin-block: 16px; }
+.permission-details fieldset { min-width: 0; padding: 12px; }
+.permission-details .check { display: flex; margin-block: 8px; }
+.permission-advanced { margin-block-start: 24px; }
+.permission-advanced summary, .permission-package-list summary { cursor: pointer; padding-block: 12px; }
+.permission-package-list details { border-block-end: 1px solid var(--border); padding-block: 8px; }
+.permission-package-list summary span { color: var(--muted); font-size: .9em; margin-inline-start: 8px; }
+.permission-effective { columns: 2 220px; padding-inline-start: 24px; }
+.permission-effective li { break-inside: avoid; margin-block-end: 8px; overflow-wrap: anywhere; }

@@ -8,6 +8,7 @@ import {
 import { hasEveryDefinedPermission } from "@/utils/permission-preview.mjs";
 import { maintenanceCommandValid } from '@/utils/maintenance.mjs';
 import { supplyCommandValid } from '@/utils/supply-contract.mjs';
+import { packageCommands, packageCommandValid } from '@/utils/permission-packages.mjs';
 export async function GET(req: NextRequest) {
   let stage = "authentication";
   try {
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  permission_package_conflict: 'packageConflict',
   supply_invalid: 'supplyInvalid',
   supply_conflict: 'supplyConflict',
   supply_duplicate: 'supplyDuplicate',
@@ -174,6 +176,10 @@ const joinErrors: Record<string, string> = {
 };
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
+  save_permission_package: [['roles','edit']],
+  set_member_permission_packages: [['roles','edit']],
+  set_member_direct_permissions: [['roles','edit']],
+  approve_member_packages: [['employees','approve'],['roles','edit']],
   create_maintenance_request: [['factory','view'],['maintenance','create']],
   create_sales_order: [['sales_orders', 'create']],
   approve_sales_order: [['sales_orders', 'approve']],
@@ -237,6 +243,7 @@ export async function POST(req: NextRequest) {
     const { db } = context;
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
+    if (packageCommands.includes(command) && !packageCommandValid(command,args)) throw new Error('invalid_input');
     if (['create_maintenance_request','change_maintenance_request'].includes(command)
       && !maintenanceCommandValid(command,args)) throw new Error('invalid_input');
     if (['supply_command','define_manufactured_product'].includes(command)&&!supplyCommandValid(command,args)) throw new Error('invalid_input');

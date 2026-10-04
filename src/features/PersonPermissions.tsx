@@ -1,200 +1,54 @@
-import { useState } from "react";
-import type { FeatureProps } from "./types";
-import { Field, localName } from "@/components/ui";
-export default function PersonPermissions({
-  snapshot: s,
-  t,
-  lang,
-  command,
-  can,
-}: FeatureProps) {
-  const [person, setPerson] = useState(""),
-    [selected, setSelected] = useState<string[]>([]),
-    [visual, setVisual] = useState(false),
-    [busy, setBusy] = useState(false);
-  const modules = [
-    ...new Set((s.tables.permissions || []).map((p) => String(p.module))),
-  ];
-  const actions = ["view", "create", "edit", "delete", "approve", "export", "issue"];
-  const members = s.tables.memberships || [];
-  const group = (m: string) =>
-    [
-      "dashboard",
-      "lines",
-      "centers",
-      "machine_status",
-      "orders",
-      "downtime",
-      "maintenance",
-      "reports",
-    ].includes(m)
-      ? "productionGroup"
-      : "administration";
-  return (
-    <section className="panel">
-      <h2>{t("personPermissions")}</h2>
-      <p>{t("personPermissionsHelp")}</p>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={visual}
-          onChange={(e) => setVisual(e.target.checked)}
-        />
-        {t("permissionVisualization")}
-      </label>
-      {visual && (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t("employees")}</th>
-                {modules.map((m) => (
-                  <th key={m}>{t(m)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((u) => (
-                <tr key={String(u.id)}>
-                  <th>{String(u.display_name)}</th>
-                  {modules.map((m) => {
-                    const grants = (s.tables.user_permissions || []).filter(
-                      (p) => p.user_id === u.user_id && p.module === m,
-                    );
-                    return (
-                      <td
-                        key={m}
-                        className={
-                          grants.length ? `permission-${group(m)}` : ""
-                        }
-                      >
-                        <span>{grants.length ? "✓" : "—"}</span>
-                        <small>
-                          {grants.map((p) => t(String(p.action))).join(" · ")}
-                        </small>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <Field label={t("employee")}>
-        <select
-          value={person}
-          onChange={(e) => {
-            setPerson(e.target.value);
-            setSelected(
-              (s.tables.user_permissions || [])
-                .filter((p) => p.user_id === e.target.value)
-                .map((p) => `${p.module}:${p.action}`),
-            );
-          }}
-        >
-          <option value="">{t("chooseEmployee")}</option>
-          {members
-            .filter((m) => !m.is_owner)
-            .map((m) => (
-              <option key={String(m.id)} value={String(m.user_id)}>
-                {String(m.display_name)}
-              </option>
-            ))}
-        </select>
-      </Field>
-      {person && (
-        <>
-          <Field label={t("applyTemplate")}>
-            <select
-              key={person}
-              defaultValue=""
-              disabled={!can("roles", "edit")}
-              onChange={(e) => {
-                if (e.target.value)
-                  setSelected(
-                    (s.tables.role_permissions || [])
-                      .filter((p) => p.role_id === e.target.value)
-                      .map((p) => `${p.module}:${p.action}`),
-                  );
-              }}
-            >
-              <option value="">{t("optionalTemplate")}</option>
-              {(s.tables.roles || []).map((r) => (
-                <option key={String(r.id)} value={String(r.id)}>
-                  {localName(r, lang)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("module")}</th>
-                  {actions.map((a) => (
-                    <th key={a}>{t(a)}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {modules.map((m) => (
-                  <tr
-                    key={m}
-                    className={visual ? `permission-${group(m)}` : ""}
-                  >
-                    <th>{t(m)}</th>
-                    {actions.map((a) => {
-                      const key = `${m}:${a}`;
-                      return (
-                        <td key={a}>
-                          <input
-                            type="checkbox"
-                            aria-label={m === 'maintenance' && a === 'edit' ? t('maintenanceManage') : m === 'orders' && a === 'create' ? t('createProductionRequest') : `${t(m)} ${t(a)}`}
-                            disabled={!can("roles", "edit") || !can(m, a)}
-                            checked={selected.includes(key)}
-                            onChange={(e) =>
-                              setSelected(
-                                e.target.checked
-                                  ? [...selected, key]
-                                  : selected.filter((x) => x !== key),
-                              )
-                            }
-                          />
-                          {m === 'orders' && a === 'create' && <small>{t('createProductionRequest')}</small>}
-                          {m === 'maintenance' && a === 'edit' && <small>{t('maintenanceManage')}</small>}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <button
-            className="primary"
-            disabled={busy || !can("roles", "edit")}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await command("set_user_permissions", {
-                  factory: s.factory?.id,
-                  person,
-                  permissions: selected.map((x) => {
-                    const [module, action] = x.split(":");
-                    return { module, action };
-                  }),
-                });
-              } catch {
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {t("savePersonPermissions")}
-          </button>
-        </>
-      )}
+import { useState } from 'react';
+import type { FeatureProps } from './types';
+import { Field } from '@/components/ui';
+import { packagePermissionPreview } from '@/utils/permission-packages.mjs';
+import { usePermissionPackages, usePackageCommand, type PermissionPackagePage } from './usePermissionPackages';
+import { PackageChoices, PermissionChoices, permissionCaption } from './PermissionPackageControls';
+import PermissionPackages from './PermissionPackages';
+export function MemberPermissions({ page, person, refresh, ...props }: FeatureProps & {page: PermissionPackagePage; person: string; refresh: () => void}) {
+  const {snapshot:s,t,can} = props;
+  const [selected,setSelected] = useState(page.package_ids), [direct,setDirect] = useState(page.direct);
+  const [saved,setSaved] = useState(''), action = usePackageCommand(props.command);
+  const preview = packagePermissionPreview(page.packages,selected,direct);
+  const editable = can('roles','edit') && page.can_manage;
+  const grantable = (keys: string[]) => keys.every(k => {const [m,a] = k.split(':');return can(m,a);});
+  return <div>
+    <p className="muted">{t('packageAssignmentHelp')}</p>
+    <PackageChoices {...props} packages={page.packages} selected={selected} onChange={setSelected} disabled={!editable || action.busy} />
+    <p aria-live="polite">{t('packageEffectiveCount')}: <strong>{preview.effective.length}</strong></p>
+    <button className="primary" disabled={!editable || action.busy || !grantable(preview.inherited)} onClick={() => void action.run('set_member_permission_packages', {
+      factory:s.factory?.id, person, packages:selected, expected_packages:page.package_ids,
+    }, () => {setSaved('packageAssignmentSaved');refresh();})}>{t('packageSaveAssignment')}</button>
+    {action.error && <p role="alert" className="toast">{t(action.error)}</p>}
+    {saved && <p role="status">{t(saved)}</p>}
+    <details className="permission-advanced"><summary>{t('packageAdvanced')}</summary>
+      <h3>{t('packageIndividualAdditions')}</h3><p className="muted">{t('packageDirectHelp')}</p>
+      <PermissionChoices {...props} definitions={s.tables.permissions || []} selected={direct} inherited={preview.inherited} onChange={setDirect} disabled={!editable || action.busy} />
+      <button disabled={!editable || action.busy || !grantable(direct)} onClick={() => void action.run('set_member_direct_permissions', {
+        factory:s.factory?.id,person,permissions:direct.map(key => {const [module,action] = key.split(':');return {module,action};}),expected_direct:page.direct,
+      }, () => {setSaved('packageDirectSaved');refresh();})}>{t('packageSaveDirect')}</button>
+      <h3>{t('packageEffectivePermissions')}</h3>
+      <ul className="permission-effective">{preview.effective.map((key:string) => {const [m,a] = key.split(':');return <li key={key}>{permissionCaption(m,a,t)} <small>{t(preview.inherited.includes(key) ? direct.includes(key) ? 'packageBothSources' : 'packageInherited' : 'packageDirectSource')}</small></li>;})}</ul>
+    </details>
+  </div>;
+}
+function PersonDetail({person,...props}: FeatureProps & {person: string}) {
+  const reader = usePermissionPackages(props.snapshot,person);
+  return <>{reader.error && <p role="alert">{props.t(reader.error)}</p>}{reader.busy && <p role="status">{props.t('loading')}</p>}
+    {reader.data && <MemberPermissions key={JSON.stringify([person,reader.data.package_ids,reader.data.direct,reader.data.packages.map(p => [p.id,p.revision])])}
+      {...props} person={person} page={reader.data} refresh={reader.refresh} />}
+    {reader.error && <button onClick={reader.refresh}>{props.t('refresh')}</button>}</>;
+}
+export default function PersonPermissions(props: FeatureProps) {
+  const {snapshot:s,t} = props, [person,setPerson] = useState('');
+  return <>
+    <section className="panel"><h2>{t('packageMemberAccess')}</h2><p>{t('packageMemberHelp')}</p>
+      <Field label={t('employee')}><select value={person} onChange={e => setPerson(e.target.value)}>
+        <option value="">{t('chooseEmployee')}</option>{(s.tables.memberships || []).filter(m => !m.is_owner).map(m =>
+          <option key={String(m.id)} value={String(m.user_id)}>{String(m.display_name)}</option>)}
+      </select></Field>
+      {person && <PersonDetail key={String(s.factory?.id)+':'+person} {...props} person={person} />}
     </section>
-  );
+    <PermissionPackages {...props} />
+  </>;
 }

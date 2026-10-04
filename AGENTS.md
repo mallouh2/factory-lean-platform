@@ -61,4 +61,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Permissions and interface
 
 - Authorize per person, never by job title or role alone. `View As` is a preview, not authorization. Use the existing TESTING account unless another is genuinely needed; do not casually create test accounts.
+- Permission Packages are factory-local reusable grants. Effective person permissions are the distinct union of assigned package contents and direct grants; V1 has no individual deny overrides. Package assignment must never replace direct grants. Protect administration and grant ceilings in the database, preserve membership/platform-scope checks, and retain existing owner protections.
 - For nontechnical factory users, favor obvious hierarchy, minimal steps, operational clarity, practical mobile use, EN/AR parity, and correct RTL. Keep configuration out of operational pages. Preserve the existing CSS architecture unless a change is justified and approved.
