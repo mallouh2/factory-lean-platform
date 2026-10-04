@@ -58,7 +58,7 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, can,
       else selected.add(item.productId);
       if (!item.quantity.trim() || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0)
         row.quantity = "orderQuantityPositive";
-      if (!["meter", "piece"].includes(item.unit)) row.unit = "orderUnitRequired";
+      if (!["meter", "piece", "kg"].includes(item.unit)) row.unit = "orderUnitRequired";
       if (Object.keys(row).length) rows[item.key] = row;
     }
     const nextErrors = {
@@ -192,7 +192,7 @@ export default function CreateProductionOrder({ snapshot, t, lang, command, can,
               aria-invalid={Boolean(rowError.unit)} aria-describedby={rowError.unit ? `request-unit-error-${item.key}` : undefined}>
               <option value="">{t("notSpecified")}</option>
               <option value="meter">{t("meter")}</option>
-              <option value="piece">{t("piece")}</option>
+              <option value="piece">{t("piece")}</option><option value="kg">{t("kg")}</option>
             </select>
             {rowError.unit && <p id={`request-unit-error-${item.key}`} className="orders-v2-field-error" role="alert">{t(rowError.unit)}</p>}
           </div>

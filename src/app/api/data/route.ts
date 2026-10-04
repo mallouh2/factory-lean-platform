@@ -7,6 +7,7 @@ import {
 } from "@/services/authorization";
 import { hasEveryDefinedPermission } from "@/utils/permission-preview.mjs";
 import { maintenanceCommandValid } from '@/utils/maintenance.mjs';
+import { supplyCommandValid } from '@/utils/supply-contract.mjs';
 export async function GET(req: NextRequest) {
   let stage = "authentication";
   try {
@@ -65,6 +66,14 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  supply_invalid: 'supplyInvalid',
+  supply_conflict: 'supplyConflict',
+  supply_duplicate: 'supplyDuplicate',
+  supply_state: 'supplyState',
+  supply_reason: 'supplyReason',
+  supply_insufficient: 'supplyInsufficient',
+  warehouse_stock_changed: 'inventoryStockChanged',
+  warehouse_confirmation_required: 'inventoryConfirmationRequired',
   maintenance_invalid: 'maintenanceInvalid',
   maintenance_machine: 'maintenanceInvalidMachine',
   maintenance_downtime: 'maintenanceInvalidDowntime',
@@ -116,6 +125,10 @@ const commandErrors: Record<string, string> = {
   history_unit_required: "historyUnitRequired",
   planning_already_started: "planningAlreadyStarted",
   planning_invalid_start: "planningInvalidStart",
+  sales_promise_read_only: "salesPromiseReadOnly",
+  stock_opening_exists: "stockOpeningExists",
+  fulfillment_stock_identity: "fulfillmentStockIdentity",
+  fulfillment_source_decision: "fulfillmentSourceDecision",
   planning_incompatible_line: "planningIncompatibleLine",
   planning_missing_rate: "planningMissingRate",
   planning_ambiguous_rate: "planningAmbiguousRate",
@@ -167,6 +180,11 @@ const rpcModules: Record<string, [string, string][]> = {
   change_sales_order: [['sales_orders', 'edit']],
   dispatch_sales_order: [['warehouse', 'issue']],
   configure_product_stock: [['warehouse', 'edit']],
+  confirm_warehouse_replenishment: [['warehouse', 'edit']],
+  configure_warehouse_material: [['warehouse', 'edit']],
+  configure_warehouse_product: [['warehouse', 'edit']],
+  receive_warehouse_stock: [['warehouse', 'edit']],
+  create_warehouse_material: [['warehouse', 'edit']],
   adjust_finished_stock: [['warehouse', 'edit']],
   configure_delivery_buffer: [['settings', 'edit']],
   configure_production_shift: [['settings','edit']],
@@ -221,6 +239,7 @@ export async function POST(req: NextRequest) {
       throw new Error("invalid_input");
     if (['create_maintenance_request','change_maintenance_request'].includes(command)
       && !maintenanceCommandValid(command,args)) throw new Error('invalid_input');
+    if (['supply_command','define_manufactured_product'].includes(command)&&!supplyCommandValid(command,args)) throw new Error('invalid_input');
     if (command === 'create_production_request' && Object.keys(args).some((key) =>
       !['factory', 'request_name', 'request_priority', 'request_required_by', 'request_notes', 'request_items'].includes(key)))
       throw new Error('invalid_input');
@@ -264,6 +283,9 @@ export async function POST(req: NextRequest) {
         } else await authorize(args.factory,
           command === "update_downtime" ? "downtime" : "centers", "edit", context);
       }
+    } else if (command === 'supply_command' || command === 'define_manufactured_product') {
+      // The RPC independently checks the specific action and original requester.
+      await authorize(args.factory,'factory','view',context);
     } else if (command === 'change_maintenance_request') {
       // The scoped RPC authorizes the manager OR the current assignee for progress only.
       await authorize(args.factory,'factory','view',context);

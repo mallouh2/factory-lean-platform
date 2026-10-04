@@ -83,3 +83,11 @@ test('selected WIP from another factory is masked and cannot supply a production
  const html=render('en',true,()=>{},{id:'foreign-lot',factory_id:'other',product_name:'Foreign private product',quantity_available:380,destinations:[{unit_kind:'machine',unit_id:'foreign-machine',item_id:'item'}]});
  assert.ok(!html.includes('Foreign private product'));assert.ok(!html.includes('machine:foreign-machine'));assert.match(html,/<button class="primary" disabled/);
 });
+test('stored Warehouse WIP is excluded from Production available quantity and input maximum',()=>{
+ const lot={id:'lot',factory_id:'f',item_id:'item',product_name:'Pipe',unit:'piece',quantity_available:35,warehouse_quantity:20,production_available:15,remaining_work:'Printing',destinations:[{unit_kind:'machine',unit_id:'printer',item_id:'item'}]};
+ const html=render('en',true,s=>{s.tables.work_centers=[{id:'printer',name:'Printer'}];s.tables.production_orders[0].unit='piece';},lot);
+ assert.match(html,/max="15"/);assert.doesNotMatch(html,/max="35"/);assert.ok(html.includes('15'));assert.ok(html.includes('Printing'));
+});
+test('manufactured compound recording displays kilograms without treating them as meters',()=>{
+ for(const lang of ['en','ar']){const html=render(lang,true,s=>{s.tables.production_orders[0].unit='kg';s.tables.products[0].product_kind='MANUFACTURED_INTERMEDIATE';s.tables.products[0].stock_unit='kg';});assert.ok(html.includes((lang==='ar'?ar:en).kg));}
+});

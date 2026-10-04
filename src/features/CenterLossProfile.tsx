@@ -53,7 +53,7 @@ function ProductLossProfile(props: FeatureProps & {
   return <section className="capability-rate-row" aria-label={localName(product, lang)}>
     <h5>{localName(product, lang)}</h5>
     <p>{t("lossCapacity")}: <strong>{String(capability.rate)} {unit === "meter"
-      ? t("meterShort") : t("pieceShort")}/h</strong></p>
+      ? t("meterShort") : t(unit === "kg" ? "kg" : "pieceShort")}/h</strong></p>
     <form onSubmit={(event) => void saveProfile(event)} className="form-grid">
       <label>{t("lossCanDefer")}
         <select value={canDefer} onChange={(event) => setCanDefer(event.target.value)}>
@@ -89,7 +89,7 @@ function ProductLossProfile(props: FeatureProps & {
     {canDefer === "yes" && <form onSubmit={(event) => void saveRecovery(event)}
       className="form-grid">
       <label>{t("lossRecoveryCapacity")} ({unit === "meter"
-        ? t("meterShort") : t("pieceShort")}/h)
+        ? t("meterShort") : t(unit === "kg" ? "kg" : "pieceShort")}/h)
         <input type="number" min="0.001" step="any" required value={recoveryRate}
           onChange={(event) => setRecoveryRate(event.target.value)} />
       </label>

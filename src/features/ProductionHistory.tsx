@@ -41,7 +41,7 @@ export default function ProductionHistory({snapshot:s,t,lang,can,onCorrect,initi
     return()=>controller.abort();
   },[valueQuery,menu]);
   const q=(value:unknown)=>Number(value).toLocaleString(lang);
-  const unit=(value:unknown)=>t(value==='meter'?'meterShort':value==='piece'?'pieceShort':'legacyUnit');
+  const unit=(value:unknown)=>t(value==='meter'?'meterShort':value==='piece'?'pieceShort':value==='kg'?'kg':'legacyUnit');
   const name=(row:Row,key:string)=>String(row[lang==='ar'?`${key}_name_ar`:`${key}_name`] || row[`${key}_name`] || t('shiftNotRecorded'));
   const shiftName=(id:unknown)=>{const row=(options.shifts || s.tables.production_shifts || []).find(x=>x.id===id);return row?localName(row,lang):t('shiftNotRecorded');};
   function change(key:string,value:string){setDraft(x=>({...x,[key]:value}));setMenuError('');}
@@ -104,7 +104,7 @@ export default function ProductionHistory({snapshot:s,t,lang,can,onCorrect,initi
       {menu==='corrected' && <Field label={t('historyCorrections')}><select multiple size={2} value={(draft.corrected || '').split(',').filter(x=>x&&x!=='all')} onChange={e=>change('corrected',Array.from(e.target.selectedOptions,x=>x.value).join(','))}><option value="no">{t('historyUncorrected')}</option><option value="yes">{t('historyCorrected')}</option></select></Field>}
       {menu==='date' && <><Field label={t('historyFrom')}><input type="date" value={draft.from || ''} max={draft.to || undefined} onChange={e=>change('from',e.target.value)}/></Field><Field label={t('historyTo')}><input type="date" value={draft.to || ''} min={draft.from || undefined} onChange={e=>change('to',e.target.value)}/></Field><small><bdi>{zone}</bdi></small></>}
       {['good','scrap','unfinished'].includes(menu) && <>
-        <Field label={t('unit')}><select required value={draft.measurement_unit || ''} onChange={e=>change('measurement_unit',e.target.value)}><option value="">{t('historyChooseMeasurementUnit')}</option><option value="meter">{t('meterShort')}</option><option value="piece">{t('pieceShort')}</option></select></Field>
+        <Field label={t('unit')}><select required value={draft.measurement_unit || ''} onChange={e=>change('measurement_unit',e.target.value)}><option value="">{t('historyChooseMeasurementUnit')}</option><option value="meter">{t('meterShort')}</option><option value="piece">{t('pieceShort')}</option><option value="kg">{t('kg')}</option></select></Field>
         {menu==='scrap' && <><Field label={t('historyMetric')}><select value={draft.scrap_metric || 'quantity'} onChange={e=>change('scrap_metric',e.target.value)}><option value="quantity">{t('historyScrapQuantity')}</option><option value="percentage">{t('historyScrapPercentage')}</option></select></Field>
           {draft.scrap_metric==='percentage' && <><Field label={t('historyScope')}><select value={draft.scrap_scope || 'row'} onChange={e=>change('scrap_scope',e.target.value)}><option value="row">{t('historyPerEntry')}</option><option value="shift">{t('historyPerShift')}</option></select></Field><small>{t('historyScrapFormula')}</small></>}</>}
         <Field label={t('historyCondition')}><select value={draft[menu+'_op'] || ''} onChange={e=>change(menu+'_op',e.target.value)}><option value="">{t('all')}</option>{['eq','gte','lte','between'].map(op=><option key={op} value={op}>{t('historyOperator_'+op)}</option>)}</select></Field>

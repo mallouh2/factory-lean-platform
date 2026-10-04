@@ -199,7 +199,7 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
             value={lostQuantity} onChange={(e) => { setLostQuantity(e.target.value); setActualFormError(""); }} />
             <select aria-label={t("lossActualLostUnit")} value={lostUnit}
               onChange={(e) => setLostUnit(e.target.value)}>
-              <option value="meter">{t("meterShort")}</option><option value="piece">{t("pieceShort")}</option>
+              <option value="meter">{t("meterShort")}</option><option value="piece">{t("pieceShort")}</option><option value="kg">{t("kg")}</option>
             </select></span>
           <small>{t("lossActualLostQuantityHelp")}</small></label>
       </section>

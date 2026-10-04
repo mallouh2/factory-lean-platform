@@ -17,7 +17,7 @@ export default function CenterCapabilities({
           e.preventDefault();
           const f = new FormData(e.currentTarget);
           const selected = (s.tables.products || []).filter((p) => Number(f.get(String(p.id))) > 0);
-          if (selected.some((p) => !["meter", "piece"].includes(String(f.get(`${p.id}:unit`))))) {
+          if (selected.some((p) => !["meter", "piece", "kg"].includes(String(f.get(`${p.id}:unit`))))) {
             setError("planningRateUnitRequired");
             return;
           }
@@ -65,7 +65,7 @@ export default function CenterCapabilities({
                     capabilities.find((c) => c.product_id === p.id)?.rate_unit || "")}>
                     <option value="">{t("notSpecified")}</option>
                     <option value="meter">{t("meterShort")}</option>
-                    <option value="piece">{t("pieceShort")}</option>
+                    <option value="piece">{t("pieceShort")}</option><option value="kg">{t("kg")}</option>
                   </select>
                 </Field>
                 <Field label={t("planningSetupMinutes")}>

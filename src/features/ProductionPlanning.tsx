@@ -8,6 +8,7 @@ import { orderAttention } from '@/utils/order-overview.mjs';
 import { requestPresentation } from '@/utils/request-queue.mjs';
 import ProductIdentity from '@/components/ProductIdentity';
 import DeliveryContext from '@/components/DeliveryContext';
+import SalesPlanningGuidance from '@/components/SalesPlanningGuidance';
 import RequestOrigin from '@/components/RequestOrigin';
 import { useFulfillment, type ProductionDemand } from './useFulfillment';
 import { productColor } from '@/utils/product-colors.mjs';
@@ -137,7 +138,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     if (isScheduled(order) && Date.parse(String(order.start_time)) <= Date.now()) return "planningPastSchedule";
     const candidates = capableLines(order, lines, centers, capabilities);
     const checks = candidates.map((line: Row) => durationMs(order, line, centers, capabilities));
-    if (checks[0]?.error === "planningMissingRate" && !["meter", "piece"].includes(String(order.unit)))
+    if (checks[0]?.error === "planningMissingRate" && !["meter", "piece", "kg"].includes(String(order.unit)))
       return "planningLegacyUnit";
     return checks.some((check: { error?: string }) => !check.error) ? "" :
       checks[0]?.error || "planningIncompatibleLine";
@@ -309,7 +310,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     return line ? localName(line, lang) : "—";
   };
   const historyTime = (value: string) => formatLocalInput(value, zone).replace("T", " ");
-  const unitOf = (order: Row) => t(order.unit === "meter" ? "meterShort" : order.unit === "piece" ? "pieceShort" : "legacyUnit");
+  const unitOf = (order: Row) => t(order.unit === "meter" ? "meterShort" : order.unit === "piece" ? "pieceShort" : order.unit === "kg" ? "kg" : "legacyUnit");
   const amountOf = (order: Row) => `${Number(order.target_quantity).toLocaleString(lang)} ${unitOf(order)}`;
   const requestOf = (order: Row) => requestById.get(String(order.request_id));
 
@@ -493,18 +494,19 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
     const now = Date.now();
     const result = suggestPlanningSlots(order, requestOf(order), lines, orders, centers, capabilities,
       { now: Math.ceil(now / 900_000) * 900_000, horizonDays: 28, limit: 3, calendar, zone });
-    const linked = fulfillment.data?.rows.some(row => row.item_id === String(order.id) && row.target_ready) || requestOf(order)?.request_type === 'SALES_PRODUCTION';
+    const linked = fulfillment.data?.rows.some(row => row.item_id === String(order.id) && row.target_ready)
+      || ['SALES_PRODUCTION','STOCK_REPLENISHMENT'].includes(String(requestOf(order)?.request_type));
     if (linked) {
       setBusy(true);
       try {
-        const response = await fetch('/api/fulfillment?' + new URLSearchParams({ factory: String(s.factory?.id), mode: 'slot', item: String(order.id) }), { cache: 'no-store' });
-        const candidate = await response.json();
-        if (!response.ok) throw Error(candidate.error || 'dataWarning');
+        const response = await fetch('/api/fulfillment?' + new URLSearchParams({ factory: String(s.factory?.id), mode: 'guidance', item: String(order.id) }), { cache: 'no-store' });
+        const guidance = await response.json();
+        if (!response.ok) throw Error(guidance.error || 'dataWarning');
+        const candidate = guidance.suggestion;
         const line = candidate && lines.find(row => String(row.id) === candidate.line);
         if (line) {
           const check: any = proposeSchedule(order, line, Date.parse(candidate.start), orders, centers, capabilities, now, calendar, zone);
-          const knownTarget = Math.min(...(fulfillment.data?.rows || []).filter(row => row.item_id === String(order.id) && row.target_ready).map(row => Date.parse(row.target_ready!)));
-          const target = Number.isFinite(knownTarget) ? knownTarget : Date.parse(candidate.finish);
+          const target = Date.parse(guidance.state === 'tight' ? guidance.requested_delivery : guidance.target_ready);
           if (!check.error && check.finish <= target) {
             const schedule = sortedLineSchedule(line, orders, centers, capabilities, String(order.id), calendar, zone);
             result.suggestions = [{ lineId: String(line.id), start: check.start, finish: check.finish, setupMs: check.setupMs,
@@ -513,7 +515,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
               load: lineCapacity(schedule, now, now + 7 * 86400000, calendar, zone) }];
             result.reason = 'salesBackwardAdvisory';
           } else result.reason = 'salesTargetNoSlot';
-        } else result.reason = 'salesTargetNoSlot';
+        } else if (guidance.requested_delivery) result.reason = 'salesTargetNoSlot';
       } catch (cause) { setError(cause instanceof Error ? cause.message : 'dataWarning'); setBusy(false); return; }
       finally { setBusy(false); }
     }
@@ -954,6 +956,8 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command,
           {proposal && !proposal.error && <span className={deadlineStatus(proposal.finish, requestOf(editing)?.required_by) === "planningLate"
             ? "planning-warning" : ""}>{t(deadlineStatus(proposal.finish, requestOf(editing)?.required_by))}</span>}
         </div>}
+        {(requestOf(editing)?.request_type === 'SALES_PRODUCTION' || fulfillment.data?.rows.some(row => row.item_id === String(editing.id) && row.sales_order_id)) &&
+          <SalesPlanningGuidance factory={String(s.factory?.id)} item={String(editing.id)} fetchedAt={s.fetchedAt} proposal={proposal} t={t} lang={lang} zone={zone} />}
         {suggestedGaps.length > 0 && <div className="planning-gap-choices">
           <strong>{t("planningAvailableStarts")}</strong>
           {suggestedGaps.map((gap: { start: number; finish: number; slot: { start: number } }) =>

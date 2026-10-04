@@ -32,7 +32,7 @@ begin
  perform public.adjust_finished_stock(f,p,'meter',150,'QA opening stock',r);
  perform pg_temp.sales_assert((select on_hand=150 from public.finished_goods_balances where product_id=p),'stock adjustment retry');
  -- A: fully stocked approval reserves without physical dispatch or production.
- s:=public.create_sales_order(f,jsonb_build_object('requested_delivery',due,'promised_delivery',promised,'lines',jsonb_build_array(jsonb_build_object('product_id',p,'quantity',100,'unit','meter'))));
+ s:=public.create_sales_order(f,jsonb_build_object('requested_delivery',due,'lines',jsonb_build_array(jsonb_build_object('product_id',p,'quantity',100,'unit','meter'))));
  perform pg_temp.sales_assert((select status='draft' from public.sales_orders where id=s),'draft');
  info:=private.sales_order_detail(f,s);perform pg_temp.sales_assert((info->'lines'->0->>'production_required')::numeric=0 and info->>'earliest_feasible' is not null,'stocked draft reads without reservation');
  r:=gen_random_uuid();perform public.approve_sales_order(f,s,r);perform public.approve_sales_order(f,s,r);
@@ -44,7 +44,7 @@ begin
  perform pg_temp.sales_assert((select on_hand=50 and reserved=0 from public.finished_goods_balances where product_id=p),'dispatch physical deduction exactly once');
  perform pg_temp.sales_assert((select status='completed' from public.sales_orders where id=s),'completion requires dispatch');
  -- B/C/G/H: shortage, Good receipt, scrap/WIP exclusion and excess stock.
- s2:=public.create_sales_order(f,jsonb_build_object('requested_delivery',due,'promised_delivery',promised,'lines',jsonb_build_array(jsonb_build_object('product_id',p,'quantity',100,'unit','meter'))));perform public.approve_sales_order(f,s2);
+ s2:=public.create_sales_order(f,jsonb_build_object('requested_delivery',due,'lines',jsonb_build_array(jsonb_build_object('product_id',p,'quantity',100,'unit','meter'))));perform public.approve_sales_order(f,s2);
  select id into l from public.sales_order_lines where order_id=s2;
  select o.id,o.request_id into i,req from public.production_orders o join public.production_requests pr on pr.id=o.request_id where pr.sales_order_line_id=l and o.status='planned';
  perform pg_temp.sales_assert((select target_quantity=50 and line_id is null from public.production_orders where id=i),'shortage exactly 50/manual Planning');
@@ -73,8 +73,10 @@ begin
  perform public.finish_product_item(f,i);perform public.dispatch_sales_order(f,s2);
  perform pg_temp.sales_assert((select on_hand=10 and reserved=0 from public.finished_goods_balances where product_id=p),'excess after dispatch');
  perform pg_temp.sales_assert((select jsonb_build_array(line_id,start_time,expected_finish) from public.production_orders where id=i)=before_plan,'Planning preserved');
- -- D: MTS projected trigger/max, no duplicate refill.
+ -- D: MTS detection plus explicit Warehouse confirmation, no duplicate refill.
  perform public.configure_product_stock(f,stockp,'MAKE_TO_STOCK','meter',40,100);
+ perform pg_temp.sales_assert(not exists(select 1 from public.production_orders where product_id=stockp),'configuration detects without auto production');
+ perform public.confirm_warehouse_replenishment(f,stockp,'produce','meter',0,100,gen_random_uuid());
  select o.id into i2 from public.production_orders o join public.production_requests pr on pr.id=o.request_id where o.product_id=stockp and o.status='planned' and pr.request_type='STOCK_REPLENISHMENT';
  perform private.replenish_finished(f,stockp);perform pg_temp.sales_assert((select count(*)=1 from public.production_orders where product_id=stockp and status='planned'),'single replenishment');
  perform pg_temp.sales_assert(private.projected_finished(f,stockp,'meter')=100,'projected includes incoming');
@@ -107,12 +109,12 @@ begin
  perform public.record_production(f,'line',ln,i,tech,20,0);perform public.finish_product_item(f,i);
  perform pg_temp.sales_assert((select on_hand=20 and reserved=0 from public.finished_goods_balances where product_id=p2),'cancelled demand output becomes free stock');
  -- I/J: impossible date and plan-slip risk without promise mutation.
- s4:=public.create_sales_order(f,jsonb_build_object('requested_delivery',now()-interval '1 day','promised_delivery',now()+interval '1 day','lines',jsonb_build_array(jsonb_build_object('product_id',p,'quantity',100,'unit','meter'))));perform public.approve_sales_order(f,s4);
+ s4:=public.create_sales_order(f,jsonb_build_object('requested_delivery',now()-interval '1 day','lines',jsonb_build_array(jsonb_build_object('product_id',p,'quantity',100,'unit','meter'))));perform public.approve_sales_order(f,s4);
  info:=private.sales_order_detail(f,s4);perform pg_temp.sales_assert((info->>'requested_feasible')::boolean=false,'impossible requested date');
  select id into l from public.sales_order_lines where order_id=s4;
  select o.id into i from public.production_orders o join public.production_requests pr on pr.id=o.request_id where pr.sales_order_line_id=l and o.status='planned';
  update public.production_orders set line_id=ln,start_time=now()+interval '2 days',expected_finish=now()+interval '3 days' where id=i;
- info:=private.sales_order_detail(f,s4);perform pg_temp.sales_assert((info->>'earliest_feasible')::timestamptz<(info->>'estimated_ready')::timestamptz,'earliest differs from delayed current plan');perform pg_temp.sales_assert(info->>'risk'='late' and (info->>'promised_delivery')::timestamptz<now()+interval '2 days','plan slip risk/promised immutable');
+ info:=private.sales_order_detail(f,s4);perform pg_temp.sales_assert((info->>'earliest_feasible')::timestamptz<(info->>'estimated_ready')::timestamptz,'earliest differs from delayed current plan');perform pg_temp.sales_assert(info->>'risk'='late' and info->>'promised_delivery' is null,'plan slip risk never invents a promise');
  perform pg_temp.sales_assert(exists(select 1 from jsonb_array_elements(public.fulfillment_production_context(f,i)->'rows') x where x->>'risk'='late'),'Planning/Floor context');
  -- Scope/authorization/direct-write denial independent of preview role.
  perform set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);

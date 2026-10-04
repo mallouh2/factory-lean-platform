@@ -62,9 +62,9 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const progress = productionProgress(item, Number(good));
   const q = (n: number) => n.toLocaleString(lang);
   const unitLabel = (row: Row) => localName((row.unit_kind === "line" ? s.tables.production_lines : s.tables.work_centers)?.find(x => x.id === row.unit_id), lang);
-  const quantityUnit = (row?: Row) => t(row?.unit === "meter" ? "meterShort" : row?.unit === "piece" ? "pieceShort" : "legacyUnit");
+  const quantityUnit = (row?: Row) => t(row?.unit === "meter" ? "meterShort" : row?.unit === "piece" ? "pieceShort" : row?.unit === "kg" ? "kg" : "legacyUnit");
   const editable = can("orders", "edit");
-  const validQuantities = unfinishedOutputValid(good,scrap,unfinished,remainingWork,inputSource==='normal'?null:processQuantity,Number(lot?.quantity_available ?? 0));
+  const validQuantities = unfinishedOutputValid(good,scrap,unfinished,remainingWork,inputSource==='normal'?null:processQuantity,Number(lot?.production_available ?? lot?.quantity_available ?? 0));
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!unit || !item || !validQuantities) return;
@@ -92,9 +92,9 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
     {editable && <form onSubmit={submit} className="recording-form">
       <fieldset disabled={busy}>
         <Field label={t("unfinishedInputSource")}><select value={inputSource} onChange={e=>{setInputSource(e.target.value);setUnitKey("");setLotId("");setProcessQuantity("");setConfirmed(false);}}><option value="normal">{t("unfinishedNormal")}</option><option value="unfinished">{t("unfinishedProduct")}</option></select></Field>
-        {inputSource==='unfinished' && <div className="unfinished-input"><Field label={t("unfinishedProduct")}><select required value={lotId} onChange={e=>{setLotId(e.target.value);setUnitKey("");setProcessQuantity("");}}><option value="">{t("unfinishedChoose")}</option>{lots.map(x=><option key={String(x.id)} value={String(x.id)}>{String(x[lang==='ar'?'product_name_ar':'product_name'] || x.product_name)} · {String(x.request_code || x.item_code)} · {q(Number(x.quantity_available))} {quantityUnit(x)} · {String(x.remaining_work)}</option>)}</select></Field>
+        {inputSource==='unfinished' && <div className="unfinished-input"><Field label={t("unfinishedProduct")}><select required value={lotId} onChange={e=>{setLotId(e.target.value);setUnitKey("");setProcessQuantity("");}}><option value="">{t("unfinishedChoose")}</option>{lots.map(x=><option key={String(x.id)} value={String(x.id)}>{String(x[lang==='ar'?'product_name_ar':'product_name'] || x.product_name)} · {String(x.request_code || x.item_code)} · {q(Number(x.production_available??x.quantity_available))} {quantityUnit(x)} · {String(x.remaining_work)}</option>)}</select></Field>
           {inventory.error && <p role="alert">{t(inventory.error)} <button type="button" onClick={inventory.refresh}>{t("refresh")}</button></p>}
-          {lot && <><p>{t("unfinishedAvailable")}: <strong>{q(Number(lot.quantity_available))} {quantityUnit(lot)}</strong> · {String(lot.remaining_work)}</p><Field label={t("unfinishedProcess")}><input required type="number" min="0" max={Number(lot.quantity_available)} step="any" value={processQuantity} onChange={e=>setProcessQuantity(e.target.value)}/></Field><p className="muted">{t("unfinishedConservationHelp")}</p></>}
+          {lot && <><p>{t("unfinishedAvailable")}: <strong>{q(Number(lot.production_available??lot.quantity_available))} {quantityUnit(lot)}</strong> · {String(lot.remaining_work)}</p><Field label={t("unfinishedProcess")}><input required type="number" min="0" max={Number(lot.production_available??lot.quantity_available)} step="any" value={processQuantity} onChange={e=>setProcessQuantity(e.target.value)}/></Field><p className="muted">{t("unfinishedConservationHelp")}</p></>}
         </div>}
         <div className="form-grid">
           <Field label={t("recordingUnit")}><select required value={unit ? `${unit.unit_kind}:${unit.unit_id}` : ""}

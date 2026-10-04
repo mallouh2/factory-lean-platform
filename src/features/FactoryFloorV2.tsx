@@ -135,7 +135,7 @@ export default function FactoryFloorV2(
     const product = s.tables.products?.find((p) => String(p.id) === String(item.product_id));
     const request = requests.find((r) => String(r.id) === String(item.request_id));
     const timing = executionTiming(item);
-    const unit = t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : "legacyUnit");
+    const unit = t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : item.unit === "kg" ? "kg" : "legacyUnit");
     const variance = (minutes: number) => minutes === 0 ? t("executionOnTime")
       : `${formatDuration(Math.abs(minutes), lang)} ${t(minutes > 0 ? "executionLate" : "executionEarly")}`;
     return <div className={`ff2-queue-job${ready ? " ff2-queue-ready" : ""}`} key={String(item.id)} data-product-item-id={String(item.id)} data-execution-state={String(item.status)}>
@@ -339,7 +339,7 @@ export default function FactoryFloorV2(
         </span> : <span className="sr-only">{t("flowSummary")}: {t(flowKey)}</span>}
         {!c.line_id && !assignment && job && <span className="ff2-node-production"><strong dir="auto"><ProductIdentity productId={job.product_id} productItemId={job.id}>{product ? localName(product, lang) : String(job.code || "")}</ProductIdentity></strong>
           <bdi>{String(requests.find(request => request.id === job.request_id)?.code || job.code || "")}</bdi>
-          <span>{t("recordingRemaining")}: {productionProgress(job).remaining.toLocaleString(lang)} {t(job.unit === "meter" ? "meterShort" : job.unit === "piece" ? "pieceShort" : "legacyUnit")}</span></span>}
+          <span>{t("recordingRemaining")}: {productionProgress(job).remaining.toLocaleString(lang)} {t(job.unit === "meter" ? "meterShort" : job.unit === "piece" ? "pieceShort" : job.unit === "kg" ? "kg" : "legacyUnit")}</span></span>}
         {state === "stopped" && stop && <span className={`ff2-node-stop${stop.stop_nature === "planned" ? " ff2-stop-planned" : ""}`}>
           <strong dir="auto">{stop.stop_nature === "planned" ? t(`lossActivity_${stop.planned_activity}`)
             : stop.reason_id ? localName(s.tables.downtime_reasons?.find((reason) => reason.id === stop.reason_id), lang) : t("downtimeUnclassified")}</strong>

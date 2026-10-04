@@ -11,8 +11,8 @@ export default function DeliveryContext({ rows, item, t, lang, zone }: {
     className="delivery-signal" data-risk={row.risk || 'none'}>
     <strong>{t(requestOriginLabel(row.request_type))}</strong>
     {row.sales_order_code && <><bdi dir="ltr">{row.sales_order_code}</bdi>
-      <span>{t('customerDue')}: {formatTime(row.promised_delivery || row.requested_delivery, lang, zone)}</span>
+      {row.requested_delivery && <><span>{t('customerDue')}: {formatTime(row.requested_delivery, lang, zone)}</span>
       <span>{t(`deliveryRisk_${row.risk || 'unknown'}`)}</span>
-      <span>{t('targetReady')}: {formatTime(row.target_ready, lang, zone)}</span></>}
+      <span>{t('targetReady')}: {formatTime(row.target_ready, lang, zone)}</span></>}</>}
   </span>)}</span>;
 }

@@ -74,7 +74,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
   const productOf = (item: Row) => products.find((product) => String(product.id) === String(item.product_id));
   const lineOf = (item: Row) => lines.find((line) => String(line.id) === String(item.line_id));
   const itemsOf = (request: Row) => itemsByRequest.get(String(request.id)) || [];
-  const unitOf = (item: Row) => t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : "legacyUnit");
+  const unitOf = (item: Row) => t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : item.unit === "kg" ? "kg" : "legacyUnit");
   const quantity = (value: unknown) => Number(value).toLocaleString(lang);
   const creators: { id: string; name: string }[] = requestCreators(requests);
   const activeFilterCount = filter.length + Number(Boolean(search)) + Number(Boolean(productFilter)) +

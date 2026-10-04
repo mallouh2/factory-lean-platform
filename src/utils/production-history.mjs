@@ -13,7 +13,7 @@ export function parseHistoryQuery(query) {
   if (filters.from && filters.to && filters.from>filters.to) throw Error('invalid_input');
   if (filters.minimum_scrap && (!Number.isFinite(Number(filters.minimum_scrap)) || Number(filters.minimum_scrap)<0)) throw Error('invalid_input');
   for(const key of ['request','product','unit','technician','shift','corrected']) if(filters[key] && (filters[key].length>3000 || filters[key].split(',').length>30)) throw Error('invalid_input');
-  if(filters.measurement_unit && !['meter','piece'].includes(filters.measurement_unit)) throw Error('invalid_input');
+  if(filters.measurement_unit && !['meter','piece','kg'].includes(filters.measurement_unit)) throw Error('invalid_input');
   if(filters.scrap_metric && !['quantity','percentage'].includes(filters.scrap_metric)) throw Error('invalid_input');
   if(filters.scrap_scope && !['row','shift'].includes(filters.scrap_scope)) throw Error('invalid_input');
   for(const key of ['good','scrap','unfinished']) if(filters[`${key}_op`]) {

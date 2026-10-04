@@ -21,6 +21,10 @@ import PersonPermissions from "@/features/PersonPermissions";
 import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import DowntimeCapture from "@/features/DowntimeCapture";
 import Maintenance from '@/features/Maintenance';
+import Purchasing from '@/features/Purchasing';
+import Products from '@/features/Products';
+import MaterialFlow from '@/features/MaterialFlow';
+import Suppliers from '@/features/Suppliers';
 import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
 import { permissionModule, previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
@@ -34,9 +38,12 @@ const pageHistoryTables: Record<string, string[]> = {
 const primary = [
   "sales",
   "warehouse",
+  "purchasing",
+  "myPurchaseRequests",
   "dashboard",
   "lines",
   "orders",
+  "materialRequests",
   "planning",
   "products",
   "unfinishedProducts",
@@ -44,9 +51,8 @@ const primary = [
   "maintenance",
   "reports",
 ];
-const admin = ["employees", "roles", "settings", "support", "audit"];
+const admin = ["employees", "roles", "suppliers", "settings", "support", "audit"];
 const future = [
-  "purchasing",
   "quality",
   "lean",
   "safety",
@@ -54,6 +60,10 @@ const future = [
   "hr",
 ];
 const sidebarIconPaths: Record<string, string[]> = {
+  purchasing: ['M3 3h2l3 12h11l2-8H6','M9 20h.01','M18 20h.01'],
+  myPurchaseRequests: ['M5 3h14v18H5z','M8 7h8','M8 11h8','M8 16l2 2 5-5'],
+  materialRequests: ['M3 7l9-4 9 4-9 4z','M3 7v10l9 4 9-4V7','M12 11v10'],
+  suppliers: ['M3 21V7l9-4 9 4v14','M7 9h2','M15 9h2','M9 21v-6h6v6'],
   platform: ["M3 21h18", "M5 21V7l7-4 7 4v14", "M9 10h.01", "M15 10h.01", "M9 14h.01", "M15 14h.01", "M10 21v-4h4v4"],
   dashboard: ["M3 3h8v8H3z", "M13 3h8v8h-8z", "M3 13h8v8H3z", "M13 13h8v8h-8z"],
   lines: ["M2 9h5v6H2z", "M10 9h5v6h-5z", "M18 9h4v6h-4z", "M7 12h3", "M15 12h3"],
@@ -105,6 +115,8 @@ export default function FactoryApp() {
     ? previewPermissions(snapshot.permissions, previewMode) : [], [snapshot, previewMode]);
   const can = (module: string, action = "view") =>
     Boolean(
+      (module === 'myPurchaseRequests' && action === 'view' && snapshot?.membership?.status === 'approved' && visiblePermissions.includes('factory:view')) ||
+      (module === 'suppliers' && action === 'view' && visiblePermissions.includes('suppliers:edit')) ||
       (module === 'maintenance' && action === 'view' && snapshot?.membership?.status === 'approved'
         && visiblePermissions.includes('factory:view')) || visiblePermissions.includes(
         `${permissionModule(module)}:${action}`,
@@ -503,7 +515,7 @@ export default function FactoryApp() {
               )}
               {props &&
                 (can(view) ? (
-                  view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}

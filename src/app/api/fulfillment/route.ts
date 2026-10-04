@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedClient, authorize, safeError } from '@/services/authorization';
+import { inventoryColumns, validInventoryFilters } from '@/utils/warehouse-inventory.mjs';
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,14 +11,22 @@ export async function GET(req: NextRequest) {
     const definitions = {
       sales: ['sales_orders', 'sales_orders_page'],
       warehouse: ['warehouse', 'warehouse_page'],
+      inventory: ['warehouse', 'warehouse_inventory'],
       production: ['orders', 'fulfillment_production_context'],
       slot: ['orders', 'sales_planning_slot'],
+      guidance: ['orders', 'sales_planning_guidance'],
+      movements: ['warehouse', 'warehouse_movements'],
     } as const;
     if (!Object.hasOwn(definitions, mode)) throw Error('invalid_input');
     const [module, rpc] = definitions[mode as keyof typeof definitions];
     const context = await authenticatedClient();
     await authorize(factory, module, 'view', context);
-    const args = mode === 'production' || mode === 'slot'
+    const filters = mode === 'inventory' ? JSON.parse(req.nextUrl.searchParams.get('filters') || '{}') : {};
+    const sort = req.nextUrl.searchParams.get('sort') || 'name', direction = req.nextUrl.searchParams.get('direction') || 'asc';
+    if (mode === 'inventory' && (!validInventoryFilters(filters) || !inventoryColumns.some(c => c[0] === sort) || !['asc','desc'].includes(direction))) throw Error('invalid_input');
+    const args = mode === 'inventory' ? { factory, page, filters, sort, direction } : mode === 'movements'
+      ? { factory, item: req.nextUrl.searchParams.get('item'), item_type: req.nextUrl.searchParams.get('item_type'), page }
+      : mode === 'production' || mode === 'slot' || mode === 'guidance'
       ? { factory, item: req.nextUrl.searchParams.get('item') || null }
       : { factory, page };
     const { data, error } = await context.db.rpc(rpc, args);

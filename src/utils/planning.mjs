@@ -133,7 +133,7 @@ export function lineRate(order, line, centers, capabilities) {
       String(capability.product_id) === String(order.product_id)));
   if (!matches.length) return { error: "planningIncompatibleLine" };
   const unit = String(order.unit || "");
-  if (!["meter", "piece"].includes(unit) || matches.some((match) =>
+  if (!["meter", "piece", "kg"].includes(unit) || matches.some((match) =>
     !Number.isFinite(Number(match.rate)) || Number(match.rate) <= 0 ||
     String(match.rate_unit || "") !== unit)) return { error: "planningMissingRate" };
   const rate = Number(matches[0].rate);
