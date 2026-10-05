@@ -59,10 +59,10 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
     x.work_center_id === event.work_center_id && x.product_id === productId);
   const canEngineer = can("downtime", "edit");
   const canCalibrate = canEngineer && can("centers", "edit");
-  const [scrap, setScrap] = useState(String(actual?.scrap_quantity ?? ""));
-  const [scrapUnit, setScrapUnit] = useState(String(actual?.scrap_unit || "kg"));
-  const [shutdown, setShutdown] = useState(String(actual?.shutdown_scrap_quantity ?? ""));
-  const [restart, setRestart] = useState(String(actual?.restart_scrap_quantity ?? ""));
+  const [scrap, setScrap] = useState(String(actual?.scrap_unit==='kg' ? actual.scrap_quantity ?? '' : ''));
+  const [scrapUnit] = useState('kg');
+  const [shutdown, setShutdown] = useState(String(actual?.scrap_unit==='kg' ? actual.shutdown_scrap_quantity ?? '' : ''));
+  const [restart, setRestart] = useState(String(actual?.scrap_unit==='kg' ? actual.restart_scrap_quantity ?? '' : ''));
   const [recovery, setRecovery] = useState(String(actual?.recovery_minutes ?? ""));
   const [lossMinutes, setLossMinutes] = useState(String(actual?.actual_loss_minutes ?? ""));
   const [lostQuantity, setLostQuantity] = useState(String(actual?.actual_lost_output_quantity ?? ""));
@@ -208,11 +208,7 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
         <label>{t("lossActualScrap")} <small>{t("lossOptional")}</small>
           <span className={styles.valueWithUnit} dir="ltr"><input type="number" min="0" step="any"
             value={scrap} onChange={(e) => { setScrap(e.target.value); setActualFormError(""); }} />
-            <select aria-label={t("lossScrapUnit")} value={scrapUnit}
-              onChange={(e) => setScrapUnit(e.target.value)}>
-              {!(["kg", "piece"].includes(scrapUnit)) && <option value={scrapUnit}>{scrapUnit}</option>}
-              <option value="kg">{t("lossKg")}</option><option value="piece">{t("lossPiece")}</option>
-            </select></span>
+            <span aria-label={t('lossScrapUnit')}>kg</span></span>
           <small>{t("lossActualScrapHelp")}</small></label>
         <div className={styles.actualParts}>
           <label>{t("lossActualShutdown")} <small>{t("lossOptional")}</small>
@@ -254,11 +250,7 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
         {nature === "unplanned" ? <label>{t("downtimeInitialReason")}
           <select required value={reason} onChange={(e) => setReason(e.target.value)}>
             <option value="">{t("downtimeChooseReason")}</option>
-            {downtimeReasonChoices.map(([name, key]) => {
-              const row = (s.tables.downtime_reasons || [])
-                .find((x) => x.name === name && !x.parent_id);
-              return row ? <option value={String(row.id)} key={String(row.id)}>{t(key)}</option> : null;
-            })}
+            {(s.tables.downtime_reasons || []).map(row => <option value={String(row.id)} key={String(row.id)}>{localName(row,lang)}</option>)}
           </select></label> : <label>{t("lossPlannedActivity")}
           <select required value={activity} onChange={(e) => setActivity(e.target.value)}>
             <option value="">{t("lossChooseActivity")}</option>
@@ -272,7 +264,7 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
         <button disabled={busy || correctionNote.trim().length < 3}>{t("save")}</button>
       </form>
     </details>}
-    {canCalibrate && profile && !dismissed && suggestions.map((suggestion) =>
+    {canCalibrate && profile?.scrap_unit==='kg' && !dismissed && suggestions.map((suggestion) =>
       suggestion && <section key={suggestion.parameter}>
         <h5>{t("lossCalibration")}</h5>
         <p>{suggestion.samples} {t("lossComparableEvents")} · {suggestion.parameter === "shutdown"
@@ -288,7 +280,7 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
                 ? suggestion.suggested_value : profile.shutdown_scrap_quantity,
               restart_scrap: suggestion.parameter === "restart"
                 ? suggestion.suggested_value : profile.restart_scrap_quantity,
-              scrap_unit: profile.scrap_unit,
+              scrap_unit: 'kg',
             });
           }}>{t("lossApproveSuggestion")}</button>
         </div>

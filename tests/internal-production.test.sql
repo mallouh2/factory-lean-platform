@@ -10,7 +10,7 @@ declare f uuid:='bab9b5da-d78d-4be7-b6d4-bb6afc388c3a';actor uuid:='d699a3ac-fab
  legacy jsonb;items jsonb;statement text;created timestamptz:=clock_timestamp();
 begin
  perform set_config('request.jwt.claim.sub',actor::text,true);
- select id into p from public.products where factory_id=f limit 1;
+ insert into public.products(factory_id,name,code,unit,stock_unit) values(f,'Internal rollback pipe','INTERNAL-'||substr(gen_random_uuid()::text,1,8),'meter','meter') returning id into p;
  select jsonb_agg(to_jsonb(x) order by id) into legacy from public.production_requests x;
  items:=jsonb_build_array(jsonb_build_object('product_id',p,'quantity',7,'unit','meter'));
  statement:=format('select public.create_production_request(%L,%L,%L,null,%%L,%L)',f,'Internal QA','normal',items);

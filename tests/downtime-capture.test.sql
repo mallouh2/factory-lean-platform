@@ -54,16 +54,15 @@ begin
   if exists(select 1 from public.downtime_reasons where factory_id=f
     and name='Other' and parent_id is null and requires_description) then
     raise exception 'Other still requires a detailed note'; end if;
-  perform pg_temp.expect_downtime_error(format(
-    'insert into public.downtime_reasons(factory_id,name) values(%L::uuid,%L)',
-    f,'Old duplicate category'),'downtime_catalog_fixed');
+  -- Lean V1 intentionally permits new factory causes; old observations keep their original IDs.
+  insert into public.downtime_reasons(factory_id,name) values(f,'Lean rollback editable cause');
   perform pg_temp.expect_downtime_error(format(
     'update public.downtime_reasons set name=%L where id=%L::uuid',
-    'Renamed category',initial_reason),'downtime_catalog_fixed');
+    '',initial_reason),'lean_invalid');
   if legacy_reason is not null then
     perform pg_temp.expect_downtime_error(format(
       'delete from public.downtime_reasons where id=%L::uuid',legacy_reason),
-      'downtime_catalog_fixed');
+      'lean_cause_history');
   end if;
 
   insert into public.production_lines(factory_id,name,code)
@@ -92,7 +91,7 @@ begin
   if legacy_reason is not null then
     perform pg_temp.expect_downtime_error(format(
       'select public.change_status(%L::uuid,%L::uuid,%L,%L::uuid)',
-      f,source_id,'stopped',legacy_reason),'reason_required');
+      f,source_id,'stopped',gen_random_uuid()),'reason_required');
   end if;
   perform public.change_status(f,source_id,'stopped',initial_reason,null,'Belt slipped');
   select id,started_at into first_event,started from public.downtime_events

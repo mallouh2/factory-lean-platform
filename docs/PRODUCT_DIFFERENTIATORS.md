@@ -1,6 +1,6 @@
 # Factory Lean — Product Differentiators
 
-Research and repository review: **2026-10-04, Asia/Riyadh**. Permission Packages V1 extends administration parity, uncommitted on `development` from checkpoint `9fa3354869249548502dc0cbfaa8ad2acdbc55af`. That checkpoint preserves Products/formulas, coherent Warehouse quantities, explicit material flow and Purchasing V1. Maintenance and prior Sales/Warehouse/Internal Production remain intact. This is the product-level evidence record, not a release certificate or marketing page. Repository code takes precedence; [HANDOFF.md](../HANDOFF.md) supplies dated verification and acceptance boundaries.
+Research and repository review: **2026-10-05, Asia/Riyadh**. Lean Analysis V1 continues Permission Packages checkpoint `60ee7d3911a32930afaf319f331761d711f65555`, uncommitted on `development`. Existing Products, Warehouse, Purchasing, Maintenance, Sales and Planning truth remain authoritative. This is product evidence, not a release certificate. [HANDOFF.md](../HANDOFF.md) records verification and acceptance boundaries.
 
 ## Purpose and durable maintenance rule
 
@@ -25,7 +25,7 @@ Factory Lean serves production engineers, planners, managers and owners in SMB f
 
 **Plan → Execute → Capture loss → Find cause → Action → Verify → Measure value → Next problem**
 
-Current strength is connecting persisted demand, execution, machine dependencies, output disposition and reviewed loss evidence. The complete corrective-action/value-measurement loop remains unfinished.
+Current strength connects persisted demand, execution, machine dependencies, output disposition and reviewed loss evidence to responsible actions, equal-runtime human effectiveness verification and recurrence monitoring. Lean Analysis V1 completes the operational improvement workflow; measured financial value and customer savings remain unimplemented and unproven.
 
 | Alternative | Concrete reason to consider Factory Lean | Boundary |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ Classifications:
 
 The subsequent Sales/inventory extension passes **428/428 Node**, **116/116 focused**, fourteen distinct rollback SQL suites, TypeScript and production build. **Local/TESTING 66** align; all 62 previous migration hashes are unchanged and DEV was not connected. Existing-account live scenarios A–G cover optional targets, opening/external stock, reservations, external shortage and kg raw receipts. Desktop EN/AR and 390px component fixtures were checked; user acceptance and real-device testing remain separate. Sources/receipts/material inventory are parity within section 16; classification remains 18 groups, **3 A / 5 B / 10 C**.
 
-Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**. Overlapping groups are different aspects of the same workflow, not eighteen independent inventions. Competitor references resolve in the dated source register.
+Nineteen implemented capability groups are reviewed below: **3 A / 6 B / 10 C**. Overlapping groups are aspects of the same workflow, not nineteen independent inventions. Competitor references resolve in the dated source register.
 
 | ID / capability | Factory Lean state | Competitor examples | Classification | Comparison boundary |
 | --- | --- | --- | --- | --- |
@@ -79,7 +79,7 @@ Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**.
 | 16 Product/formulas → inventory/material flow → sourcing/fulfillment | V; TESTING-verified, manual freeze open | MRPeasy, Autodesk Fusion Operations, Katana, Odoo, Daftra | C | Reusable formulas and explicit human stock/purchase handoffs are parity; no full MRP or accounting claim. |
 | 17 EN/AR operational presentation | V; real-device acceptance open | Daftra | C | Arabic is expected regionally; no unique-localization claim. |
 | 18 Stop-linked Maintenance Requests and independent repair verification | V; TESTING-verified, user freeze outstanding | MaintainX, Limble, Fiix | C | Authoritative stop → response → verified repair; no preventive scheduling or measured recurrence claim. |
-| Corrective action → verified improvement | P/I | Tulip CAPA, Odoo Quality | D | The intended loop is not yet complete. |
+| 19 Reviewed losses → accountable actions → equal-runtime human verification → recurrence watch | A; TESTING-verified, manual freeze outstanding | MachineMetrics, Tulip CAPA, Odoo Quality | B | Conservative operational comparison; no proven automatic causality, savings or market uniqueness. |
 | Maintenance planning / preventive schedules | P | Odoo Maintenance | D | Requests exist; capacity-aware service windows and preventive scheduling remain deferred. |
 
 ## Validated capabilities and comparison
@@ -120,7 +120,7 @@ Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**.
 
 **Factory problem:** Part of an order needs printing or finishing elsewhere, while moving the whole original job would falsify its plan and line queue.
 
-**Factory Lean approach:** A separate operation binds a specific lot, consumed quantity, remaining-work note and compatible secondary line or independent center to the resulting declaration. Recording and assignment are atomic. It never creates a second ordinary active-line assignment or overwrites the original planned/actual times. Database checks conserve consumed quantity = Good + Scrap + new Unfinished and reject conflicting destinations/OPEN transfers.
+**Factory Lean approach:** A separate operation binds a specific lot, consumed quantity, remaining-work note and compatible secondary line or independent center to the resulting declaration. Recording and assignment are atomic. It never creates a second ordinary active-line assignment or overwrites the original planned/actual times. Database checks conserve consumed quantity = Good + discarded production quantity + new Unfinished and reject conflicting destinations/OPEN transfers. Lean V1 records physical Scrap separately in kg; kg is never added to pieces or meters.
 
 **Operational value:** Engineers process partial unfinished output with original demand lineage; planners retain their original schedule.
 
@@ -140,7 +140,7 @@ Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**.
 
 **Operational value:** Engineers distinguish scrap from recoverable work; managers see available unfinished quantity and its source.
 
-**Implementation status:** A; Recording/WIP implemented and tested; manual acceptance outstanding. Same Product and m/pcs only; no general material transformation or consumption reversal. History declaration sums are not unique stock balances.
+**Implementation status:** A; Recording/WIP implemented and tested; manual acceptance outstanding. Same Product and matching configured production unit, including kg manufactured intermediates; no general material transformation or consumption reversal. History declaration sums are not unique stock balances.
 
 **Competitive context:** Siemens rework/containment [S5] and Odoo quality failure handling [S12] cover related disposition concerns.
 
@@ -168,7 +168,7 @@ Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**.
 
 **Factory problem:** Mixed meters/pieces, page-only totals and averaged percentages give misleading comparisons.
 
-**Factory Lean approach:** Server filtering precedes 50-row pagination. Effective Good/Scrap/Unfinished, request/Product/unit/technician/shift/date/correction filters share full-result summaries. Physical Scrap % = Scrap / (Good + Scrap + Unfinished); shift percentages use summed output per stored shift and measurement unit. Zero-output ratios are undefined; ambiguous legacy units are excluded explicitly. Correction originals remain readable.
+**Factory Lean approach:** Server filtering precedes 50-row pagination. Effective Good/discarded production quantity/Unfinished, request/Product/unit/technician/shift/date/correction filters share full-result summaries. Historical same-unit discarded fractions retain their original basis and are labeled separately. New declaration rows show physical Scrap kg and Scrap Rate = Scrap kg / produced kg, with produced kg from Good plus newly recorded WIP and an explicit matching-unit Product weight snapshot. Lean full-period and Shift Details aggregate mass separately from typed output. Zero-output ratios and missing legacy mass remain unknown. Correction originals remain readable.
 
 **Operational value:** Engineers compare like quantities and managers avoid false scrap rankings.
 
@@ -372,19 +372,33 @@ Eighteen implemented capability groups are reviewed below: **3 A / 5 B / 10 C**.
 
 **Operational value:** Connects operational problem → captured downtime → responsible maintenance response → verified repair within the existing factory workflow. Stable IDs/history provide a foundation for later Lean effectiveness measurement, not proof that recurrence or money saved has been measured.
 
-**Implementation status:** V for source, focused/rollback tests and the recorded existing-account TESTING lifecycle/reload/EN/AR/mobile checks. Disposable QA requests were safely removed with genuine Audit rows retained. User freeze and real-device acceptance remain open. No preventive schedules, service windows, spare parts, costing or Lean Analysis.
+**Implementation status:** V for source, focused/rollback tests and the recorded existing-account TESTING lifecycle/reload/EN/AR/mobile checks. Disposable QA requests were safely removed with genuine Audit rows retained. User freeze and real-device acceptance remain open. Maintenance V1 does not implement preventive schedules, service windows, spare parts or costing. Lean Analysis V1 is separately implemented in section 19.
 
 **Competitive context:** MaintainX documents request review and conversion to work orders [S20]; Limble documents asset-linked requests and assigned-work views [S21]; Fiix documents mobile request assets, priority and status [S22]. Those establish expected maintenance capability. Factory Lean deliberately uses one small request lifecycle; these sources do not establish an identical independent-verifier rule or a unique integration claim.
 
-**Differentiation:** C — parity/expected functionality. The stop-linked response opportunity is materially implemented, while the full corrective-action/value-measurement loop remains unfinished. Basic requests are not automatically a Strong Differentiator.
+**Differentiation:** C — parity/expected functionality. The stop-linked response opportunity is materially implemented, while measured financial value remains unimplemented. Basic requests are not automatically a Strong Differentiator.
 
 **Evidence:** [forward migration](../supabase/migrations/20261003065917_maintenance_requests_v1.sql), [Maintenance page](../src/features/Maintenance.tsx), [workflow/detail](../src/features/MaintenanceRequest.tsx), [exact Downtime reference](../src/features/DowntimeReference.tsx), [Floor V2](../src/features/FactoryFloorV2.tsx), [Node tests](../tests/maintenance.test.mjs), [rollback SQL](../tests/maintenance.test.sql), HANDOFF live evidence; S20–S22, 2026-10-03.
 
+### 19. Reviewed losses, accountable actions and equal-runtime effectiveness — B
+
+**Factory problem:** Loss totals alone cannot show which recurring issue deserves action, who will act, or whether the combined improvement effort worked under comparable production exposure.
+
+**Implemented approach:** One bounded Lean Problems workbench combines authoritative existing Production Loss/Downtime with kg-only Scrap and reviewed original observations. Identities differ by mechanism: Machine + Approved Cause, or Line + Product + Approved Cause. Explicit same-event links deduplicate. Approved startup allowance is per actual startup; monthly observed performance cannot silently redefine normal. Full-page evidence/Shift Details and read-only Sales/Maintenance context lead into one active initiative, required-owner/due-date actions, retained reasoned cancellations, reusable/all-outcome suggestions and one human verification for the entire effort. Same-Product operating effective-flow exposure determines equal-runtime comparison; insufficient or missing historical exposure stays explicit. Independent manual analysis cannot verify an initiative. Two distinct same-identity events within 30 calendar days after Improved show recurrence.
+
+**Status:** A — automated and existing-account TESTING verification are recorded in [Lean implementation and verification](lean-analysis-v1-implementation.md). User manual freeze and real-device acceptance remain outstanding. No employee score, opaque Lean score, AI diagnosis, invented historic kg/runtime, financial loss or ROI claim.
+
+**Competitive context:** Official MachineMetrics Production Analytics and Downtime/Quality guides [S31/S32] support period filters, separate loss/quality dimensions and historical production analysis. Tulip CAPA [S17] and Odoo continuous improvement [S18] already support corrective action patterns. LEI PDCA [S33] supports checking effectiveness before adopting an improvement. Factory Lean's connected, simple pipe-factory workflow is a product advantage inference, not proof that competitors lack it.
+
+**Classification:** B — competitive advantage from the specific connected workflow and transparent comparison assumptions; individual dashboards, actions and rights remain expected capabilities. Financial Measure value remains P.
+
+**Evidence:** [main page](../src/features/LeanAnalysis.tsx), [detail](../src/features/LeanProblem.tsx), [shared comparison](../src/utils/lean-comparison.mjs), [protected forward migration](../supabase/migrations/20261005064954_lean_analysis_v1.sql), [Lean rollback SQL](../tests/lean-analysis.test.sql), [domain tests](../tests/lean-analysis.test.mjs), [UI tests](../tests/lean-ui.test.mjs), HANDOFF; S31–S33 reviewed 2026-10-05.
+
 ## Candidate / planned differentiators
 
-Keep these separate from the eighteen implemented groups:
+Keep these separate from the nineteen implemented groups:
 
-- **P — Complete improvement loop:** root cause → responsible action → verified effectiveness → measured operational/financial value. Current capture/estimate/actual review is not a completed CAPA system. Lean data foundations do not prove an implemented end-user workflow.
+- **P — Financial value:** operational actions, effectiveness verification and recurrence watch are implemented in section 19. Actual recipe/material costs, financial opportunity value, measured savings and customer ROI still require separate discovery; Lean V1 implements no costing.
 - **P — Maintenance planning/Gantt, preventive schedules and financial analysis:** Maintenance Requests V1 is implemented in section 18. Repair workflow is not preventive/capacity scheduling; loss quantities are not demonstrated money saved.
 - **I — Automated machine signals, structured quality checks, advance WIP-operation planning, selected external integrations:** current research candidates only; no roadmap approval or completed implementation asserted.
 - **Not future:** Sales reservation/shortage/dispatch/Min-Max/backward suggestions now exist and are listed under verified implementation, live-accepted on TESTING. Do not duplicate them as proposals.
@@ -395,7 +409,7 @@ Apply the core loop before prioritizing. Recommendations require discovery, user
 
 | Opportunity / present gap | Official reference | Factory problem and strategy fit | Product priority / reason |
 | --- | --- | --- | --- |
-| Responsible corrective action, due date, evidence and effectiveness review — P/I | Tulip CAPA [S17]; Odoo continuous improvement [S18] | Stops recur when diagnosis never produces accountable verified action. Directly completes Find cause → Action → Verify. | **HIGH:** close the existing loop before adding unrelated modules; retain a small factory workflow. |
+| Responsible corrective action and equal-runtime human effectiveness review — A; financial value — P | Tulip CAPA [S17]; Odoo continuous improvement [S18]; MachineMetrics [S31/S32] | Section 19 implements Find cause → Action → Verify → recurrence monitoring. Customer acceptance and financial value remain separate. | **HIGH remaining work:** manual freeze and demonstrated factory usefulness; discover defensible financial inputs separately. |
 | Stop-linked response — V; preventive maintenance/capacity-aware window — P | MaintainX/Limble/Fiix [S20–S22]; Odoo calendar [S19] | Stop-linked requests now provide responsible repair and independent verification. Planned service windows still need separate discovery. | **HIGH remaining opportunity:** intentional capacity-aware windows when justified; avoid a full enterprise asset system. |
 | Selected machine signals with operator reason confirmation — I | Tulip OPC UA/app capture [S6]; MachineMetrics monitoring [S2/S3] | Manual capture can miss short stops and delay reliable observations. Improves evidence for Capture loss/Verify. | **MEDIUM:** pilot a few compatible machines only after integration/cost discovery; never claim current automatic collection. |
 | Small structured quality checks tied to Recording/WIP — I | Odoo checks [S12]; Tulip defects [S7] | Disposition alone does not explain why output was rejected. Add reason/measurement evidence for Find cause. | **MEDIUM:** concentrate on pipe defects/checks; avoid certification/compliance scope without demand. |
@@ -464,6 +478,9 @@ All entries researched **2026-10-02 (Asia/Riyadh)**. Official documentation/help
 | S28 | [Autodesk Fusion Operations — Real Consumptions and Lot Traceability](https://help.fusionoperations.autodesk.com/en/articles/435903-real-consumptions-and-lot-traceability) | Official help reviewed 2026-10-04: actual consumed quantities and lots stay distinct from theoretical requirements; no full genealogy equivalence. |
 | S29 | [Tulip — Add and Manage Users](https://support.tulip.co/docs/add-and-manage-users) | Official help reviewed 2026-10-04: protected user/role administration and inspectable rights informed broad function selection. No identical package-union or market superiority claim. |
 | S30 | [MRPeasy — Users](https://www.mrpeasy.com/resources/user-manual/settings/human-resources/users/) | Official manual reviewed 2026-10-04: user rights and administration are expected industrial product capabilities. |
+| S31 | [MachineMetrics — Production Analytics Guide](https://docs.machinemetrics.com/docs/product-guides/production-analytics-guide/) | Official guide reviewed 2026-10-05: production context and historical comparison patterns; no exact equal-runtime or uniqueness equivalence claimed. |
+| S32 | [MachineMetrics — Downtime and Quality Guide](https://docs.machinemetrics.com/docs/product-guides/downtime-quality-guide/) | Official guide reviewed 2026-10-05: reasoned downtime/quality analysis supports separate dimensions. |
+| S33 | [Lean Enterprise Institute — PDCA](https://www.lean.org/lexicon-terms/pdca/) | Official explanation reviewed 2026-10-05: test/check outcomes before adopting improvements; no automatic statistical or financial conclusion. |
 
 Older [architecture.md](architecture.md) and [phase-one-improvements.md](phase-one-improvements.md) retain foundation/future labels from earlier phases. Use their invariant explanations, not their historical feature/migration counts, to judge the current product. The newest HANDOFF and forward migrations establish current Planning, WIP, Shift and Sales implementation.
 
@@ -477,3 +494,4 @@ Older [architecture.md](architecture.md) and [phase-one-improvements.md](phase-o
 | 2026-10-03 | Optional requested targets/read-only historic promises and exact Planning guidance extend section 8 (B); opening/external stock, three supply sources and raw/semi receipts extend section 16 as parity (C). 18 groups and 3 A / 5 B / 10 C unchanged. New manual acceptance remains outstanding. | Reviewed official MRPeasy item and stock-movement manuals; kept sourcing/receipt claims conservative and separate from Purchasing/BOM/ERP. |
 | 2026-10-04 | Products/formulas, one Product inventory row, stored WIP locations, explicit material issue/receipt and Purchasing/suppliers extend section 16 as parity (C); classification counts unchanged. Manual freeze remains open. | Official MRPeasy item definitions and Autodesk request/actual-consumption references informed simple human handoffs. No uniqueness, enterprise genealogy, MRP, price/accounting or savings claim. |
 | 2026-10-04 | Permission Packages V1 extends section 14 as parity (C); eight broad starting functions, factory customization, multiple packages and preserved direct grants. Classification counts unchanged; manual freeze remains open. | Official Tulip user/role administration and MRPeasy user-rights guidance support function-first selection and optional rights detail. |
+| 2026-10-05 | Lean Analysis V1 adds section 19 as B: 19 groups, 3 A / 6 B / 10 C. Reviewed kg/startup loss, accountable actions, equal-runtime human verification and recurrence watch are implemented; financial value remains P. Manual freeze remains open. | Official MachineMetrics Production Analytics/Downtime-Quality and LEI PDCA informed the workflow. Conservative connected-workflow advantage inference; no uniqueness, automatic diagnosis or measured savings claim. |

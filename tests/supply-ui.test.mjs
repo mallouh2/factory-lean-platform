@@ -119,3 +119,15 @@ test('Warehouse list remains requester-oriented even when this person independen
 });
 test('Another requester cannot cancel or confirm direct receipt',()=>{for(const status of ['UNDER_REVIEW','READY_FOR_RECEIPT']){const row={...request,requested_by:'other',status},h=harness('Purchasing',{stock:true,rows:[row],detail:row});button(h,en.open).props.onClick();assert.equal(button(h,en.purchaseCancelRequest),undefined);assert.equal(button(h,en.purchaseConfirmReceipt),undefined);}});
 test('Item autocomplete pages the authoritative catalogue and typing resets page',()=>{const h=harness('WarehousePurchase',{data:{catalogue:{rows:[{id:'R',name:'Resin',unit:'kg'}],total:101}}});itemControl(h).props.onFocus();itemControl(h).props.onKeyDown({key:'PageDown',preventDefault(){}});h.nodes();assert.equal(h.queries.at(-1).extra.page,'2');itemControl(h).props.onKeyDown({key:'PageDown',preventDefault(){}});assert.equal(button(h,en.next).props.disabled,true);itemControl(h).props.onKeyDown({key:'PageUp',preventDefault(){}});h.nodes();assert.equal(h.queries.at(-1).extra.page,'2');itemControl(h).props.onChange({target:{value:'PVC-R'}});h.nodes();assert.equal(h.queries.at(-1).extra.page,'1');assert.equal(JSON.parse(h.queries.at(-1).extra.filters).search,'PVC-R');});
+
+for(const lang of ['en','ar'])test('Production Material Requests are full screens with issued quantity/history in '+lang,()=>{
+ const w=lang==='ar'?ar:en,row={...request,quantity:6,unit:'kg',status:'ISSUED',requested_by:'actor',issued_at:'2026-10-04T00:00:00Z',issued_by:'actor',movement_id:'movement'},h=harness('MaterialFlow',{rows:[row],lang});
+ button(h,w.open).props.onClick();const html=h.html();assert.ok(html.includes('material-working-screen'));assert.ok(!html.includes('role="dialog"'));assert.ok(html.includes(w.materialIssuedQuantity));assert.ok(html.includes(w.materialRequestHistory));assert.ok(button(h,w.materialReceiveConfirm));
+ const warehouse=harness('MaterialFlow',{warehouse:true,rows:[{...row,status:'REQUESTED'}],lang});button(warehouse,w.open).props.onClick();assert.ok(warehouse.html().includes('<dialog'));assert.ok(button(warehouse,w.materialIssueConfirm));
+});
+
+test('Material detail follows refreshed Warehouse issue status without losing the selected request',()=>{
+ const row={...request,requested_by:'actor',status:'REQUESTED'},rows=[row],h=harness('MaterialFlow',{rows});button(h,en.open).props.onClick();assert.equal(button(h,en.materialReceiveConfirm),undefined);
+ rows[0]={...row,status:'ISSUED',issued_at:'2026-10-05T00:00:00Z',issued_by:'actor',movement_id:'new-issue'};
+ assert.ok(button(h,en.materialReceiveConfirm));assert.ok(h.html().includes('new-issue'));
+});

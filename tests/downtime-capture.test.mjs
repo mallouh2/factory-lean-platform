@@ -94,7 +94,7 @@ test("downtime page retains review, retroactive entry and fixed configuration in
       "downtimeQuality", "downtimeSetup", "downtimeUtilities", "downtimeOther"]) {
       assert.match(html, new RegExp(dictionary[key]));
     }
-    assert.doesNotMatch(html, /Planned Maintenance|Old reason/);
+    assert.match(html, /Planned Maintenance|Old reason/);
   }
 });
 
@@ -133,7 +133,7 @@ test("actual result uses clear bilingual helpers, shared scrap unit and visible 
       "lossActualShutdownHelp", "lossActualRestartHelp", "lossScrapSharedUnitHelp"]) {
       assert.ok(html.includes(dictionary[key].replaceAll("'", "&#x27;")), key);
     }
-    assert.ok(html.includes(`value="kg" selected=""`));
+    assert.ok(html.includes(`aria-label="${dictionary.lossScrapUnit}">kg</span>`));
     assert.ok(html.includes(`value="piece"`));
     assert.ok(html.includes(dictionary.lossOptional));
     assert.ok(!html.includes(dictionary.lossActualRecoveryHelp));

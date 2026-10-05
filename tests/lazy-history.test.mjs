@@ -110,7 +110,7 @@ function hookHarness(){
       return[states[i],next=>{states[i]=typeof next==='function'?next(states[i]):next;}];},
     useEffect:(fn,next)=>{if(!deps||next.some((v,i)=>v!==deps[i])){effect=fn;deps=next;}}
   }:require(name)).useHistoryData;
-  return {render(url,revision='now'){index=0;return hook(url,revision);},run(){cleanup?.();cleanup=effect?.();effect=null;},close(){cleanup?.();}};
+  return {render(url,revision='now',identity=url){index=0;return hook(url,revision,identity);},run(){cleanup?.();cleanup=effect?.();effect=null;},close(){cleanup?.();}};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('history hook loads lazily, masks prior factory/page data, and ignores aborted late replies',async()=>{
@@ -137,3 +137,20 @@ test('local history failure retains its query/retry state and performs no global
     assert.deepEqual(h.render('/audit').data,{rows:[]});assert.equal(h.render('/audit').error,'');h.close();
   }finally{globalThis.fetch=original;}
 });
+
+ test('live time windows retain content and equivalent replies, but changed filters hide it immediately',async()=>{
+ const original=globalThis.fetch,requests=[];
+ try{
+ globalThis.fetch=(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}));
+ const h=hookHarness(),identity='factory:A/filters:all/page:1';
+ h.render('/lean?to=1','1',identity);h.run();requests[0].resolve({ok:true,json:async()=>({rows:['A']})});await tick();
+ const loaded=h.render('/lean?to=1','1',identity).data;
+ assert.equal(h.render('/lean?to=2','2',identity).data,loaded);h.run();assert.equal(h.render('/lean?to=2','2',identity).loading,true);
+ requests[1].resolve({ok:true,json:async()=>({rows:['A']})});await tick();assert.equal(h.render('/lean?to=2','2',identity).data,loaded);
+ h.render('/lean?to=3','3',identity);h.run();requests[2].resolve({ok:false,json:async()=>({error:'dataWarning'})});await tick();
+ assert.equal(h.render('/lean?to=3','3',identity).data,loaded);assert.equal(h.render('/lean?to=3','3',identity).error,'dataWarning');
+ for(const next of ['factory:B/filters:all/page:1','factory:A/filters:P/page:1','factory:A/filters:all/page:2']){
+ assert.equal(h.render('/lean?'+next,'4',next).data,null);h.run();}
+ assert.equal(requests[3].options.signal.aborted,true);requests[3].resolve({ok:true,json:async()=>({rows:['late']})});await tick();assert.equal(h.render('/lean?factory:A/filters:all/page:2','4','factory:A/filters:all/page:2').data,null);h.close();
+ }finally{globalThis.fetch=original;}
+ });

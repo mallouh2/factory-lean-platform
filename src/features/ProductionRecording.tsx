@@ -7,6 +7,8 @@ import ProductionHistory from './ProductionHistory';
 import { useUnfinished } from './useUnfinished';
 import { unfinishedOutputValid } from '@/utils/unfinished-production.mjs';
 import { shiftWindow } from '@/utils/production-shifts.mjs';
+import LeanScrapReview from './LeanScrapReview';
+import { useHistoryData } from '@/hooks/useHistoryData';
 
 export default function ProductionRecording({ snapshot: s, lang, t, can, command  ,selectedLot }: FeatureProps & {selectedLot?:Row}) {
   const [inputSource,setInputSource]=useState(selectedLot?'unfinished':'normal');
@@ -42,6 +44,9 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const [correctionShift,setCorrectionShift]=useState('');
   const [good, setGood] = useState("");
   const [scrap, setScrap] = useState("0");
+  const [discarded,setDiscarded]=useState('0'),[startupKg,setStartupKg]=useState('0');
+  const [startupId,setStartupId]=useState(''),[startupAt,setStartupAt]=useState('');
+  const [reviewRevision,setReviewRevision]=useState(0);
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [serverOverproduction, setServerOverproduction] = useState(false);
@@ -53,6 +58,7 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const correctionRequest = useRef(crypto.randomUUID());
   const [correctionGood, setCorrectionGood] = useState("");
   const [correctionScrap, setCorrectionScrap] = useState("");
+  const [correctionDiscarded,setCorrectionDiscarded]=useState('0'),[correctionStartup,setCorrectionStartup]=useState('0');
   const [correctionConfirmed, setCorrectionConfirmed] = useState(false);
   const [serverCorrectionOverproduction, setServerCorrectionOverproduction] = useState(false);
   const unit = units.find(x => `${x.unit_kind}:${x.unit_id}` === unitKey) || (!unitKey && units.length === 1 ? units[0] : undefined);
@@ -64,16 +70,22 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const unitLabel = (row: Row) => localName((row.unit_kind === "line" ? s.tables.production_lines : s.tables.work_centers)?.find(x => x.id === row.unit_id), lang);
   const quantityUnit = (row?: Row) => t(row?.unit === "meter" ? "meterShort" : row?.unit === "piece" ? "pieceShort" : row?.unit === "kg" ? "kg" : "legacyUnit");
   const editable = can("orders", "edit");
-  const validQuantities = unfinishedOutputValid(good,scrap,unfinished,remainingWork,inputSource==='normal'?null:processQuantity,Number(lot?.production_available ?? lot?.quantity_available ?? 0));
+  const startupContext=useHistoryData<{startups:Row[]}>('/api/lean?'+new URLSearchParams({factory:shiftFactory,mode:'recording_context',...(item?.id?{item_id:String(item.id)}:{})}),String(s.fetchedAt)+':'+reviewRevision);
+  useEffect(()=>{setStartupId('');setStartupAt('');setStartupKg('0');},[item?.id]);
+  const validMass=[scrap,startupKg].every(x=>x!==''&&Number.isFinite(Number(x))&&Number(x)>=0)&&Number(startupKg)<=Number(scrap)&&(Number(startupKg)===0||Boolean(startupId&&startupAt));
+  const unitTotal=Number(good)+Number(discarded)+Number(unfinished);
+  const validQuantities = validMass && (unfinishedOutputValid(good,discarded,unfinished,remainingWork,inputSource==='normal'?null:processQuantity,Number(lot?.production_available ?? lot?.quantity_available ?? 0)) || inputSource==='normal'&&unitTotal===0&&Number(scrap)>0);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!unit || !item || !validQuantities) return;
     setBusy(true);setNotice("");
     try {
-      await command("record_production", { factory:s.factory?.id, unit_kind:unit.unit_kind, production_unit:unit.unit_id,
-        item:item.id,technician,good:Number(good),scrap:Number(scrap),notes:note,confirm_overproduction:confirmed,request_id:request.current,
-        shift:manualShift ? shift || null : null,shift_override_reason:manualShift ? overrideReason.trim() : null,unfinished:Number(unfinished),remaining_work:remainingWork.trim(),input_lot:lot?.id || null,input_quantity:lot?Number(processQuantity):0 });
-      request.current=crypto.randomUUID();setGood("");setScrap("0");setUnfinished("0");setRemainingWork("");setProcessQuantity("");inventory.refresh();setNote("");setConfirmed(false);setServerOverproduction(false);setManualShift(false);setShift('');setOverrideReason('');setNotice("saved");
+      const result=await command("record_lean_production", { factory:s.factory?.id, request_id:request.current,payload:{unit_kind:unit.unit_kind, production_unit:unit.unit_id,
+        item:item.id,technician,good:Number(good),discarded_quantity:Number(discarded),scrap_kg:Number(scrap),startup_kg:Number(startupKg),notes:note,confirm_overproduction:confirmed,
+        shift:manualShift ? shift || null : null,shift_override_reason:manualShift ? overrideReason.trim() : null,unfinished:Number(unfinished),remaining_work:remainingWork.trim(),input_lot:lot?.id || null,input_quantity:lot?Number(processQuantity):0,
+        startup_id:Number(startupKg)>0?startupId:null,startup_at:Number(startupKg)>0?String(startupContext.data?.startups.find(x=>x.id===startupId)?.occurred_at||new Date(startupAt).toISOString()):null}}) as {needs_review:boolean;weight_missing:boolean;standard_missing:boolean};
+      setReviewRevision(x=>x+1);setDiscarded('0');setStartupKg('0');
+      request.current=crypto.randomUUID();setGood("");setScrap("0");setUnfinished("0");setRemainingWork("");setProcessQuantity("");inventory.refresh();setNote("");setConfirmed(false);setServerOverproduction(false);setManualShift(false);setShift('');setOverrideReason('');setNotice(result.needs_review?'leanAbnormalPrompt':result.weight_missing?'leanWeightMissing':result.standard_missing?'leanStandardMissing':'saved');
     } catch (error) { const key=error instanceof Error ? error.message : "error";
       setNotice(key);if(key==="recordingOverproductionConfirm")setServerOverproduction(true); }
     finally { setBusy(false); }
@@ -81,7 +93,7 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   function openCorrection(entry: Row) {
     const values=entryQuantities(entry);
     setCorrectionUnfinished(String(entry.effective_unfinished || 0));setCorrectionWork(String(entry.effective_remaining_work || ''));
-    setEditing(entry);setCorrectionGood(String(values.good));setCorrectionScrap(String(values.scrap));
+    setEditing(entry);setCorrectionGood(String(values.good));setCorrectionDiscarded(String(values.scrap));setCorrectionScrap(String(entry.effective_scrap_kg??''));setCorrectionStartup(String(entry.effective_startup_kg??0));
     setCorrectionShift(String(entry.shift_id || ''));
     setReason("");setCorrectionConfirmed(false);setServerCorrectionOverproduction(false);setNotice("");correctionRequest.current=crypto.randomUUID();
   }
@@ -128,9 +140,16 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
         <div className="form-grid">
           <Field label={`${t("recordingGood")} (${quantityUnit(item)})`}><input required type="number" min="0" step="any" inputMode="decimal"
             value={good} onChange={e=>{setGood(e.target.value);setConfirmed(false);}} /></Field>
-          <Field label={`${t("recordingScrap")} (${quantityUnit(item)})`}><input required type="number" min="0" step="any" inputMode="decimal"
+          <Field label={`${t("recordingScrap")} (kg)`}><input required type="number" min="0" step="any" inputMode="decimal"
             value={scrap} onChange={e=>setScrap(e.target.value)} /></Field>
         </div>
+        <p className="muted">{t('leanScrapMassHelp')}</p>
+        {inputSource==='unfinished' && <Field label={t('leanDiscardedQuantity')+' ('+quantityUnit(item)+')'}><input required type="number" min="0" step="any" value={discarded} onChange={e=>setDiscarded(e.target.value)}/></Field>}
+        {item?.line_id && <details><summary>{t('leanStartupScrap')}</summary><Field label={t('leanStartupIncluded')}><input type="number" min="0" max={Number(scrap)} step="any" value={startupKg} onChange={e=>setStartupKg(e.target.value)}/></Field>
+          {Number(startupKg)>0 && <><Field label={t('leanStartupEvent')}><select required value={startupId} onChange={e=>{setStartupId(e.target.value);const row=startupContext.data?.startups.find(x=>x.id===e.target.value);if(row)setStartupAt(new Date(Date.parse(String(row.occurred_at))-new Date().getTimezoneOffset()*60000).toISOString().slice(0,23));}}><option value="">{t('choose')}</option>{startupId&&!startupContext.data?.startups.some(x=>x.id===startupId)&&<option value={startupId}>{t('leanNewStartup')}</option>}{startupContext.data?.startups.map(x=><option key={String(x.id)} value={String(x.id)}>{String(x.occurred_at)}</option>)}</select></Field>
+          <button type="button" onClick={()=>{setStartupId(crypto.randomUUID());setStartupAt(new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,23));}}>{t('leanNewStartup')}</button>
+          <Field label={t('leanOccurredAt')}><input required type="datetime-local" step="0.001" value={startupAt} disabled={Boolean(startupContext.data?.startups.some(x=>x.id===startupId))} onInput={e=>setStartupAt(e.currentTarget.value)} onChange={e=>setStartupAt(e.target.value)}/></Field><p>{t('leanStartupEventHelp')}</p></>}
+        </details>}
         <Field label={t('unfinishedQuantity')+' ('+quantityUnit(item)+')'}><input required type="number" min="0" step="any" value={unfinished} onChange={e=>setUnfinished(e.target.value)}/></Field>
         {Number(unfinished)>0 && <Field label={t('unfinishedRemainingWork')}><input required minLength={3} maxLength={2000} value={remainingWork} onChange={e=>setRemainingWork(e.target.value)}/></Field>}
         <Field label={t("notes")}><input maxLength={2000} value={note} onChange={e=>setNote(e.target.value)} /></Field>
@@ -143,16 +162,20 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
     </form>}
     {editable && !units.length && <p className="muted">{t(inputSource==='unfinished'?'unfinishedNoDestination':'recordingNoActive')}</p>}
     {notice && <p role="status" className="notice">{t(notice)}</p>}
+    <LeanScrapReview snapshot={s} lang={lang} t={t} can={can} command={command} revision={reviewRevision}/>
     <ProductionHistory snapshot={s} lang={lang} t={t} can={can} command={command} onCorrect={openCorrection}/>
     {editing && <Dialog title={t("recordingCorrect")} t={t} onClose={()=>{if(!busy)setEditing(null);}}>
       <form onSubmit={async e=>{e.preventDefault();setBusy(true);setNotice("");try {
-        await command("correct_production_entry",{factory:s.factory?.id,entry:editing.id,good:Number(correctionGood),scrap:Number(correctionScrap),
-          reason,confirm_overproduction:correctionConfirmed,request_id:correctionRequest.current,unfinished:Number(correctionUnfinished),remaining_work:correctionWork.trim(),shift:correctionShift || null,change_shift:correctionShift!==String(editing.shift_id || '')});setEditing(null);setNotice("saved");
+        await command("correct_lean_production",{factory:s.factory?.id,request_id:correctionRequest.current,payload:{entry:editing.id,good:Number(correctionGood),discarded_quantity:Number(correctionDiscarded),scrap_kg:Number(correctionScrap),startup_kg:Number(correctionStartup),
+          reason,confirm_overproduction:correctionConfirmed,unfinished:Number(correctionUnfinished),remaining_work:correctionWork.trim(),shift:correctionShift || null,change_shift:correctionShift!==String(editing.shift_id || '')}});setReviewRevision(x=>x+1);setEditing(null);setNotice("saved");
         } catch(error) {const key=error instanceof Error ? error.message : "error";setNotice(key);
           if(key==="recordingOverproductionConfirm")setServerCorrectionOverproduction(true);}finally{setBusy(false);}}}>
         <Field label={t("recordingGood")}><input required type="number" min="0" step="any" value={correctionGood} disabled={busy}
           onChange={e=>{setCorrectionGood(e.target.value);setCorrectionConfirmed(false);}} /></Field>
-        <Field label={t("recordingScrap")}><input required type="number" min="0" step="any" value={correctionScrap} disabled={busy} onChange={e=>setCorrectionScrap(e.target.value)} /></Field>
+        <Field label={t("recordingScrap")+' (kg)'}><input required type="number" min="0" step="any" value={correctionScrap} disabled={busy} onChange={e=>setCorrectionScrap(e.target.value)} /></Field>
+        {editing.effective_scrap_kg==null&&<p>{t('leanLegacyScrapHelp')}</p>}
+        {editing.input_lot_id&&<Field label={t('leanDiscardedQuantity')}><input required type="number" min="0" step="any" value={correctionDiscarded} onChange={e=>setCorrectionDiscarded(e.target.value)}/></Field>}
+        {editing.lean_startup_id&&<Field label={t('leanStartupIncluded')}><input required type="number" min="0" max={Number(correctionScrap)} step="any" value={correctionStartup} onChange={e=>setCorrectionStartup(e.target.value)}/></Field>}
         <Field label={t('unfinishedQuantity')}><input required type="number" min="0" step="any" value={correctionUnfinished} disabled={busy} onChange={e=>setCorrectionUnfinished(e.target.value)}/></Field>
         {Number(correctionUnfinished)>0 && <Field label={t('unfinishedRemainingWork')}><input required minLength={3} maxLength={2000} value={correctionWork} disabled={busy} onChange={e=>setCorrectionWork(e.target.value)}/></Field>}
         {editing.input_lot_id && <p>{t('unfinishedConservationHelp')} · {t('unfinishedProcess')}: {Number(editing.input_quantity)} {quantityUnit(editing)}</p>}

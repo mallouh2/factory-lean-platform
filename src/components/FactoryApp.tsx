@@ -21,6 +21,7 @@ import PersonPermissions from "@/features/PersonPermissions";
 import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import DowntimeCapture from "@/features/DowntimeCapture";
 import Maintenance from '@/features/Maintenance';
+import LeanAnalysis from '@/features/LeanAnalysis';
 import Purchasing from '@/features/Purchasing';
 import Products from '@/features/Products';
 import MaterialFlow from '@/features/MaterialFlow';
@@ -40,26 +41,24 @@ const primary = [
   "warehouse",
   "purchasing",
   "myPurchaseRequests",
-  "dashboard",
   "lines",
   "orders",
-  "materialRequests",
   "planning",
   "products",
-  "unfinishedProducts",
   "downtime",
   "maintenance",
+  "lean",
   "reports",
 ];
 const admin = ["employees", "roles", "suppliers", "settings", "support", "audit"];
 const future = [
   "quality",
-  "lean",
   "safety",
   "costing",
   "hr",
 ];
 const sidebarIconPaths: Record<string, string[]> = {
+  lean:['M3 3v18h18','M7 15l4-5 4 3 5-7'],
   purchasing: ['M3 3h2l3 12h11l2-8H6','M9 20h.01','M18 20h.01'],
   myPurchaseRequests: ['M5 3h14v18H5z','M8 7h8','M8 11h8','M8 16l2 2 5-5'],
   materialRequests: ['M3 7l9-4 9 4-9 4z','M3 7v10l9 4 9-4V7','M12 11v10'],
@@ -91,7 +90,7 @@ function SidebarIcon({ name }: { name: string }) {
 export default function FactoryApp() {
   const [lang, setLang] = useState<Language>("en"),
     [dirtyLayout, setDirtyLayout] = useState(false),
-    [view, setView] = useState("dashboard"),
+    [view, setView] = useState("lines"),
     [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [loading, setLoading] = useState(true),
     [notice, setNotice] = useState(""),
@@ -209,8 +208,9 @@ export default function FactoryApp() {
     }
   }
   const props = snapshot ? { snapshot: previewMode === "full" ? snapshot : { ...snapshot, permissions: visiblePermissions }, t, lang, command, can } : null;
-  const previewHome = can("dashboard") ? "dashboard" : [...primary, ...admin].find((page) => can(page)) || "dashboard";
+  const previewHome = can("lines") ? "lines" : [...primary, ...admin].find((page) => can(page)) || "lines";
   const navigate = (x: string) => {
+    x = x === "dashboard" ? "lines" : x === "unfinishedProducts" ? "warehouse" : x === "materialRequests" ? "orders" : x;
     if (previewMode !== "full" && !can(x)) return;
     if (dirtyLayout && !confirm(t("discardChanges"))) return;
     setView(x);
@@ -237,7 +237,7 @@ export default function FactoryApp() {
   async function openFactory(id: string) {
     await command("open_platform_factory", { factory: id });
     setSupportFactory(id);
-    setView("dashboard");
+    setView("lines");
   }
   async function signout() {
     if (!confirm(t("logoutConfirm"))) return;
@@ -362,7 +362,7 @@ export default function FactoryApp() {
                 onClick={() => {
                   if(dirtyLayout&&!confirm(t("discardChanges")))return;
                   setSupportFactory("");
-                  setView("dashboard");
+                  setView("lines");
                 }}
               >
                 <SidebarIcon name="platform" /><span className="nav-label">{t("platformDashboard")}</span>
@@ -515,7 +515,7 @@ export default function FactoryApp() {
               )}
               {props &&
                 (can(view) ? (
-                  view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'lean' ? <LeanAnalysis key={String(snapshot.factory.id)} {...props}/> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}

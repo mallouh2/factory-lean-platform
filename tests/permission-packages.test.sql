@@ -16,6 +16,8 @@ declare f uuid:='bab9b5da-d78d-4be7-b6d4-bb6afc388c3a';admin uuid:='d699a3ac-fab
  rejected uuid:='3f9d81aa-562a-54c0-bd6d-d48b85d9bdbe';production uuid;planning uuid;warehouse uuid;foreign_factory uuid;foreign_package uuid;custom uuid:=gen_random_uuid();
  baseline text;row_digest text;person record;permission record;page jsonb;role_id uuid;membership_id uuid;amount bigint;before_audit bigint;definition jsonb;
 begin
+ -- This existing full-administration QA person receives new feature keys only inside rollback.
+ insert into public.user_permissions(factory_id,user_id,module,action) select f,admin,module,action from public.permissions where module in ('lean','lean_standards') on conflict do nothing;
  perform pg_temp.pp_assert(position('private.require_permission' in split_part(pg_get_functiondef('private.save_permission_package(uuid,uuid,jsonb,jsonb,integer)'::regprocedure),'pg_advisory_xact_lock',2))>0,'package editing rechecks authority after serialization');
  perform pg_temp.pp_assert(position('private.require_permission' in split_part(pg_get_functiondef('private.set_member_permission_packages(uuid,uuid,uuid[],uuid[])'::regprocedure),'pg_advisory_xact_lock',2))>0,'package assignment rechecks authority after serialization');
  -- Baseline authority is identical before adoption, including inactive membership guard.

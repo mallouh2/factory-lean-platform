@@ -9,6 +9,7 @@ import { hasEveryDefinedPermission } from "@/utils/permission-preview.mjs";
 import { maintenanceCommandValid } from '@/utils/maintenance.mjs';
 import { supplyCommandValid } from '@/utils/supply-contract.mjs';
 import { packageCommands, packageCommandValid } from '@/utils/permission-packages.mjs';
+import { leanCommands, leanCommandValid, leanRequiredPermission } from '@/utils/lean-contract.mjs';
 export async function GET(req: NextRequest) {
   let stage = "authentication";
   try {
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  lean_invalid:'leanInvalid',lean_conflict:'leanConflict',lean_closed:'leanClosed',lean_incomplete:'leanIncomplete',lean_baseline_missing:'leanBaselineMissing',lean_startup_required:'leanStartupRequired',lean_link_invalid:'leanLinkInvalid',lean_link_cause:'leanLinkCause',lean_insufficient_exposure:'leanInsufficientExposure',lean_scrap_kg_only:'leanScrapKgOnly',lean_comparison_product:'leanComparisonProduct',
   permission_package_conflict: 'packageConflict',
   supply_invalid: 'supplyInvalid',
   supply_conflict: 'supplyConflict',
@@ -176,6 +178,9 @@ const joinErrors: Record<string, string> = {
 };
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
+  record_lean_production:[['orders','edit'],['orders','view']],
+  correct_lean_production:[['orders','edit'],['orders','view']],
+  lean_command:[['factory','view']],
   save_permission_package: [['roles','edit']],
   set_member_permission_packages: [['roles','edit']],
   set_member_direct_permissions: [['roles','edit']],
@@ -244,6 +249,8 @@ export async function POST(req: NextRequest) {
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
     if (packageCommands.includes(command) && !packageCommandValid(command,args)) throw new Error('invalid_input');
+    if (leanCommands.includes(command) && !leanCommandValid(command,args)) throw new Error('invalid_input');
+    if (command==='lean_command') { const [module,action]=leanRequiredPermission(args.operation); await authorize(args.factory,module,action,context); }
     if (['create_maintenance_request','change_maintenance_request'].includes(command)
       && !maintenanceCommandValid(command,args)) throw new Error('invalid_input');
     if (['supply_command','define_manufactured_product'].includes(command)&&!supplyCommandValid(command,args)) throw new Error('invalid_input');

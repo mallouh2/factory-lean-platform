@@ -36,8 +36,8 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can, in
   const events = s.tables.downtime_events || [];
   const machines = (s.tables.work_centers || []).filter((x) => !x.archived);
   const reasons = s.tables.downtime_reasons || [];
-  const categories = downtimeReasonChoices.map(([name, key]) => ({
-    row: reasons.find((r) => r.name === name && !r.parent_id), key,
+  const categories = reasons.map(row => ({
+    row, key: downtimeReasonChoices.find(([name])=>name===row.name)?.[1],
   })).filter((option) => option.row);
   const open = events.filter((e) => !e.ended_at)
     .sort((a, b) => String(a.started_at).localeCompare(String(b.started_at)));
@@ -113,7 +113,7 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can, in
               <label>{t("downtimeInitialReason")}
                 <select required value={initialReason} onChange={(e) => setInitialReason(e.target.value)}>
                   <option value="">{t("downtimeChooseReason")}</option>
-                  {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{t(key)}</option>)}
+                  {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{key?t(key):localName(row,lang)}</option>)}
                 </select>
               </label>
               <label>{t("downtimeOperatorNote")}
@@ -144,7 +144,7 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can, in
             <label>{t("downtimeInitialReason")}
               <select required value={initialReason} onChange={(e) => setInitialReason(e.target.value)}>
                 <option value="">{t("downtimeChooseReason")}</option>
-                {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{t(key)}</option>)}
+                {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{key?t(key):localName(row,lang)}</option>)}
               </select>
             </label>
             <label>{t("downtimeOperatorNote")}
@@ -187,7 +187,7 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can, in
             <select value={causeId || (focusedInitialIsCurrent ? String(focused.reason_id) : "")}
               onChange={(e) => setCauseId(e.target.value)}>
               <option value="">{t("downtimeChooseReason")}</option>
-              {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{t(key)}</option>)}
+              {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{key?t(key):localName(row,lang)}</option>)}
             </select>
           </label>
           <label>{t("downtimeEngineeringNote")}
@@ -244,7 +244,7 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can, in
           onChange={(e) => setRetroEnd(e.target.value)} /></label>
         <label>{t("downtimeInitialReason")}<select value={retroReason} onChange={(e) => setRetroReason(e.target.value)}>
           <option value="">{t("downtimeUnclassified")}</option>
-          {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{t(key)}</option>)}
+          {categories.map(({ row, key }) => <option key={String(row?.id)} value={String(row?.id)}>{key?t(key):localName(row,lang)}</option>)}
         </select></label>
         <label>{t("downtimeOperatorNote")}<textarea maxLength={2000} value={retroNote}
           onChange={(e) => setRetroNote(e.target.value)} /></label>
@@ -254,7 +254,7 @@ export default function DowntimeCapture({ snapshot: s, t, lang, command, can, in
     {can("downtime", "create") && <details className={styles.card}>
       <summary>{t("configuration")}</summary>
       <p>{t("downtimeCurrentReasonsHelp")}</p>
-      <ul>{downtimeReasonChoices.map(([, key]) => <li key={key}>{t(key)}</li>)}</ul>
+      <ul>{categories.map(({row,key}) => <li key={String(row.id)}>{key?t(key):localName(row,lang)}</li>)}</ul>
     </details>}
   </section>;
 }

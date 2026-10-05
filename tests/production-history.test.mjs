@@ -101,11 +101,11 @@ test('background History error remains local and retains the loaded correction e
   assert.ok(h.nodes().some(n=>n.type==='li'&&n.key==='correction'));
  }finally{h.close();}
 });
-for(const key of ['date','productionShift','recordingUnit','historyOrder','product','recordingTechnician','recordingGood','recordingScrap','unfinishedQuantity','historyCorrections'])test(`header filter opens ${key} without a duplicate top panel`,async()=>{
+for(const key of ['date','productionShift','recordingUnit','historyOrder','product','recordingTechnician','recordingGood','leanDiscardedLegacy','unfinishedQuantity','historyCorrections'])test(`header filter opens ${key} without a duplicate top panel`,async()=>{
  const h=historyHarness();try{await loadHistory(h);h.open(key);assert.ok(h.nodes().some(n=>n.props?.role==='dialog'));assert.ok(h.field(en.historyColumn));assert.ok(!h.nodes().some(n=>n.props?.className==='history-filters'));}finally{h.close();}
 });
 test('numeric header draft survives refresh; validated Apply uses full server query and Clear removes it',async()=>{
- const h=historyHarness();try{await loadHistory(h);h.open('recordingScrap');
+ const h=historyHarness();try{await loadHistory(h);h.open('leanDiscardedLegacy');
  h.field(en.unit).props.onChange({target:{value:'piece'}});h.draw();
  h.field(en.historyMetric).props.onChange({target:{value:'percentage'}});h.draw();
  h.field(en.historyScope).props.onChange({target:{value:'shift'}});h.draw();
@@ -114,7 +114,7 @@ test('numeric header draft survives refresh; validated Apply uses full server qu
  h.refresh();assert.equal(h.field(en.historyValue+' (%)').props.value,'5');assert.equal(h.field(en.historyScope).props.value,'shift');
  h.apply();const query=new URL(h.reads.at(-1).url,'http://localhost').searchParams;
  assert.equal(query.get('scrap_metric'),'percentage');assert.equal(query.get('scrap_scope'),'shift');assert.equal(query.get('scrap_min'),'5');assert.equal(query.get('measurement_unit'),'piece');
- await h.settle(h.reads.at(-1),result);h.open('recordingScrap');h.nodes().find(n=>n.type==='button'&&n.props.children===en.historyClearColumn).props.onClick();h.draw();
+ await h.settle(h.reads.at(-1),result);h.open('leanDiscardedLegacy');h.nodes().find(n=>n.type==='button'&&n.props.children===en.historyClearColumn).props.onClick();h.draw();
  assert.equal(new URL(h.reads.at(-1).url,'http://localhost').searchParams.has('scrap_op'),false);
  }finally{h.close();}
 });

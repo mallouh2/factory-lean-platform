@@ -355,3 +355,15 @@ test("the deadline field presents the business-deadline meaning in English and A
     assert.ok(html.includes(dictionary.requiredByHint));
   }
 });
+
+test('Request Materials opens a Production child screen and returning preserves request filters',()=>{
+ const states=[];let hook=0;const react=require('react'),mod={exports:{}};
+ new Function('require','module','exports',bundled.outputFiles[0].text)(name=>name==='react'?{...react,useState(initial){const i=hook++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return[states[i],next=>states[i]=typeof next==='function'?next(states[i]):next];},useRef(){return{current:null};},useEffect(){}}:require(name),mod,mod.exports);
+ const walk=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(walk):[node,...walk(node.props?.children)];
+ const draw=()=>{hook=0;return walk(mod.exports.default({snapshot,lang:'en',t:key=>en[key]||key,can:()=>true,command:()=>{throw Error('navigation must not write');}}));};
+ let nodes=draw();nodes.find(n=>n.type==='input'&&n.props.type==='search').props.onChange({target:{value:'Al Rayyan'}});
+ nodes=draw();nodes.find(n=>n.type==='button'&&n.props.children===en.productionRequestMaterials).props.onClick({currentTarget:{}});
+ nodes=draw();assert.equal(nodes.some(n=>n.type==='h2'&&n.props.children===en.productionRequestMaterials),true);assert.ok(nodes.some(n=>typeof n.type==='function'&&n.props.snapshot===snapshot));
+ const original=globalThis.requestAnimationFrame;try{globalThis.requestAnimationFrame=()=>{};nodes.find(n=>n.type==='button'&&Array.isArray(n.props.children)&&n.props.children.includes(en.backToOrders)).props.onClick();}finally{globalThis.requestAnimationFrame=original;}
+ assert.equal(draw().find(n=>n.type==='input'&&n.props.type==='search').props.value,'Al Rayyan');
+});

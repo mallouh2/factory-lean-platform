@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {build} from 'esbuild';
 import {NextRequest} from 'next/server.js';
+import en from '../src/locales/en.json' with {type:'json'};
+import ar from '../src/locales/ar.json' with {type:'json'};
 import {floorSnapshot} from './fixtures/factory-floor.mjs';
 
 const require=createRequire(import.meta.url);
@@ -147,4 +149,12 @@ test('the shared shell never renders Demo/Trial banners on any operational or co
     assert.equal(hasBanner(app.render()),false,view);
     assert.equal(app.snapshot.factory.is_demo,true,'internal seed/preview configuration stays intact');
   }
+});
+
+const walk=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(walk):[n,...walk(n.props?.children)];
+test('Factory navigation hides Overview, Semi-Finished and top-level Material Requests in EN/AR',()=>{
+ for(const lang of ['en','ar']){const h=appHarness(lang);h.snapshot.permissions.push('orders:view','warehouse:view');h.states[2]='lines';
+ const nodes=walk(h.render()),nav=nodes.filter(n=>n.type==='nav');const buttons=nav.flatMap(n=>walk(n)).filter(n=>n.type==='button');
+ const words=lang==='ar'?ar:en;for(const key of ['dashboard','unfinishedProducts','materialRequests'])assert.ok(!buttons.some(n=>walk(n).some(x=>x.props?.children===words[key])));
+ }
 });

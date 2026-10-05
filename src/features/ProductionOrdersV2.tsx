@@ -12,12 +12,13 @@ import { requestCreators, requestPresentation, requestQueueMatches, requestStatu
 import ProductIdentity from '@/components/ProductIdentity';
 import HistoryLimitWarning from '@/components/HistoryLimitWarning';
 import Configuration from "./Configuration";
+import MaterialFlow from "./MaterialFlow";
 import CreateProductionOrder from "./CreateProductionOrder";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 import { requestOriginLabel } from '@/utils/request-origin.mjs';
 
-type Screen = "list" | "details" | "create" | "edit";
+type Screen = "list" | "details" | "create" | "edit" | "materials";
 type Filter = "all" | "active" | "planned" | "delayed" | "completed" | "cancelled";
 const filters: Filter[] = ["all", "active", "planned", "delayed", "completed", "cancelled"];
 
@@ -129,6 +130,8 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
     </div>;
   }
 
+  if (screen === "materials") return <section className="orders-v2 orders-v2-subscreen ops-workbench" dir={lang === "ar" ? "rtl" : "ltr"}><button className="orders-v2-back" onClick={backToList}>← {t("backToOrders")}</button><h2 ref={headingRef} tabIndex={-1}>{t("productionRequestMaterials")}</h2><p className="ops-page-subtitle">{t("productionMaterialDirection")}</p><MaterialFlow {...props}/></section>;
+
   if (screen === "create" || screen === "edit") {
     const leaveCreate = () => {
       if (screen === "create" && createDirty && !confirm(t("discardRequestDraft"))) return false;
@@ -199,7 +202,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
               {statusChip(String(item.status || "planned"), orderAttention(item, now))}
             </div>
             {itemProgress(item)}
-            <dl className="recording-figures">{(["required", "good", "remaining", "scrap", "overproduction"] as const).map(key => <div key={key}><dt>{t({required:"recordingRequired",good:"recordingGoodSoFar",remaining:"recordingRemaining",scrap:"recordingScrap",overproduction:"recordingOverproduction"}[key])}</dt><dd>{quantity(productionProgress(item)[key])} {unitOf(item)}</dd></div>)}<div><dt>{t("orderProgressNow")}</dt><dd>{quantity(productionProgress(item).percent)}%</dd></div></dl>
+            <dl className="recording-figures">{(["required", "good", "remaining", "scrap", "overproduction"] as const).map(key => <div key={key}><dt>{t({required:"recordingRequired",good:"recordingGoodSoFar",remaining:"recordingRemaining",scrap:"leanDiscardedLegacy",overproduction:"recordingOverproduction"}[key])}</dt><dd>{quantity(productionProgress(item)[key])} {unitOf(item)}</dd></div>)}<div><dt>{t("orderProgressNow")}</dt><dd>{quantity(productionProgress(item).percent)}%</dd></div></dl>
             <dl className="orders-v2-facts">
               <div><dt>{t("line")}</dt><dd dir="auto">{line ? localName(line, lang) : t("unassigned")}</dd></div>
               {item.start_time && <div><dt>{t("executionPlannedStart")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>}
@@ -250,6 +253,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
   return <section className="orders-v2 ops-workbench" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
     <header className="orders-v2-page-head">
       <p className="ops-page-subtitle">{t('requestsOperationalSubtitle')}</p>
+      {can("orders", "view") && <button onClick={event=>{openerRef.current=event.currentTarget;setScreen("materials");}}>{t("productionRequestMaterials")}</button>}
       {can("orders", "create") && <button className="primary" onClick={(event) => {
         openerRef.current = event.currentTarget; setCreatedId(null); setScreen("create");
       }}>+ {t("createProductionRequest")}</button>}

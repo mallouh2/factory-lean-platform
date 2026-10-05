@@ -16,9 +16,9 @@ function ProductLossProfile(props: FeatureProps & {
     : profile?.can_defer === false ? "no" : "unknown");
   const [scrapExpected, setScrapExpected] = useState(profile?.scrap_expected === true
     ? "yes" : profile?.scrap_expected === false ? "no" : "unknown");
-  const [shutdown, setShutdown] = useState(String(profile?.shutdown_scrap_quantity ?? ""));
-  const [restart, setRestart] = useState(String(profile?.restart_scrap_quantity ?? ""));
-  const [scrapUnit, setScrapUnit] = useState(String(profile?.scrap_unit ?? ""));
+  const [shutdown, setShutdown] = useState(String(profile?.scrap_unit==='kg'?profile.shutdown_scrap_quantity ?? '':''));
+  const [restart, setRestart] = useState(String(profile?.scrap_unit==='kg'?profile.restart_scrap_quantity ?? '':''));
+  const scrapUnit='kg';
   const [recoveryRate, setRecoveryRate] = useState(String(recovery?.rate ?? ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -80,8 +80,7 @@ function ProductLossProfile(props: FeatureProps & {
             onChange={(event) => setRestart(event.target.value)} />
         </label>
         <label>{t("lossScrapUnit")}
-          <input required maxLength={30} value={scrapUnit}
-            onChange={(event) => setScrapUnit(event.target.value)} />
+          <span>kg</span>
         </label>
       </>}
       <button className="primary" disabled={busy || !editable}>{t("lossSaveAssumptions")}</button>
