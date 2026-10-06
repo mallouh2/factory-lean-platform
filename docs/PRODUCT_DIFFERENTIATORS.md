@@ -314,6 +314,8 @@ Nineteen implemented capability groups are reviewed below: **3 A / 6 B / 10 C**.
 
 **Factory Lean approach:** Lazy paginated Audit/Loss/Production History and fulfillment readers; retained operational snapshot keeps its authorization/caps. History errors stay local and refresh retains already loaded results. Some mixed histories remain in the snapshot.
 
+**Application export extension (2026-10-06):** Owner/Admin-controlled Excel export reuses fixed factory-scoped paginated readers and existing per-person export/view permissions. It includes operational history and frozen Lean evidence without transporting histories on every Floor refresh. This is expected data portability/parity, not an exclusive capability or a restorable database backup. [Implementation and limits](factory-export.md); comparable CSV export is documented in [MRPeasy’s official manual](https://www.mrpeasy.com/resources/user-manual/one/). Data Retention & Monthly Archive remains a [future design item](data-retention-archive.md), with no purge or final retention policy.
+
 **Operational value:** Operators can navigate current state without repeatedly transporting the largest histories.
 
 **Implementation status:** V with larger-data monitoring open. Prior controlled SQL JSONB-text measurement was 7,588,943 → 252,306 bytes; this is not HTTP bytes. Prior bounded refresh run had zero timeouts, not indefinite stability.

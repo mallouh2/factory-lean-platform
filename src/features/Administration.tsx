@@ -6,6 +6,7 @@ import Configuration from "./Configuration";
 import ProductionShifts from './ProductionShifts';
 import AuditHistory from './AuditHistory';
 import MemberPackageApproval from './MemberPackageApproval';
+import FactoryExport from './FactoryExport';
 import type { Row } from '@/types';
 export default function Administration({
   view,
@@ -75,6 +76,7 @@ export default function Administration({
     return (
       <section className="panel narrow">
         <h2>{t("settings")}</h2>
+        <FactoryExport {...props} />
         {localError && (
           <p role="alert" className="toast">
             {t(localError)}

@@ -34,6 +34,8 @@
 .review { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: .8rem; }
 .reviewList { display: grid; align-content: start; gap: .35rem; max-height: 28rem; overflow: auto; }
 .reviewList button { text-align: start; display: grid; gap: .2rem; padding: .6rem; border: 1px solid #cedde0; border-radius: .5rem; background: #fff; color: inherit; }
+.reviewList button:nth-child(even) { background: var(--table-row-alternate, #f0f4f8); }
+.reviewList button:hover { background: var(--table-row-hover, #e8eff7); }
 .reviewList button[aria-pressed="true"] { border-color: #1e777c; background: #eef8f7; }
 .reviewList span { font-size: .8rem; color: #526574; }
 .reviewDetail { display: grid; align-content: start; gap: .75rem; min-width: 0; }

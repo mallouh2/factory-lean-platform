@@ -1628,5 +1628,11 @@
   "leanRecurringLabel": "Recurring",
   "leanPartialShort": "Partial evidence",
   "leanRuntimeUnknown": "Runtime unknown",
-  "leanFilterPrioritization": "Prioritization"
+  "leanFilterPrioritization": "Prioritization",
+  "factoryExport": "Export Factory Data",
+  "factoryExportHelp": "Download one Excel workbook with this factory’s data and history. Full export requires export and view access to all included workflows.",
+  "factoryExportPreparing": "Preparing workbook…",
+  "factoryExportDownloaded": "Workbook ready. Your browser will handle the download.",
+  "factoryExportChanged": "The data changed during export. Stop making changes and try again.",
+  "factoryExportTooLarge": "This factory’s history exceeds the current export limit. Contact your administrator for a controlled archive."
 }

@@ -1628,5 +1628,11 @@
   "leanRecurringLabel": "متكرر",
   "leanPartialShort": "بيانات جزئية",
   "leanRuntimeUnknown": "وقت التشغيل غير معروف",
-  "leanFilterPrioritization": "الأولوية"
+  "leanFilterPrioritization": "الأولوية",
+  "factoryExport": "تصدير بيانات المصنع",
+  "factoryExportHelp": "نزّل ملف Excel واحدًا يحتوي على بيانات هذا المصنع وسجلاته. يتطلب التصدير الكامل صلاحية التصدير والاطلاع على جميع العمليات المشمولة.",
+  "factoryExportPreparing": "جارٍ إعداد الملف…",
+  "factoryExportDownloaded": "الملف جاهز. سيتولى المتصفح عملية التنزيل.",
+  "factoryExportChanged": "تغيّرت البيانات أثناء التصدير. أوقف التعديلات وحاول مرة أخرى.",
+  "factoryExportTooLarge": "تجاوز سجل المصنع الحد الحالي للتصدير. تواصل مع مسؤول النظام لإعداد أرشيف منضبط."
 }
