@@ -4,6 +4,7 @@ import ProductIdentity from '@/components/ProductIdentity';
 import { historyQuery, parseHistoryQuery, selectedHistoryValues } from '@/utils/production-history.mjs';
 import type { FeatureProps } from './types';
 import type { Row } from '@/types';
+import TableExport from '@/components/TableExport';
 export type HistoryResult={rows:Row[];total:number;page:number;page_size:number;totals:Row[];highest:Row[];shift_totals?:Row[];unknown_unit_records?:number};
 const empty:HistoryResult={rows:[],total:0,page:1,page_size:50,totals:[],highest:[]};
 export default function ProductionHistory({snapshot:s,t,lang,can,onCorrect,initial}:FeatureProps & {onCorrect:(entry:Row)=>void;initial?:HistoryResult}){
@@ -116,7 +117,8 @@ export default function ProductionHistory({snapshot:s,t,lang,can,onCorrect,initi
       <div className="row-actions"><button className="primary" onClick={()=>{try{parseHistoryQuery(new URLSearchParams(historyQuery(factory,draft,sort,direction,1)));setFilters(draft);setPage(1);document.getElementById(popoverId)?.hidePopover();}catch(e){setMenuError(e instanceof Error&&e.message==='history_unit_required'?'historyUnitRequired':'historyFilterInvalid');}}}>{t('historyApply')}</button><button onClick={()=>{clearFilter(menu);document.getElementById(popoverId)?.hidePopover();}}>{t('historyClearColumn')}</button></div>
     </div>
     <div className="history-sort-controls"><Field label={t('historySort')}><select value={sort} onChange={e=>{setSort(e.target.value);setPage(1);}}>{[['date','date'],['good','recordingGood'],['scrap','leanDiscardedLegacy'],['unfinished','unfinishedQuantity'],['unit','recordingUnit'],['technician','recordingTechnician'],['shift','productionShift']].map(([key,label])=><option key={key} value={key}>{t(label)}</option>)}</select></Field>
-      <button onClick={()=>{setDirection(x=>x==='desc'?'asc':'desc');setPage(1);}}>{t(direction==='desc'?'historyDescending':'historyAscending')}</button></div>
+      <button onClick={()=>{setDirection(x=>x==='desc'?'asc':'desc');setPage(1);}}>{t(direction==='desc'?'historyDescending':'historyAscending')}</button>
+      {can('orders')&&<TableExport factory={factory} dataset="production-history" filters={filters} sort={sort} direction={direction} total={result.total} language={lang} t={t} disabled={busy||!loaded||!!error}/>}</div>
     {error && <p role="alert">{t(error)} <button onClick={()=>setRetry(x=>x+1)}>{t('refresh')}</button></p>}
     <p className="history-load-status muted" role="status">{busy?t('historyLoading'):''}</p>
     {loaded && <><div className="history-summary" role="status"><strong>{t('historyRecords')}: {q(result.total)}</strong>

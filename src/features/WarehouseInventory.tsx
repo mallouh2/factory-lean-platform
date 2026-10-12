@@ -5,6 +5,7 @@ import { useFulfillment } from './useFulfillment';
 import { inventoryColumns, warehouseVisibleColumns, inventoryChoices, validInventoryFilters } from '@/utils/warehouse-inventory.mjs';
 import WarehouseOutputs from './WarehouseOutputs';
 import { useSupplyCommand } from './useSupply';
+import TableExport from '@/components/TableExport';
 export type InventoryRow = {
  id:string; row_key:string; entity:string; name:string; name_ar:string; code:string; item_type:string; supply_source:string; unit:string|null;
  on_hand:number|null; reserved:number|null; available:number|null; incoming:number|null; projected:number|null; minimum_stock:number|null; maximum_stock:number|null;
@@ -58,6 +59,7 @@ export default function WarehouseInventory({ snapshot:s,t,lang,can,command,onCha
  <div className="inventory-filter-tools">
  <select className="inventory-mobile-column" aria-label={t('inventoryFilterColumn')} value="" onChange={e=>openFilter(e.target.value)}><option value="">{t('inventoryFilterColumn')}</option>{columns.map(([key,title])=><option key={key} value={key}>{t(title)}</option>)}</select>
  {active.length>0&&<button onClick={()=>{setFilters({});setPage(1);}}>{t('inventoryClearAll')}</button>}
+ {can('warehouse')&&<TableExport factory={String(s.factory?.id||'')} dataset="warehouse-stock" filters={scope===s.factory?.id?filters:{}} sort={sort} direction={direction} total={read.data?.total??0} language={lang} t={t} disabled={read.busy||!read.data||!!read.error}/>}
  </div>
  {(read.error||notice)&&<p role="status">{t(read.error||notice)}</p>}{read.busy&&<p role="status">{t('loading')}</p>}
  {!read.busy&&read.data?.rows.length===0&&<p className="empty">{t('noResults')}</p>}

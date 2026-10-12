@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FeatureProps } from './types';
 import { Dialog, Field, formatTime, localName } from '@/components/ui';
 import type { InventoryRow } from './WarehouseInventory';
+import TableExport from '@/components/TableExport';
 export type MaterialStock = { id: string; name: string; name_ar: string; code: string; unit: string; inventory_kind: string; on_hand: number; reserved: number };
 type Movement = { id: string; kind: string; quantity: number; reserved_delta?: number; unit: string | null; note: string; reference: string; created_by: string; actor_name: string | null; created_at: string };
 export default function WarehouseReceiving({ snapshot: s, can, command, t, lang, materials = [], refresh, children, showMaterials=true, receiveRow, compactActions=false, settingsAction, purchaseAction }: FeatureProps & { materials: MaterialStock[]; refresh: () => void; children?: ReactNode; showMaterials?:boolean; receiveRow?:InventoryRow|null; compactActions?:boolean; settingsAction?:ReactNode; purchaseAction?:ReactNode }) {
@@ -68,7 +69,7 @@ export default function WarehouseReceiving({ snapshot: s, can, command, t, lang,
         </>}
         {notice && <p role="alert">{t(notice)}</p>}{dialog !== 'history' && <button className="primary" disabled={dialog === 'receive' && !selectedUnit}>{t('save')}</button>}
       </fieldset></form>
-      {dialog === 'history' && item && <>{!history && !notice && <p role="status">{t('loading')}</p>}<div className="fulfillment-orders">{history?.rows.map(row => <article className="fulfillment-order" key={row.id}>
+      {dialog === 'history' && item && <>{can('warehouse')&&<TableExport factory={String(s.factory?.id||'')} dataset="warehouse-movements" filters={{item,item_type:type}} total={history?.total??0} language={lang} t={t} disabled={!history||!!notice}/>}{!history && !notice && <p role="status">{t('loading')}</p>}<div className="fulfillment-orders">{history?.rows.map(row => <article className="fulfillment-order" key={row.id}>
         <strong>{t(`movement_${row.kind}`)}</strong><p>{t('stockMovementDelta')}: {Number(row.quantity).toLocaleString(lang)} {row.unit ? t(row.unit) : t('historicalUnitUnknown')}</p>
         {Number(row.reserved_delta) !== 0 && row.reserved_delta != null && <p>{t('reservedMovementDelta')}: {Number(row.reserved_delta).toLocaleString(lang)} {row.unit ? t(row.unit) : t('historicalUnitUnknown')}</p>}
         <p>{formatTime(row.created_at, lang, String(s.factory?.timezone || 'UTC'))}</p><p>{t('receivingActor')}: <bdi>{row.actor_name || row.created_by || t('notSpecified')}</bdi></p>

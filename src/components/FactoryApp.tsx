@@ -22,6 +22,7 @@ import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import DowntimeCapture from "@/features/DowntimeCapture";
 import Maintenance from '@/features/Maintenance';
 import LeanAnalysis from '@/features/LeanAnalysis';
+import Quality, { QualityNotifications } from '@/features/Quality';
 import Purchasing from '@/features/Purchasing';
 import Products from '@/features/Products';
 import MaterialFlow from '@/features/MaterialFlow';
@@ -48,16 +49,17 @@ const primary = [
   "downtime",
   "maintenance",
   "lean",
+  "quality",
   "reports",
 ];
 const admin = ["employees", "roles", "suppliers", "settings", "support", "audit"];
 const future = [
-  "quality",
   "safety",
   "costing",
   "hr",
 ];
 const sidebarIconPaths: Record<string, string[]> = {
+  quality:['M12 3 3 7v6c0 5 9 9 9 9s9-4 9-9V7z','M8 12l3 3 5-6'],
   lean:['M3 3v18h18','M7 15l4-5 4 3 5-7'],
   purchasing: ['M3 3h2l3 12h11l2-8H6','M9 20h.01','M18 20h.01'],
   myPurchaseRequests: ['M5 3h14v18H5z','M8 7h8','M8 11h8','M8 16l2 2 5-5'],
@@ -515,7 +517,7 @@ export default function FactoryApp() {
               )}
               {props &&
                 (can(view) ? (
-                  view === 'lean' ? <LeanAnalysis key={String(snapshot.factory.id)} {...props}/> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'quality' ? <Quality key={String(snapshot.factory.id)} {...props}/> : view === 'lean' ? <LeanAnalysis key={String(snapshot.factory.id)} {...props}/> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}
@@ -558,9 +560,9 @@ export default function FactoryApp() {
                       </details>
                     </>
                   ) : view === "orders" ? (
-                    <ProductionOrdersV2 {...props} onPlanItem={(itemId) => {
+                    <><QualityNotifications {...props} onPlanItem={itemId=>{setPlanningItemId(itemId);setView('planning');}}/><ProductionOrdersV2 {...props} onPlanItem={(itemId) => {
                       setPlanningItemId(itemId); setView("planning");
-                    }} />
+                    }} /></>
                   ) : view === "planning" ? (
                     <ProductionPlanning key={planningItemId || "planning"} {...props} initialItemId={planningItemId} />
                   ) : primary.includes(view) ? (

@@ -119,11 +119,14 @@ test('Warehouse dispatch availability follows complete order or explicit complet
  const html=harness('Warehouse',{rows:[],orders:[early],total:0,orders_total:1}).html();assert.match(html,/Dispatch Complete Product Line/);assert.ok(!html.includes('>'+en.dispatchOrder+'</button>'));
  assert.ok(!harness('Warehouse',{rows:[],orders:[full],total:0,orders_total:1},(_m,a='view')=>a!=='issue').html().includes('>'+en.dispatchOrder+'</button>'));
 });
-test('Physical dispatch submits no arbitrary partial quantity',async()=>{
+test('Physical dispatch requires explicit source picks and submits no arbitrary partial quantity',async()=>{
  const calls=[],prior=globalThis.confirm;globalThis.confirm=()=>true;
  try{const h=harness('Warehouse',{rows:[],orders:[{...order,dispatch_allowed:true}],total:0,orders_total:1},()=>true,async(...args)=>calls.push(args));
- const action=h.nodes().find(n=>n.type==='button'&&n.props.children===en.dispatchOrder);action.props.onClick();assert.equal(calls.length,0);h.nodes().find(n=>n.type==='button'&&n.props.children===en.confirmDispatch).props.onClick();await new Promise(resolve=>setImmediate(resolve));
- assert.equal(calls[0][0],'dispatch_sales_order');assert.equal(calls[0][1].sales_order,'S');assert.equal(calls[0][1].factory,'F');assert.ok(calls[0][1].request_id);assert.ok(!Object.hasOwn(calls[0][1],'quantity'));}finally{globalThis.confirm=prior;}
+ const action=h.nodes().find(n=>n.type==='button'&&n.props.children===en.dispatchOrder);action.props.onClick();assert.equal(calls.length,0);
+ let confirmButton=h.nodes().find(n=>n.type==='button'&&n.props.children===en.confirmDispatch);assert.equal(confirmButton.props.disabled,true);confirmButton.props.onClick();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.length,0);
+ const source=h.nodes().find(n=>typeof n.type==='function'&&n.type.name==='SourceAllocationFields');assert.ok(source);assert.equal(source.props.salesLine,'L');
+ source.props.onChange([{source_id:null,quantity:'100',sales_line_id:'L'}],true);confirmButton=h.nodes().find(n=>n.type==='button'&&n.props.children===en.confirmDispatch);assert.equal(confirmButton.props.disabled,false);confirmButton.props.onClick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls[0][0],'source_stock_command');assert.equal(calls[0][1].operation,'dispatch');assert.equal(calls[0][1].payload.sales_order,'S');assert.deepEqual(calls[0][1].allocations,[{source_id:null,quantity:'100',sales_line_id:'L'}]);assert.equal(calls[0][1].factory,'F');assert.ok(calls[0][1].request_id);assert.ok(!Object.hasOwn(calls[0][1].payload,'quantity'));}finally{globalThis.confirm=prior;}
 });
 test('Create Sales preserves typed unit, exact optional customer time and hold default, without a promise writer',async()=>{
  const calls=[],h=harness('SalesOrders',{rows:[],total:0},()=>true,async(...args)=>calls.push(args));

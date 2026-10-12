@@ -2,9 +2,11 @@ import { useState } from 'react';
 import type { FeatureProps } from './types';
 import { Dialog, Field, formatTime } from '@/components/ui';
 import { useSupply, useSupplyCommand, type SupplyRow } from './useSupply';
+import { SourceIdentityDialog } from './SourceStock';
 export default function WarehouseOutputs(props:FeatureProps & { product?:string; onClose?:()=>void; onChanged?:()=>void }) {
   const { snapshot:s,t,lang,can,product,onChanged }=props;
   const [page,setPage]=useState(1),[receiving,setReceiving]=useState<SupplyRow|null>(null),[quantity,setQuantity]=useState('');
+  const [identifying,setIdentifying]=useState<SupplyRow|null>(null);
   const lots=useSupply(s,'lots',{page:String(page),...(product?{selected:product}:{})}),good=useSupply(s,'outputs',{page:String(page)},!product);
   const action=useSupplyCommand(props.command,s.factory?.id);
   const stamp=(value:unknown)=>formatTime(value,lang,String(s.factory?.timezone||'UTC'));
@@ -12,7 +14,7 @@ export default function WarehouseOutputs(props:FeatureProps & { product?:string;
   const body=<section className="supply-page" dir={lang==='ar'?'rtl':'ltr'}>
     {!product&&<><h3>{t('warehouseGoodAcknowledgment')}</h3><p className="muted">{t('warehouseGoodAlreadyCredited')}</p>
       {good.data?.rows.map(row=><article key={String(row.id)}><strong>{String(lang==='ar'?row.name_ar||row.name:row.name)}</strong><p><bdi>{String(row.code)}</bdi> · {String(row.effective_good)} {t(String(row.unit))} · {stamp(row.created_at)}</p>
-        {can('warehouse','edit')&&<button disabled={action.busy} onClick={()=>void run('acknowledge_good',{entry:row.id})}>{t('warehouseAcknowledgeGood')}</button>}</article>)}</>}
+        {can('warehouse','edit')&&<div className="row-actions">{!row.acknowledged&&<button disabled={action.busy} onClick={()=>void run('acknowledge_good',{entry:row.id})}>{t('warehouseAcknowledgeGood')}</button>}<button onClick={()=>setIdentifying(row)}>{t('sourceIdentify')}</button></div>}</article>)}</>}
     <h3>{t('inventorySemiFinished')}</h3>{(lots.error||good.error||action.error)&&<p role="alert">{t(lots.error||good.error||action.error)}</p>}
     {lots.busy&&<p role="status">{t('loading')}</p>}{!lots.busy&&!lots.data?.rows.length&&<p className="empty">{t('unfinishedEmpty')}</p>}
     <div className="supply-directory">{lots.data?.rows.map(row=><article key={String(row.id)}>
@@ -25,6 +27,7 @@ export default function WarehouseOutputs(props:FeatureProps & { product?:string;
     <nav className="fulfillment-pagination"><button disabled={page===1||lots.busy} onClick={()=>setPage(x=>x-1)}>{t('previous')}</button><span>{page}</span><button disabled={lots.busy||page*50>=Math.max(lots.data?.total||0,good.data?.total||0)} onClick={()=>setPage(x=>x+1)}>{t('next')}</button></nav>
   </section>;
   return <>{product&&props.onClose?<Dialog title={t('inventorySemiFinished')} t={t} onClose={props.onClose}>{body}</Dialog>:body}
+    {identifying&&<SourceIdentityDialog {...props} product={String(identifying.product_id)} unit={String(identifying.unit)} entry={String(identifying.id)} onClose={()=>setIdentifying(null)} onChanged={()=>{good.refresh();onChanged?.();}}/>}
     {receiving&&<Dialog title={t('warehouseReceiveWip')} t={t} onClose={()=>{if(!action.busy)setReceiving(null);}}>
       <strong>{String(receiving.name)}</strong><p>{String(receiving.remaining_work)}</p><form onSubmit={e=>{e.preventDefault();void run('receive_wip',{lot:receiving.id,quantity:Number(quantity)});}}><fieldset disabled={action.busy}>
         <Field label={t('quantity')+' ('+t(String(receiving.unit))+')'}><input required type="number" min="0.000001" step="any" max={Number(receiving.floor_quantity)} value={quantity} onChange={e=>setQuantity(e.target.value)}/></Field>

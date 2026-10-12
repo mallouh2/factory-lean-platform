@@ -10,6 +10,7 @@ import { maintenanceCommandValid } from '@/utils/maintenance.mjs';
 import { supplyCommandValid } from '@/utils/supply-contract.mjs';
 import { packageCommands, packageCommandValid } from '@/utils/permission-packages.mjs';
 import { leanCommands, leanCommandValid, leanRequiredPermission } from '@/utils/lean-contract.mjs';
+import { qualityCommandValid, sourceCommandValid,qualityRequiredPermissions,sourceRequiredPermissions } from '@/utils/quality-contract.mjs';
 export async function GET(req: NextRequest) {
   let stage = "authentication";
   try {
@@ -68,6 +69,8 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  quality_quantity:'qualityInvalidQuantity',quality_weight:'qualityWeightRequired',quality_unavailable:'qualityUnavailable',quality_reserved:'qualityReserved',quality_reason:'qualityReasonRequired',quality_duplicate_reason:'qualityReasonDuplicate',quality_shortfall:'qualityShortfall',quality_reversal_unavailable:'qualityReversalUnavailable',
+  source_identity:'sourceIdentity',source_selection_required:'sourceSelectionRequired',source_quantity:'sourceQuantity',source_unavailable:'sourceUnavailable',source_committed:'sourceCommitted',source_conservation:'sourceStockChanged',source_correction_unavailable:'sourceUnavailable',
   lean_invalid:'leanInvalid',lean_conflict:'leanConflict',lean_closed:'leanClosed',lean_incomplete:'leanIncomplete',lean_baseline_missing:'leanBaselineMissing',lean_startup_required:'leanStartupRequired',lean_link_invalid:'leanLinkInvalid',lean_link_cause:'leanLinkCause',lean_insufficient_exposure:'leanInsufficientExposure',lean_scrap_kg_only:'leanScrapKgOnly',lean_comparison_product:'leanComparisonProduct',
   permission_package_conflict: 'packageConflict',
   supply_invalid: 'supplyInvalid',
@@ -178,6 +181,7 @@ const joinErrors: Record<string, string> = {
 };
 /** Pre-checks mirror the require_permission calls inside each RPC; the database remains authoritative. */
 const rpcModules: Record<string, [string, string][]> = {
+  quality_command:[['factory','view']],source_stock_command:[['factory','view']],
   record_lean_production:[['orders','edit'],['orders','view']],
   correct_lean_production:[['orders','edit'],['orders','view']],
   lean_command:[['factory','view']],
@@ -248,6 +252,11 @@ export async function POST(req: NextRequest) {
     const { db } = context;
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
+    if(command==='quality_command'&&!qualityCommandValid(args))throw new Error('invalid_input');
+    if(command==='source_stock_command'&&!sourceCommandValid(args))throw new Error('invalid_input');
+    if(command==='quality_command'||command==='source_stock_command'){
+      for(const [module,action] of (command==='quality_command'?qualityRequiredPermissions(args.operation):sourceRequiredPermissions(args.operation)))await authorize(args.factory,module,action,context);
+    }
     if (packageCommands.includes(command) && !packageCommandValid(command,args)) throw new Error('invalid_input');
     if (leanCommands.includes(command) && !leanCommandValid(command,args)) throw new Error('invalid_input');
     if (command==='lean_command') { const [module,action]=leanRequiredPermission(args.operation); await authorize(args.factory,module,action,context); }

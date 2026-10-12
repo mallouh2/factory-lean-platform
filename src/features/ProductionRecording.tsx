@@ -9,6 +9,8 @@ import { unfinishedOutputValid } from '@/utils/unfinished-production.mjs';
 import { shiftWindow } from '@/utils/production-shifts.mjs';
 import LeanScrapReview from './LeanScrapReview';
 import { useHistoryData } from '@/hooks/useHistoryData';
+import { SourceAllocationFields,type SourcePick } from './SourceStock';
+import { decimalCompare,decimalSubtract,scrapWeight } from '@/utils/quality-quantities.mjs';
 
 export default function ProductionRecording({ snapshot: s, lang, t, can, command  ,selectedLot }: FeatureProps & {selectedLot?:Row}) {
   const [inputSource,setInputSource]=useState(selectedLot?'unfinished':'normal');
@@ -57,6 +59,8 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const request = useRef(crypto.randomUUID());
   const correctionRequest = useRef(crypto.randomUUID());
   const [correctionGood, setCorrectionGood] = useState("");
+  const [correctionPicks,setCorrectionPicks]=useState<SourcePick[]>([]),[correctionPicksValid,setCorrectionPicksValid]=useState(false);
+  const [reworkWeightEdited,setReworkWeightEdited]=useState(false);
   const [correctionScrap, setCorrectionScrap] = useState("");
   const [correctionDiscarded,setCorrectionDiscarded]=useState('0'),[correctionStartup,setCorrectionStartup]=useState('0');
   const [correctionConfirmed, setCorrectionConfirmed] = useState(false);
@@ -64,6 +68,9 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const unit = units.find(x => `${x.unit_kind}:${x.unit_id}` === unitKey) || (!unitKey && units.length === 1 ? units[0] : undefined);
   const item = s.tables.production_orders?.find(x => x.id === unit?.item_id);
   const product = s.tables.products?.find(x => x.id === item?.product_id);
+  const reworkDefault=scrapWeight(discarded,String(lot?.unit||item?.unit||''),product?.stock_unit===lot?.unit?product?.unit_weight_kg:null,'').defaultKg;
+  useEffect(()=>{setReworkWeightEdited(false);},[lot?.id]);
+  useEffect(()=>{if(lot?.reserved_quality_rejection_id&&!reworkWeightEdited&&reworkDefault!==null)setScrap(reworkDefault);},[lot?.reserved_quality_rejection_id,reworkWeightEdited,reworkDefault]);
   const requestHeader = s.tables.production_requests?.find(x => x.id === item?.request_id);
   const progress = productionProgress(item, Number(good));
   const q = (n: number) => n.toLocaleString(lang);
@@ -94,10 +101,12 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
     const values=entryQuantities(entry);
     setCorrectionUnfinished(String(entry.effective_unfinished || 0));setCorrectionWork(String(entry.effective_remaining_work || ''));
     setEditing(entry);setCorrectionGood(String(values.good));setCorrectionDiscarded(String(values.scrap));setCorrectionScrap(String(entry.effective_scrap_kg??''));setCorrectionStartup(String(entry.effective_startup_kg??0));
+    setCorrectionPicks([]);setCorrectionPicksValid(false);
     setCorrectionShift(String(entry.shift_id || ''));
     setReason("");setCorrectionConfirmed(false);setServerCorrectionOverproduction(false);setNotice("");correctionRequest.current=crypto.randomUUID();
   }
   const correctedItem=(editing?.history_item as unknown as Row | undefined) || s.tables.production_orders?.find(x=>x.id===editing?.order_id);
+  const correctionDecrease=!!editing&&decimalCompare(correctionGood,String(editing.effective_good??entryQuantities(editing).good))===-1;
   const correctionOverproduction=editing && productionProgress(correctedItem).good-entryQuantities(editing).good+Number(correctionGood)>Number(correctedItem?.target_quantity);
   return <section className="production-recording" aria-labelledby="production-recording-heading">
     <header><div><h3 id="production-recording-heading">{t("productionRecording")}</h3><p className="muted">{t("recordingHelp")}</p></div></header>
@@ -141,9 +150,10 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
           <Field label={`${t("recordingGood")} (${quantityUnit(item)})`}><input required type="number" min="0" step="any" inputMode="decimal"
             value={good} onChange={e=>{setGood(e.target.value);setConfirmed(false);}} /></Field>
           <Field label={`${t("recordingScrap")} (kg)`}><input required type="number" min="0" step="any" inputMode="decimal"
-            value={scrap} onChange={e=>setScrap(e.target.value)} /></Field>
+            value={scrap} onChange={e=>{setScrap(e.target.value);setReworkWeightEdited(true);}} /></Field>
         </div>
         <p className="muted">{t('leanScrapMassHelp')}</p>
+        {!!lot?.reserved_quality_rejection_id&&<p>{t('qualityDefaultKg')}: {reworkDefault===null?t('qualityWeightMissing'):reworkDefault+' kg'} · {t('qualityReservedHelp')}</p>}
         {inputSource==='unfinished' && <Field label={t('leanDiscardedQuantity')+' ('+quantityUnit(item)+')'}><input required type="number" min="0" step="any" value={discarded} onChange={e=>setDiscarded(e.target.value)}/></Field>}
         {item?.line_id && <details><summary>{t('leanStartupScrap')}</summary><Field label={t('leanStartupIncluded')}><input type="number" min="0" max={Number(scrap)} step="any" value={startupKg} onChange={e=>setStartupKg(e.target.value)}/></Field>
           {Number(startupKg)>0 && <><Field label={t('leanStartupEvent')}><select required value={startupId} onChange={e=>{setStartupId(e.target.value);const row=startupContext.data?.startups.find(x=>x.id===e.target.value);if(row)setStartupAt(new Date(Date.parse(String(row.occurred_at))-new Date().getTimezoneOffset()*60000).toISOString().slice(0,23));}}><option value="">{t('choose')}</option>{startupId&&!startupContext.data?.startups.some(x=>x.id===startupId)&&<option value={startupId}>{t('leanNewStartup')}</option>}{startupContext.data?.startups.map(x=><option key={String(x.id)} value={String(x.id)}>{String(x.occurred_at)}</option>)}</select></Field>
@@ -164,10 +174,10 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
     {notice && <p role="status" className="notice">{t(notice)}</p>}
     <LeanScrapReview snapshot={s} lang={lang} t={t} can={can} command={command} revision={reviewRevision}/>
     <ProductionHistory snapshot={s} lang={lang} t={t} can={can} command={command} onCorrect={openCorrection}/>
-    {editing && <Dialog title={t("recordingCorrect")} t={t} onClose={()=>{if(!busy)setEditing(null);}}>
+    {editing && <Dialog busy={busy} title={t("recordingCorrect")} t={t} onClose={()=>{if(!busy)setEditing(null);}}>
       <form onSubmit={async e=>{e.preventDefault();setBusy(true);setNotice("");try {
-        await command("correct_lean_production",{factory:s.factory?.id,request_id:correctionRequest.current,payload:{entry:editing.id,good:Number(correctionGood),discarded_quantity:Number(correctionDiscarded),scrap_kg:Number(correctionScrap),startup_kg:Number(correctionStartup),
-          reason,confirm_overproduction:correctionConfirmed,unfinished:Number(correctionUnfinished),remaining_work:correctionWork.trim(),shift:correctionShift || null,change_shift:correctionShift!==String(editing.shift_id || '')}});setReviewRevision(x=>x+1);setEditing(null);setNotice("saved");
+        await command(correctionDecrease?'source_stock_command':"correct_lean_production",{factory:s.factory?.id,request_id:correctionRequest.current,...(correctionDecrease?{operation:'correct',allocations:correctionPicks}:{}),payload:{entry:editing.id,good:correctionGood,discarded_quantity:correctionDiscarded,scrap_kg:correctionScrap,startup_kg:correctionStartup,
+          reason,confirm_overproduction:correctionConfirmed,unfinished:correctionUnfinished,remaining_work:correctionWork.trim(),shift:correctionShift || null,change_shift:correctionShift!==String(editing.shift_id || '')}});setReviewRevision(x=>x+1);setEditing(null);setNotice("saved");
         } catch(error) {const key=error instanceof Error ? error.message : "error";setNotice(key);
           if(key==="recordingOverproductionConfirm")setServerCorrectionOverproduction(true);}finally{setBusy(false);}}}>
         <Field label={t("recordingGood")}><input required type="number" min="0" step="any" value={correctionGood} disabled={busy}
@@ -183,7 +193,8 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
         <Field label={t('productionShift')}><select value={correctionShift} disabled={busy} onChange={e=>setCorrectionShift(e.target.value)}><option value="">{t('shiftNotRecorded')}</option>{shifts.filter(x=>!x.archived || x.id===editing.shift_id).map(x=><option key={String(x.id)} value={String(x.id)}>{localName(x,lang)}</option>)}</select></Field>
         {(correctionOverproduction || serverCorrectionOverproduction) && <label className="recording-confirm"><input type="checkbox" checked={correctionConfirmed} disabled={busy} onChange={e=>setCorrectionConfirmed(e.target.checked)} />{t("recordingOverproductionConfirm")}</label>}
         {notice && <p role="alert">{t(notice)}</p>}
-        <button className="primary" disabled={busy || reason.trim().length<3 || Boolean((correctionOverproduction || serverCorrectionOverproduction) && !correctionConfirmed)}>{t("save")}</button>
+        {correctionDecrease&&<SourceAllocationFields disabled={busy} snapshot={s} t={t} lang={lang} product={String(correctedItem?.product_id||'')} unit={String(editing.unit)} entry={String(editing.id)} quantity={decimalSubtract(String(editing.effective_good??entryQuantities(editing).good),correctionGood)||''} onChange={(picks,valid)=>{setCorrectionPicks(picks);setCorrectionPicksValid(valid);}}/>}
+        <button className="primary" disabled={busy || correctionDecrease&&!correctionPicksValid || reason.trim().length<3 || Boolean((correctionOverproduction || serverCorrectionOverproduction) && !correctionConfirmed)}>{t("save")}</button>
       </form>
     </Dialog>}
   </section>;

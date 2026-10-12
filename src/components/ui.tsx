@@ -48,11 +48,13 @@ export function Dialog({
   onClose,
   children,
   t,
+  busy = false,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   t: Translate;
+  busy?: boolean;
 }) {
   const [error, setError] = useState("");
   useEffect(() => {
@@ -65,12 +67,12 @@ export function Dialog({
       ref={(el) => {
         if (el && !el.open) el.showModal();
       }}
-      onCancel={onClose}
+      onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
       className="dialog"
     >
       <header>
         <h2>{title}</h2>
-        <button onClick={onClose} aria-label={t("close")}>
+        <button disabled={busy} onClick={onClose} aria-label={t("close")}>
           ×
         </button>
       </header>

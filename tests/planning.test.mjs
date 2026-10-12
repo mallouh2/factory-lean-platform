@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createElement } from "react";
@@ -15,6 +15,10 @@ import {
   proposeSchedule, sortedLineSchedule, sortPlanningItems,
   suggestPlanningSlots,
 } from "../src/utils/planning.mjs";
+
+// These fixed October 8 schedules must stay in the future for placement tests.
+// Freeze only this isolated test process; application time handling is unchanged.
+mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-07T00:00:00Z') });
 
 const requests = [
   { id: "R1", code: "PO-1", name: "Pipe project", priority: "urgent", required_by: "2026-09-25T10:00:00Z" },

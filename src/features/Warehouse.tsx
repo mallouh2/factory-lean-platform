@@ -10,6 +10,8 @@ import WarehouseOutputs from './WarehouseOutputs';
 import Purchasing from './Purchasing';
 import WarehousePurchase from './WarehousePurchase';
 import { useFulfillment, type SalesLine, type SalesOrder, type StockRow } from './useFulfillment';
+import { SourceAllocationFields,type SourcePick } from './SourceStock';
+import { decimalCompare } from '@/utils/quality-quantities.mjs';
 export default function Warehouse({ snapshot: s, t, lang, command, can }: FeatureProps) {
   const [page, setPage] = useState(1), [purchase,setPurchase]=useState(false);
   const read = useFulfillment<{ rows: StockRow[]; total: number; orders: SalesOrder[]; orders_total: number; materials: MaterialStock[]; materials_total: number }>(s, 'warehouse', page, can('warehouse'));
@@ -18,6 +20,8 @@ export default function Warehouse({ snapshot: s, t, lang, command, can }: Featur
   const [source, setSource] = useState('MANUFACTURED');
   const [quantity, setQuantity] = useState(''), [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [dispatch, setDispatch] = useState<{ order: SalesOrder; line?: SalesLine } | null>(null);
+  const [dispatchPicks,setDispatchPicks]=useState<Record<string,{picks:SourcePick[];valid:boolean}>>({});
+  const [adjustPicks,setAdjustPicks]=useState<SourcePick[]>([]),[adjustValid,setAdjustValid]=useState(false);
   const retry = useRef<{ key: string; id: string } | null>(null);
   const [revision, setRevision] = useState(0), [receiveRow,setReceiveRow] = useState<InventoryRow|null>(null);
   const [configuredRow,setConfiguredRow] = useState<InventoryRow|null>(null);
@@ -30,6 +34,7 @@ export default function Warehouse({ snapshot: s, t, lang, command, can }: Featur
     setMinimum(String(catalogue?.minimum_stock??row.minimum_stock??'')); setMaximum(String(catalogue?.maximum_stock??row.maximum_stock??''));setNotice('');setDialog('configure');
   };
   async function run(name: string, args: Record<string, unknown>) {
+    if(busy)return;
     const key = JSON.stringify([name, args]);
     if (retry.current?.key !== key) retry.current = { key, id: crypto.randomUUID() };
     setBusy(true); setNotice('');
@@ -58,27 +63,29 @@ export default function Warehouse({ snapshot: s, t, lang, command, can }: Featur
           <ProductIdentity productId={line.product_id}>{lang === 'ar' ? line.product_name_ar || line.product_name : line.product_name}</ProductIdentity>
           <span>{line.quantity} {t(line.unit)} · {t('stockReserved')}: {line.reserved_quantity} · {t('stockDispatched')}: {line.dispatched_quantity}</span>
           {can('warehouse', 'issue') && line.dispatch_allowed && !order.dispatch_allowed && <button disabled={busy}
-            onClick={() => setDispatch({ order, line })}>{t('dispatchProductLine')}</button>}
+            onClick={() => {setDispatchPicks({});setDispatch({ order, line });}}>{t('dispatchProductLine')}</button>}
         </div>)}
         {can('warehouse', 'issue') && order.dispatch_allowed && <button className="primary" disabled={busy}
-          onClick={() => setDispatch({ order })}>{t('dispatchOrder')}</button>}
+          onClick={() => {setDispatchPicks({});setDispatch({ order });}}>{t('dispatchOrder')}</button>}
       </article>)}</div>
       <nav className="fulfillment-pagination" aria-label={t('warehouse')}><button disabled={page === 1 || read.busy} onClick={() => setPage(value => value - 1)}>{t('previous')}</button><span>{page}</span>
         <button disabled={read.busy || (page * 50 >= (read.data?.total || 0) && page * 25 >= (read.data?.orders_total || 0) && page * 50 >= (read.data?.materials_total || 0))} onClick={() => setPage(value => value + 1)}>{t('next')}</button></nav>
     </>
     {purchase&&<WarehousePurchase snapshot={s} t={t} lang={lang} command={command} can={can} onClose={()=>setPurchase(false)} onChanged={refresh}/>}
-    {dispatch && <Dialog title={t('confirmDispatch')} t={t} onClose={() => { if (!busy) setDispatch(null); }}>
+    {dispatch && <Dialog busy={busy} title={t('confirmDispatch')} t={t} onClose={() => { if (!busy) setDispatch(null); }}>
       <p>{t('dispatchConfirm')}</p><strong><bdi dir="ltr">{dispatch.order.code}</bdi> · {dispatch.order.customer_reference}</strong>
       {(dispatch.line ? [dispatch.line] : dispatch.order.lines.filter(line => line.dispatched_quantity < line.quantity)).map(line =>
-        <p key={line.id}><ProductIdentity productId={line.product_id}>{lang === 'ar' ? line.product_name_ar || line.product_name : line.product_name}</ProductIdentity> · {line.quantity - line.dispatched_quantity} {t(line.unit)}</p>)}
+        <div key={line.id}><p><ProductIdentity productId={line.product_id}>{lang === 'ar' ? line.product_name_ar || line.product_name : line.product_name}</ProductIdentity> · {line.quantity - line.dispatched_quantity} {t(line.unit)}</p>
+        <SourceAllocationFields disabled={busy} snapshot={s} t={t} lang={lang} product={line.product_id} unit={line.unit} quantity={String(line.quantity-line.dispatched_quantity)} salesLine={line.id} onChange={(picks,valid)=>setDispatchPicks(old=>({...old,[line.id]:{picks,valid}}))}/></div>)}
       {notice && notice !== 'saved' && <p role="alert">{t(notice)}</p>}
       <div className="row-actions"><button disabled={busy} onClick={() => setDispatch(null)}>{t('cancel')}</button>
-        <button className="primary" disabled={busy} onClick={() => run('dispatch_sales_order', { sales_order: dispatch.order.id, ...(dispatch.line ? { line: dispatch.line.id } : {}) })}>{t('confirmDispatch')}</button></div>
+        <button className="primary" disabled={busy||(dispatch.line?[dispatch.line]:dispatch.order.lines.filter(line=>line.dispatched_quantity<line.quantity)).some(line=>!dispatchPicks[line.id]?.valid)} onClick={() => {if((dispatch.line?[dispatch.line]:dispatch.order.lines.filter(line=>line.dispatched_quantity<line.quantity)).every(line=>dispatchPicks[line.id]?.valid))void run('source_stock_command', {operation:'dispatch',payload:{sales_order: dispatch.order.id, ...(dispatch.line ? { line: dispatch.line.id } : {})},allocations:Object.values(dispatchPicks).flatMap(value=>value.picks)});}}>{t('confirmDispatch')}</button></div>
     </Dialog>}
     {dialog && <Dialog title={t(dialog === 'configure' ? 'configureStock' : 'adjustStock')} t={t} onClose={() => { if (!busy) setDialog(''); }}>
       {dialog==='configure'&&<button onClick={()=>{setDialog('adjust');setQuantity('');setReason('');setNotice('');}}>{t('adjustStock')}</button>}
       <form onSubmit={event => { event.preventDefault();
         if (dialog === 'configure') run('configure_warehouse_product', { product, source, mode, unit, minimum: mode === 'MAKE_TO_STOCK' ? Number(minimum) : null, maximum: mode === 'MAKE_TO_STOCK' && maximum !== '' ? Number(maximum) : null });
+        else if(decimalCompare(quantity,'0')===-1){if(adjustValid)run('source_stock_command',{operation:'adjust',payload:{product,unit,quantity,reason},allocations:adjustPicks});}
         else run('adjust_finished_stock', { product, unit, quantity: Number(quantity), reason });
       }}><fieldset disabled={busy} className="fulfillment-form">
         <Field label={t('product')}><select required value={product} onChange={event => {
@@ -94,7 +101,8 @@ export default function Warehouse({ snapshot: s, t, lang, command, can }: Featur
             <Field label={t('stockMax')}><input type="number" min={Math.max(Number(minimum), 0.000001)} step="any" value={maximum} onChange={event => setMaximum(event.target.value)} /></Field></>}
         </> : <><p>{t('stockAdjustmentHelp')}</p><Field label={t('quantity')}><input required type="number" step="any" value={quantity} onChange={event => setQuantity(event.target.value)} /></Field>
           <Field label={t('reason')}><textarea required minLength={3} maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} /></Field></>}
-        {notice && <p role="alert">{t(notice)}</p>}<button className="primary">{t('save')}</button>
+        {dialog!=='configure'&&decimalCompare(quantity,'0')===-1&&<SourceAllocationFields disabled={busy} snapshot={s} t={t} lang={lang} product={product} unit={unit} quantity={quantity.slice(1)} onChange={(picks,valid)=>{setAdjustPicks(picks);setAdjustValid(valid);}}/>}
+        {notice && <p role="alert">{t(notice)}</p>}<button className="primary" disabled={dialog!=='configure'&&decimalCompare(quantity,'0')===-1&&!adjustValid}>{t('save')}</button>
       </fieldset></form>
     </Dialog>}
   </section>;

@@ -1,0 +1,58 @@
+begin;
+create function pg_temp.q_assert(ok boolean,label text) returns void language plpgsql as $$begin
+ if ok is distinct from true then raise exception 'Quality boundary: %',label;end if;raise notice 'PASS %',label;end$$;
+create function pg_temp.q_error(statement text,expected text) returns void language plpgsql as $$begin
+ begin execute statement;exception when others then if sqlerrm=expected then raise notice 'PASS blocked %',expected;return;end if;raise exception 'Expected %, got %',expected,sqlerrm;end;raise exception 'Expected %',expected;end$$;
+do $$declare x quality_test.fixtures;s uuid;s2 uuid;r uuid;q uuid;e uuid;so uuid;sl uuid;a uuid;p jsonb;before numeric;begin
+ perform quality_test.make_fixture('boundary','meter',.35,100);select * into x from quality_test.fixtures where name='boundary';
+ select id into s from public.finished_goods_sources where entry_id=x.entry_id;
+ select id into r from public.quality_reasons where factory_id=x.factory_id and not is_other limit 1;
+ p:=jsonb_build_object('source',s,'quantity','1','reason',r,'disposition','SCRAP','actual_scrap_kg','.35','physically_identified',true);
+ perform pg_temp.q_error(format('select public.quality_command(%L,''reject'',%L::jsonb,gen_random_uuid())',x.factory_id,p::text),'quality_unavailable');
+ perform public.source_stock_command(x.factory_id,'identify',jsonb_build_object('source',s,'quantity','100','label','LABEL-B1','physically_identified',true),'[]',gen_random_uuid());
+ perform public.supply_command(x.factory_id,'acknowledge_good',jsonb_build_object('entry',x.entry_id),gen_random_uuid());
+ perform pg_temp.q_assert((select on_hand=100 from public.finished_goods_balances where factory_id=x.factory_id),'Warehouse acknowledgment never double credits identified Good');
+ so:=public.create_sales_order(x.factory_id,jsonb_build_object('lines',jsonb_build_array(jsonb_build_object('product_id',x.product_id,'quantity',80,'unit','meter'))));
+ perform public.approve_sales_order(x.factory_id,so);select id into sl from public.sales_order_lines where order_id=so;
+ perform public.source_stock_command(x.factory_id,'reserve',jsonb_build_object('sales_line_id',sl),jsonb_build_array(jsonb_build_object('source_id',s,'quantity','80')) ,gen_random_uuid());
+ perform pg_temp.q_error(format('select public.quality_command(%L,''reject'',%L::jsonb,gen_random_uuid())',x.factory_id,(p||jsonb_build_object('quantity','21','actual_scrap_kg','7.35'))::text),'quality_unavailable');
+ q:=public.quality_command(x.factory_id,'reject',p||jsonb_build_object('quantity','20','actual_scrap_kg','7'),gen_random_uuid());
+ perform pg_temp.q_assert((select on_hand=80 and reserved=80 from public.finished_goods_balances where factory_id=x.factory_id),'Quality keeps Sales reservation intact');
+ perform public.source_stock_command(x.factory_id,'dispatch',jsonb_build_object('sales_order',so),jsonb_build_array(jsonb_build_object('source_id',s,'quantity','80','sales_line_id',sl)),gen_random_uuid());
+ e:=(public.record_lean_production(x.factory_id,jsonb_build_object('unit_kind','line','production_unit',x.line_id,'item',x.item_id,'technician',x.technician_id,'good',100,'discarded_quantity',0,'scrap_kg',0,'unfinished',0,'input_quantity',0),gen_random_uuid())->>'id')::uuid;
+ select id into s2 from public.finished_goods_sources where entry_id=e;
+ perform public.source_stock_command(x.factory_id,'identify',jsonb_build_object('source',s2,'quantity','100','label','LABEL-B2','physically_identified',true),'[]',gen_random_uuid());
+ perform pg_temp.q_error(format('select public.quality_command(%L,''reject'',%L::jsonb,gen_random_uuid())',x.factory_id,p::text),'quality_unavailable');
+ perform pg_temp.q_assert((select quantity_available=100 from public.finished_goods_sources where id=s2),'other source availability never authorizes rejection of shipped stock');
+ perform pg_temp.q_error(format('select public.source_stock_command(%L,''correct'',%L::jsonb,%L::jsonb,gen_random_uuid())',x.factory_id,jsonb_build_object('entry',e,'good','99','scrap_kg','0','discarded_quantity','0','unfinished','0','reason','Correct physical count')::text,jsonb_build_array(jsonb_build_object('source_id',s,'quantity','1'))::text),'source_unavailable');
+ perform public.source_stock_command(x.factory_id,'correct',jsonb_build_object('entry',e,'good','99','scrap_kg','0','discarded_quantity','0','unfinished','0','reason','Correct physical count'),jsonb_build_array(jsonb_build_object('source_id',s2,'quantity','1')),gen_random_uuid());
+ perform pg_temp.q_assert((select quantity_available=99 and quantity_credited=99 and quantity_identified=99 from public.finished_goods_sources where id=s2),'Good correction debits actual source and provenance budget');
+ insert into auth.users(id,email,email_confirmed_at) values(gen_random_uuid(),'quality-viewer@isolated.invalid',now()) returning id into a;
+ insert into public.memberships(factory_id,user_id,display_name,status,is_owner) values(x.factory_id,a,'Quality viewer','approved',false);
+ insert into public.user_permissions(factory_id,user_id,module,action) values(x.factory_id,a,'quality','view');
+ perform set_config('request.jwt.claim.sub',a::text,true);
+ execute 'set local role authenticated';
+ perform pg_temp.q_assert(public.quality_read(x.factory_id,'{"mode":"board"}') is not null,'authenticated Quality viewer uses protected reader');
+ perform pg_temp.q_error(format('select public.quality_command(%L,''reject'',%L::jsonb,gen_random_uuid())',x.factory_id,(p||jsonb_build_object('source',s2))::text),'permission_denied');
+ perform pg_temp.q_error(format('select public.quality_command(%L,''reason'',%L::jsonb,gen_random_uuid())',x.factory_id,jsonb_build_object('name','Unauthorized reason')::text),'permission_denied');
+ perform pg_temp.q_error(format('select public.quality_read(%L,''{"mode":"history"}'')',x.factory_id),'permission_denied');
+ begin execute 'select * from public.quality_rejections';raise exception 'direct read allowed';exception when insufficient_privilege then raise notice 'PASS protected rejection table denies direct authenticated access';end;
+ begin execute 'insert into private.finished_goods_pick_context values(1,1,null,null,null,null,null,null,null)';raise exception 'forged context allowed';exception when insufficient_privilege then raise notice 'PASS transaction pick context cannot be forged';end;
+ execute 'reset role';
+ insert into public.user_permissions(factory_id,user_id,module,action) values(x.factory_id,a,'quality','create'),(x.factory_id,a,'factory','view');
+ select id into r from public.quality_reasons where factory_id=x.factory_id and is_other;
+ p:=p||jsonb_build_object('source',s2,'reason',r,'description','Fixture one-time defect','approve_reason',true);
+ execute 'set local role authenticated';
+ perform pg_temp.q_error(format('select public.quality_command(%L,''reject'',%L::jsonb,gen_random_uuid())',x.factory_id,p::text),'permission_denied');
+ q:=public.quality_command(x.factory_id,'reject',p||jsonb_build_object('approve_reason',false),gen_random_uuid());
+ execute 'reset role';
+ perform pg_temp.q_assert((select description='Fixture one-time defect' from public.quality_rejections where id=q) and not exists(select 1 from public.quality_reasons where factory_id=x.factory_id and name='Fixture one-time defect'),'create-only Quality can record Other but cannot create approved reasons');
+ perform set_config('request.jwt.claim.sub',x.actor_id::text,true);
+ begin
+  update public.finished_goods_balances set on_hand=on_hand+1 where factory_id=x.factory_id;
+  set constraints all immediate;
+  raise exception 'conservation bypass allowed';
+ exception when others then if sqlerrm<>'source_conservation' then raise;end if;raise notice 'PASS deferred conservation rejects unexplained stock change';end;
+ set constraints all immediate;
+end$$;
+rollback;
