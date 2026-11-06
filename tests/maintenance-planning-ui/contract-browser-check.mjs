@@ -1,0 +1,45 @@
+// Actual drawer components; synthetic GETs and rejected writes only. Never localhost3000/3001.
+import {createRequire} from 'node:module';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import assert from 'node:assert/strict';
+const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
+const output=join(tmpdir(),'FactoryLean-Maintenance-Contract-20261012','proof');await mkdir(output,{recursive:true});
+const browser=await chromium.launch({headless:true,channel:'msedge'}),context=await browser.newContext({viewport:{width:1440,height:1000}});
+await context.route('**/*',route=>route.request().url().startsWith('http://127.0.0.1:4205/')?route.continue():route.abort());
+const page=await context.newPage(),results=[],errors=[];page.on('pageerror',e=>errors.push(e.message));
+const previewPattern='**/api/maintenance-planning?*mode=preview*';
+const open=async()=>{await page.goto('http://127.0.0.1:4205/');await page.locator('.mr-open').first().click();};
+const check=()=>page.getByRole('dialog').getByRole('button',{name:'Check candidate window',exact:true}).click();
+const ready=()=>page.getByText('Preview current. Reservation confirmation remains disabled.',{exact:true});
+try {
+ await open();await check();await ready().waitFor();assert.ok(await page.getByRole('button',{name:'Confirm reservation',exact:true}).isDisabled());
+ results.push('Fresh matching server preview carried; gate-disabled confirmation stays disabled');
+ await page.getByLabel('Proposed end (optional) · Asia/Riyadh',{exact:true}).fill('2030-01-02T12:00');
+ assert.equal(await ready().count(),0);assert.equal(await page.getByText('Capacity clear in this read',{exact:true}).count(),0);
+ results.push('Relevant draft edit immediately hides clear and confirmation-ready state');
+ await open();await check();await ready().waitFor();let supplied=false;
+ await page.route(previewPattern,async route=>{const q=new URL(route.request().url()).searchParams;supplied=/^[a-f0-9]{64}$/.test(q.get('context_hash')||'');await route.fulfill({status:409,json:{error:'mpPreviewStale'}});});
+ await check();await page.getByRole('alert').filter({hasText:'factory scheduling context changed'}).waitFor();assert.equal(await ready().count(),0);assert.ok(supplied);
+ results.push('Same-window recheck sends fingerprint; HTTP409 removes readiness and explains refresh');
+ await page.unroute(previewPattern);await open();
+ await page.route(previewPattern,async route=>{const response=await route.fetch(),body=await response.json();await route.fulfill({response,json:{...body,factory_id:'10000000-0000-0000-0000-000000999999'}});});
+ await check();await page.getByText(/factory scheduling context changed/).waitFor();assert.equal(await ready().count(),0);assert.equal(await page.getByText('Capacity clear in this read',{exact:true}).count(),0);
+ results.push('Mismatched factory response is hidden and cannot grant readiness');
+ await page.unroute(previewPattern);await open();let release,started;
+ const startedPromise=new Promise(done=>started=done),hold=new Promise(done=>release=done);
+ await page.route(previewPattern,async route=>{const response=await route.fetch(),body=await response.json();started();await hold;try{await route.fulfill({response,json:body});}catch{/* The obsolete request can be aborted by the actual hook. */}});
+ await check();await startedPromise;await page.getByLabel('Proposed start · Asia/Riyadh',{exact:true}).fill('2030-01-03T10:00');release();
+ await page.getByText(/factory scheduling context changed/).waitFor();assert.equal(await ready().count(),0);assert.equal(await page.getByText('Capacity clear in this read',{exact:true}).count(),0);
+ results.push('Delayed obsolete response after edited window cannot restore CLEAR');
+ await page.unroute(previewPattern);await open();await page.clock.install({time:new Date()});await check();await ready().waitFor();await page.clock.fastForward(61000);
+ await page.getByText(/factory scheduling context changed/).waitFor();assert.equal(await ready().count(),0);
+ results.push('Expired preview removes confirmation-ready state');
+ await page.clock.setSystemTime(new Date());await page.clock.resume();await page.keyboard.press('Escape');await page.getByRole('button',{name:'English / العربية',exact:true}).click();await page.setViewportSize({width:390,height:844});
+ await page.locator('.mr-open').first().click();await page.getByRole('button',{name:'التحقق من الفترة المقترحة',exact:true}).click();await page.getByText('المعاينة حديثة. لا يزال تأكيد الحجز معطلاً.',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>document.documentElement.dir),'rtl');assert.equal(await page.evaluate(()=>document.querySelector('dialog').scrollWidth>document.querySelector('dialog').clientWidth),false);
+ await page.screenshot({path:join(output,'contract-ar-mobile.png')});results.push('Arabic RTL and mobile show current preview without enabling confirmation');
+ assert.equal(await page.evaluate(()=>window.commands?.length||0),0);assert.deepEqual(errors,[]);
+ await writeFile(join(output,'browser-results.json'),JSON.stringify({results,errors,scope:'Actual components, synthetic reads, no successful reservations or hosted acceptance'},null,2));console.log(JSON.stringify({results,errors}));
+}finally{await browser.close();}

@@ -1,0 +1,46 @@
+begin;
+truncate late_test.checks;
+do $$declare x jsonb;y jsonb;z jsonb;w jsonb;r jsonb;p jsonb;f uuid;origin uuid;so uuid;sl uuid;other_sl uuid;package uuid;pr uuid;item uuid;h private.manufactured_outputs;g jsonb;begin
+ x:=output4_test.context('Sales conservation');f:=(x->>'factory')::uuid;origin:=(x->>'item')::uuid;
+ insert into public.sales_orders(factory_id,requested_by,created_by,safety_buffer_days,status) values(f,(x->>'owner')::uuid,(x->>'owner')::uuid,0,'approved') returning id into so;
+ insert into public.sales_order_lines(factory_id,order_id,product_id,quantity,unit) values(f,so,(x->>'product')::uuid,100,'meter') returning id into sl;
+ perform private.reserve_finished(f,sl,90);
+ insert into public.sales_incoming_allocations(factory_id,line_id,item_id,quantity) values(f,sl,origin,10);
+ w:=output4_test.decision(x,'COMPLETE',10);y:=output4_test.start(x,w);
+ perform late_test.ok((select reserved=90 and on_hand=90 from public.finished_goods_balances where factory_id=f),'issue preserves existing ninety Sales reservations');
+ insert into public.sales_orders(factory_id,requested_by,created_by,safety_buffer_days,status) values(f,(x->>'owner')::uuid,(x->>'owner')::uuid,0,'approved') returning id into so;
+ insert into public.sales_order_lines(factory_id,order_id,product_id,quantity,unit) values(f,so,(x->>'product')::uuid,5,'meter') returning id into other_sl;
+ perform private.allocate_sales_line(f,other_sl);
+ perform late_test.ok(not exists(select 1 from public.sales_incoming_allocations where line_id=other_sl and item_id=(w->>'item_id')::uuid),'another Sales order cannot take dedicated completion forecast');
+ perform late_test.ok(private.quality_production_remaining(f,(w->>'item_id')::uuid)=10 and private.quality_production_remaining(f,origin)=0,'original and replacement forecast not duplicated');
+ r:=public.record_manufactured_output(f,output2_test.payload(y,10)||jsonb_build_object('input_lot',x->>'lot','input_quantity',10),gen_random_uuid());
+ perform late_test.ok((select quantity=10 from public.sales_incoming_allocations where item_id=origin),'recording does not reduce original incoming commitments');
+ perform late_test.ok(public.manufactured_completion_read(f)#>>'{work,0,demand_shortage}'='10','work retains visible original shortage after input consumption');
+ perform output4_test.receive(f,(r->>'entry_id')::uuid);
+ perform late_test.ok((select quantity=100 from public.finished_goods_reservations where line_id=sl) and not exists(select 1 from public.sales_incoming_allocations where line_id=sl and quantity>0),'receipt converts only original ten into Sales stock reservation');
+ perform late_test.ok((select on_hand=100 and reserved=100 from public.finished_goods_balances where factory_id=f),'finished stock, reserved and available conserved');
+ perform late_test.ok(public.manufactured_completion_read(f)#>>'{work,0,demand_shortage}'='0' and public.manufactured_completion_read(f)#>>'{work,0,demand_received}'='100','work reader shows original demand fulfilled only after receipt');
+ perform late_test.ok(private.quality_production_remaining(f,(w->>'item_id')::uuid)=0,'received completed forecast leaves incoming once');
+
+ x:=output4_test.context('Pooled source shares');f:=(x->>'factory')::uuid;
+ pr:=public.create_production_request(f,'Other source order','normal',null,'Separate demand',jsonb_build_array(jsonb_build_object('product_id',x->>'product','quantity',10,'unit','meter')));
+ select id into item from public.production_orders where request_id=pr;
+ perform public.plan_product_item(f,item,(x->>'line')::uuid,date_trunc('day',clock_timestamp())+interval '7 days');perform public.start_product_item(f,item);
+ y:=x||jsonb_build_object('item',item);p:=output2_test.payload(y,3,7);
+ p:=jsonb_set(p,'{output_groups}',jsonb_build_array(p->'output_groups'->0,jsonb_build_object('id',gen_random_uuid(),'quantity','7','missing_operations',jsonb_build_array(x->>'step1'))));
+ r:=public.record_manufactured_output(f,p,gen_random_uuid());z:=output4_test.receive(f,(r->>'entry_id')::uuid);perform public.finish_product_item(f,item);
+ w:=output4_test.decision(x,'REPLACE',10);
+ perform late_test.ok((select sum(warehouse_quantity)=17 from public.unfinished_lots where factory_id=f),'compatible pooled seventeen remains physically present');
+ perform late_test.ok((select demand_item_id=item from private.manufactured_output_lots where output_id=(z->>'output')::uuid),'other order retains its seven-meter demand ownership');
+ perform late_test.ok((select value->>'free_for_stock'='0' and value->>'unassigned'='7' from jsonb_array_elements(public.manufactured_completion_read(f)->'rows') where value->>'id'=z->>'output'),'releasing ten never releases pooled seven');
+
+ insert into public.permission_packages(factory_id,name,created_by) values(f,'Local completion planner',(x->>'owner')::uuid) returning id into package;
+ insert into public.permission_package_permissions(factory_id,package_id,module,action) select f,package,'orders',a from unnest(array['view','edit','create']) a;
+ insert into public.member_permission_packages(factory_id,user_id,package_id) values(f,(x->>'worker')::uuid,package);
+ perform set_config('request.jwt.claim.sub',x->>'worker',false);
+ w:=output4_test.decision(x||jsonb_build_object('revision',5),'STOCK',4);
+ perform late_test.ok(w->>'choice'='STOCK','effective package grants authorize disposition without role inference');
+ perform late_test.fails(format('select public.manufactured_completion_read(%L)',(select (a.x->>'factory')::uuid from output2_test.fixture a)),'permission_denied');
+end$$;
+select count(*) assertions from late_test.checks;
+rollback;

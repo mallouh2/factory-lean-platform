@@ -1,6 +1,7 @@
 import { evaluateFlow } from "./production-flow.mjs";
 
 export const LOSS_MODEL_VERSION = 1;
+export const MAINTENANCE_LOSS_POLICY_VERSION = 1;
 const minute = 60_000;
 const number = (value) => value === null || value === undefined || value === ""
   ? null : Number.isFinite(Number(value)) ? Number(value) : null;
@@ -15,12 +16,32 @@ const round = (value) => Math.round(value * 1000) / 1000;
  * @param {Record<string, any>|null} actual
  * @param {number} now
  * @param {Array<Record<string, any>>} comparable
+ * @param {Record<string, any>|null} maintenance
  */
 export function calculateProductionLoss(event, samples, actual = null, now = Date.now(),
-  comparable = []) {
+  comparable = [], maintenance = null) {
   const started = time(event.started_at);
   const ended = event.ended_at ? time(event.ended_at) : now;
+  const linked = maintenance?.operation === "LINK";
+  const scheduled = linked && maintenance.relationship === "PLANNED_MAINTENANCE" &&
+    event.stop_nature === "planned";
+  const approvalStart = time(maintenance?.approved_start);
+  const approvalEnd = time(maintenance?.approved_end);
+  const validApproval = maintenance?.valid === true &&
+    same(maintenance?.event_id, event.id) && same(maintenance?.machine_id, event.work_center_id) &&
+    Number.isFinite(approvalStart) && Number.isFinite(approvalEnd) && approvalEnd > approvalStart;
   const base = {
+    ...(maintenance ? {
+      maintenance_policy_version: MAINTENANCE_LOSS_POLICY_VERSION,
+      maintenance_context: maintenance,
+      approved_maintenance_minutes: scheduled && validApproval
+        ? round(Math.max(0, Math.min(ended, approvalEnd) - Math.max(started, approvalStart)) / minute) : null,
+      outside_window_minutes: scheduled && validApproval
+        ? round(Math.max(0, ended - started - Math.max(0,
+          Math.min(ended, approvalEnd) - Math.max(started, approvalStart))) / minute) : null,
+      scheduled_non_production_minutes: 0,
+      maintenance_segments: /** @type {Array<Record<string, any>>} */ ([]),
+    } : {}),
     model_version: LOSS_MODEL_VERSION,
     calculated_at: new Date(now).toISOString(),
     stop_nature: event.stop_nature || "legacy_unknown",
@@ -51,6 +72,7 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
     confidence: "LOW",
     confidence_basis: { comparable_count: 0, mean_relative_scrap_error: null },
   };
+  // An omitted context preserves the exact V1 legacy result shape/arithmetic.
   if (!Number.isFinite(started) || !Number.isFinite(ended) || ended <= started) return base;
   const history = samples
     .filter((x) => same(x.event_id, event.id) && Number.isFinite(time(x.captured_at)))
@@ -60,9 +82,12 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
     return { ...base, readiness: "INCOMPLETE",
       impact_level: null,
       effective_loss_minutes: null, estimated_lost_output_quantity: null,
+      ...(scheduled ? { scheduled_non_production_minutes: null } : {}),
       missing: ["Historical event context snapshot"] };
   }
   const boundaries = new Set([started, ended]);
+  if (scheduled && validApproval) for (const at of [approvalStart, approvalEnd])
+    if (at > started && at < ended) boundaries.add(at);
   for (const sample of history) {
     const at = time(sample.captured_at);
     if (at > started && at < ended) boundaries.add(at);
@@ -102,6 +127,7 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
   let scrapProfileSeen = false;
   let outputUnit = null;
   let deferredUnit = null;
+  if (linked && !validApproval) missing.add("Frozen maintenance approval evidence");
   for (let index = 0; index < points.length - 1; index++) {
     const from = points[index];
     const to = points[index + 1];
@@ -121,13 +147,51 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
       continue;
     }
     const lineId = event.line_id || center.line_id;
-    const orders = rows(context, "orders").filter((x) =>
-      x.line_id && same(x.line_id, lineId) && x.status !== "cancelled" &&
-      time(x.start_time) <= from && time(x.expected_finish) >= to);
-    if (!orders.length) {
-      base.non_production_minutes += duration;
+    if (scheduled && (!["blocking", "buffer", "independent"].includes(center.dependency_mode) ||
+      !["whole_line", "downstream", "none"].includes(center.impact_scope))) {
+      missing.add("Historical production demand and routing evidence");
+      lossTimeUnknown = true; outputUnknown = true; continue;
+    }
+    const maintenanceSegment = scheduled && validApproval && from >= approvalStart && to <= approvalEnd;
+    if (scheduled && (context.maintenance_loss_context_version !== 1 ||
+      context.demand_complete !== true || !Array.isArray(context.orders) ||
+      !Array.isArray(context.routing_steps))) {
+      missing.add("Historical production demand and routing evidence");
+      lossTimeUnknown = true; outputUnknown = true;
       continue;
     }
+    // Independent routing and current OPEN borrower ownership identify real demand,
+    // rather than assuming an arbitrary line or configured alternative is operating.
+    const relevantOrder = (x) => (x.line_id && same(x.line_id, lineId)) ||
+      (scheduled && (rows(context, "routing_steps").some(r => r.kind === "work_center" &&
+        same(r.work_center_id, center.id) && same(r.product_id, x.product_id)) ||
+        rows(context, "transfers").some(r => !r.ended_at &&
+          same(r.alternative_id, center.id) && same(r.order_id, x.id))));
+    if (scheduled && rows(context, "orders").some(x => relevantOrder(x) &&
+      ["planned", "active"].includes(x.status) &&
+      (!Number.isFinite(time(x.start_time)) || !Number.isFinite(time(x.expected_finish)) ||
+        time(x.expected_finish) <= time(x.start_time) ||
+        (x.status === "active" && (time(x.expected_finish) < to ||
+          (Number.isFinite(time(x.actual_started_at)) && time(x.actual_started_at) < time(x.start_time) &&
+            time(x.actual_started_at) < to && time(x.start_time) > from)))))) {
+      missing.add("Historical production demand and routing evidence");
+      lossTimeUnknown = true; outputUnknown = true; continue;
+    }
+    const orders = rows(context, "orders").filter((x) =>
+      relevantOrder(x) && x.status !== "cancelled" &&
+      time(x.start_time) <= from && time(x.expected_finish) >= to);
+    if (scheduled) base.maintenance_segments.push({
+      from: new Date(from).toISOString(), to: new Date(to).toISOString(), context_snapshot_id: sample.id,
+      maintenance_segment: maintenanceSegment ? "APPROVED" : "OUTSIDE", intended_order_ids: orders.map(x => x.id),
+    });
+    if (!orders.length) {
+      base.non_production_minutes += duration;
+      if (scheduled) {
+        if (maintenanceSegment) base.scheduled_non_production_minutes += duration;
+      }
+      continue;
+    }
+    if (maintenanceSegment) missing.add("Approved maintenance conflicts with intended production");
     plannedMinutes += duration;
     if (orders.length > 1) {
       missing.add("Overlapping planned Product Items");
@@ -149,8 +213,12 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
       scrapProfile = profile;
       scrapProfileSeen = true;
     }
+    const transfers = rows(context, "transfers");
+    const activeTransfer = scheduled ? transfers.find(x => !x.ended_at && same(x.original_id, center.id)) : null;
+    const wrongOwner = activeTransfer && !same(activeTransfer.order_id, order.id);
+    if (wrongOwner) missing.add("Active alternative ownership evidence");
     const flow = evaluateFlow(centers, rows(context, "stops"),
-      rows(context, "transfers"), from + 1);
+      wrongOwner ? transfers.filter(x => x !== activeTransfer) : transfers, from + 1);
     const state = flow[String(center.id)]?.state;
     const source = flow[String(center.id)]?.source;
     // Only one causal root receives a line's lost throughput for this segment.
@@ -174,6 +242,10 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
       restart_scrap_quantity: profile?.restart_scrap_quantity ?? null,
       scrap_unit: profile?.scrap_unit ?? null,
     };
+    if (scheduled) Object.assign(segmentAssumptions, {
+      maintenance_segment: maintenanceSegment ? "APPROVED" : "OUTSIDE",
+      intended_order_ids: orders.map(x => x.id),
+    });
     assumptions.push(segmentAssumptions);
     if (unit && outputUnit && !same(unit, outputUnit))
       missing.add("Multiple planned output units in one event");
@@ -301,7 +373,8 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
   base.mitigation = [...mitigation];
   base.assumptions = assumptions;
   base.missing = [...missing];
-  base.readiness = missing.size ? "INCOMPLETE" : plannedMinutes ? "READY" : "NOT_APPLICABLE";
+  if (scheduled) base.scheduled_non_production_minutes = lossTimeUnknown ? null : round(base.scheduled_non_production_minutes);
+  base.readiness = missing.size ? "INCOMPLETE" : plannedMinutes || scheduled ? "READY" : "NOT_APPLICABLE";
   const matching = comparable.filter((x) =>
     time(x.recorded_at) <= started &&
     same(x.stop_nature, event.stop_nature) &&

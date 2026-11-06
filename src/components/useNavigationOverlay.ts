@@ -9,6 +9,7 @@ export function useNavigationOverlay(mobile: boolean, setMobile: (open: boolean)
   const keyboardMode = useRef(false);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasMobile = useRef(false);
+  const expandedScroll = useRef(0);
   function cancelCollapse() {
     if (collapseTimer.current) clearTimeout(collapseTimer.current);
     collapseTimer.current = null;
@@ -32,10 +33,21 @@ export function useNavigationOverlay(mobile: boolean, setMobile: (open: boolean)
     else if (wasMobile.current) menuRef.current?.focus();
     wasMobile.current = mobile;
   }, [mobile]);
+  useEffect(() => {
+    if (!mobile) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [mobile]);
   return { sidebarRef, menuRef,
+    onScroll: () => {
+      if (sidebarRef.current?.classList.contains('is-expanded') || mobile)
+        expandedScroll.current = sidebarRef.current?.scrollTop || 0;
+    },
     onPointerEnter: (event: React.PointerEvent<HTMLElement>) => {
       if (event.pointerType === 'touch' || !window.matchMedia('(min-width: 901px) and (hover: hover)').matches) return;
       pointerInside.current = true; cancelCollapse(); setCollapsed(false);
+      window.requestAnimationFrame?.(() => { if(sidebarRef.current)sidebarRef.current.scrollTop=expandedScroll.current; });
     },
     onPointerLeave: () => { pointerInside.current = false; collapseWhenOutside(); },
     onFocusCapture: () => {
@@ -51,7 +63,8 @@ export function useNavigationOverlay(mobile: boolean, setMobile: (open: boolean)
       if (!mobile || event.key !== 'Tab') return;
       const controls = sidebarRef.current?.querySelectorAll<HTMLElement>(
         'a[href],button:not([disabled]),select:not([disabled]),summary');
-      const visible = Array.from(controls || []).filter(element => element.getClientRects().length);
+      const visible = Array.from(controls || []).filter(element => !element.closest('[inert]')
+        && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
       const first = visible[0], last = visible.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }

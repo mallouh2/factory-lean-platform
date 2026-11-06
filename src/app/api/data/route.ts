@@ -6,7 +6,10 @@ import {
   safeError,
 } from "@/services/authorization";
 import { hasEveryDefinedPermission } from "@/utils/permission-preview.mjs";
+import { recordingFailure,exactRecordingPayload,recordingFetch } from '@/utils/production-recording-v3.mjs';
 import { maintenanceCommandValid } from '@/utils/maintenance.mjs';
+import { maintenanceStopCommands, maintenanceStopCommandValid } from '@/utils/maintenance-stops.mjs';
+import { maintenancePlanningCommandValid, maintenancePlanningPermissions } from '@/utils/maintenance-planning.mjs';
 import { supplyCommandValid } from '@/utils/supply-contract.mjs';
 import { packageCommands, packageCommandValid } from '@/utils/permission-packages.mjs';
 import { leanCommands, leanCommandValid, leanRequiredPermission } from '@/utils/lean-contract.mjs';
@@ -69,6 +72,8 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  maintenance_active_stop:'maintenanceActiveStop',maintenance_stop_scope:'maintenanceStopScope',
+  maintenance_stop_window:'maintenanceStopWindow',maintenance_stop_conflict:'maintenanceStopStale',
   quality_quantity:'qualityInvalidQuantity',quality_weight:'qualityWeightRequired',quality_unavailable:'qualityUnavailable',quality_reserved:'qualityReserved',quality_reason:'qualityReasonRequired',quality_duplicate_reason:'qualityReasonDuplicate',quality_shortfall:'qualityShortfall',quality_reversal_unavailable:'qualityReversalUnavailable',
   source_identity:'sourceIdentity',source_selection_required:'sourceSelectionRequired',source_quantity:'sourceQuantity',source_unavailable:'sourceUnavailable',source_committed:'sourceCommitted',source_conservation:'sourceStockChanged',source_correction_unavailable:'sourceUnavailable',
   lean_invalid:'leanInvalid',lean_conflict:'leanConflict',lean_closed:'leanClosed',lean_incomplete:'leanIncomplete',lean_baseline_missing:'leanBaselineMissing',lean_startup_required:'leanStartupRequired',lean_link_invalid:'leanLinkInvalid',lean_link_cause:'leanLinkCause',lean_insufficient_exposure:'leanInsufficientExposure',lean_scrap_kg_only:'leanScrapKgOnly',lean_comparison_product:'leanComparisonProduct',
@@ -87,16 +92,34 @@ const commandErrors: Record<string, string> = {
   maintenance_assignee: 'maintenanceInvalidAssignee',
   maintenance_state: 'maintenanceInvalidState',
   maintenance_conflict: 'maintenanceConflict',
+  maintenance_preview_stale: 'mpPreviewStale',
+  maintenance_preview_required: 'mpPreviewRequired',
+  maintenance_preview_incomplete: 'mpIncomplete',
   maintenance_note: 'maintenanceNoteRequired',
   maintenance_missing: 'noResults',
   maintenance_existing: 'maintenanceExistingProblem',
   maintenance_independent_verifier: 'maintenanceIndependentVerifier',
+  maintenance_planning_inactive: 'maintenancePlanningInactive',
+  maintenance_capacity_reserved: 'maintenanceCapacityReserved',
+  maintenance_production_conflict: 'maintenanceProductionConflict',
+  maintenance_unknown_window: 'maintenanceUnknownWindow',
+  maintenance_configuration_unknown: 'maintenanceConfigurationUnknown',
+  maintenance_configuration_changed: 'maintenanceConfigurationChanged',
+  maintenance_execution_window_unknown: 'maintenanceUnknownWindow',
+  maintenance_transfer_unresolved: 'maintenanceTransferUnresolved',
+  maintenance_approval_required: 'maintenanceApprovalRequired',
+  maintenance_early_start: 'maintenanceEarlyStart',
+  maintenance_late_start: 'maintenanceLateStart',
+  maintenance_machine_not_ready: 'maintenanceMachineNotReady',
+  maintenance_unschedule_required: 'maintenanceUnscheduleRequired',
   internal_reason_required: 'internalReasonRequired',
   fulfillment_invalid: 'fulfillmentInvalid',
   fulfillment_product: 'fulfillmentProduct',
   fulfillment_state: 'fulfillmentState',
   fulfillment_hold: 'fulfillmentHold',
   fulfillment_not_ready: 'fulfillmentNotReady',
+  pooled_dispatch_unavailable:'pooledDispatchUnavailable',
+  planning_material_committed:'planningMaterialCommitted',
   fulfillment_stock_committed: 'fulfillmentStockCommitted',
   fulfillment_planner_decision: 'fulfillmentPlannerDecision',
   shift_invalid: 'shiftInvalid',
@@ -136,6 +159,9 @@ const commandErrors: Record<string, string> = {
   stock_opening_exists: "stockOpeningExists",
   fulfillment_stock_identity: "fulfillmentStockIdentity",
   fulfillment_source_decision: "fulfillmentSourceDecision",
+  output_work_capability: 'planningIncompatibleLine',
+  output_work_not_ready: 'compNotReady',
+  output_quality_hold: 'planningQualityHold',
   planning_incompatible_line: "planningIncompatibleLine",
   planning_missing_rate: "planningMissingRate",
   planning_ambiguous_rate: "planningAmbiguousRate",
@@ -194,6 +220,7 @@ const rpcModules: Record<string, [string, string][]> = {
   approve_sales_order: [['sales_orders', 'approve']],
   change_sales_order: [['sales_orders', 'edit']],
   dispatch_sales_order: [['warehouse', 'issue']],
+  dispatch_sales_quantity: [['warehouse', 'issue']],
   configure_product_stock: [['warehouse', 'edit']],
   confirm_warehouse_replenishment: [['warehouse', 'edit']],
   configure_warehouse_material: [['warehouse', 'edit']],
@@ -243,12 +270,20 @@ const rpcModules: Record<string, [string, string][]> = {
   set_support: [["support", "edit"]],
 };
 export async function POST(req: NextRequest) {
+  let v3Recording=false;
+  let maintenancePlanning=false;
   try {
     verifyOrigin(req);
     if (Number(req.headers.get("content-length") || 0) > 100000)
       throw new Error("invalid_input");
-    const { command, args } = await req.json();
-    const context = await authenticatedClient();
+    const raw = await req.text();
+    const { command, args } = JSON.parse(raw);
+    maintenancePlanning=command==='maintenance_planning_command';
+    // Transport opt-in also preserves existing WIP/independent inputs. It does
+    // not supply recording_context or grant late admission; SQL owns both.
+    v3Recording=command==='record_lean_production' && args?.payload &&
+      (Object.hasOwn(args.payload,'recording_context') || req.headers.get('x-factory-recording')==='3');
+    const context = await authenticatedClient(v3Recording?recordingFetch():undefined);
     const { db } = context;
     if (typeof command !== "string" || !args || typeof args !== "object")
       throw new Error("invalid_input");
@@ -262,6 +297,8 @@ export async function POST(req: NextRequest) {
     if (command==='lean_command') { const [module,action]=leanRequiredPermission(args.operation); await authorize(args.factory,module,action,context); }
     if (['create_maintenance_request','change_maintenance_request'].includes(command)
       && !maintenanceCommandValid(command,args)) throw new Error('invalid_input');
+    if (command==='maintenance_planning_command' && !maintenancePlanningCommandValid(args)) throw new Error('invalid_input');
+    if (maintenanceStopCommands.includes(command) && !maintenanceStopCommandValid(command,args)) throw new Error('invalid_input');
     if (['supply_command','define_manufactured_product'].includes(command)&&!supplyCommandValid(command,args)) throw new Error('invalid_input');
     if (command === 'create_production_request' && Object.keys(args).some((key) =>
       !['factory', 'request_name', 'request_priority', 'request_required_by', 'request_notes', 'request_items'].includes(key)))
@@ -290,6 +327,15 @@ export async function POST(req: NextRequest) {
         args.id ? "edit" : "create",
         context,
       );
+    } else if (maintenanceStopCommands.includes(command)) {
+      await authorize(args.factory,'factory','view',context);
+      if(command==='correct_maintenance_stop') {
+        await authorize(args.factory,'maintenance','edit',context);await authorize(args.factory,'downtime','edit',context);
+      } else {
+        await authorize(args.factory,'maintenance','view',context);
+        const {data:allowed}=await db.rpc('can_access',{factory:args.factory,module:'machine_status',action:'edit'});
+        if(!allowed) await authorize(args.factory,'centers','edit',context);
+      }
     } else if (["change_status", "stop_machine", "update_downtime",
       "set_downtime_initial"].includes(command)) {
       const { data: allowed } = await db.rpc("can_access", {
@@ -309,6 +355,9 @@ export async function POST(req: NextRequest) {
     } else if (command === 'supply_command' || command === 'define_manufactured_product') {
       // The RPC independently checks the specific action and original requester.
       await authorize(args.factory,'factory','view',context);
+    } else if (command === 'maintenance_planning_command') {
+      await authorize(args.factory,'factory','view',context);
+      for (const [module,action] of maintenancePlanningPermissions(args.operation)) await authorize(args.factory,module,action,context);
     } else if (command === 'change_maintenance_request') {
       // The scoped RPC authorizes the manager OR the current assignee for progress only.
       await authorize(args.factory,'factory','view',context);
@@ -339,11 +388,22 @@ export async function POST(req: NextRequest) {
           .catch(() => ({})) : {};
         return NextResponse.json({
           error: commandErrors[detail.error] || "error",
-        }, { status: 400 });
+        }, { status: detail.error === "loss_estimate_context_mismatch" || detail.error === "loss_estimate_locked"
+          ? 409 : detail.error === "permission_denied" ? 403 : detail.error === "loss_estimate_incomplete" ? 422 : 400 });
       }
       return NextResponse.json({ data: data?.id });
     }
+    if(v3Recording)exactRecordingPayload(raw,args.payload);
     const { data, error } = await db.rpc(command, args);
+    if (v3Recording) {
+      if(error) {
+        const {status,...body}=recordingFailure(error);
+        return NextResponse.json(body,{status,headers:{'Cache-Control':'private, no-store'}});
+      }
+      return NextResponse.json({data},{headers:{'Cache-Control':'private, no-store'}});
+    }
+    if (maintenancePlanning && (error?.code==='42501' || error?.message==='permission_denied' || data?.error==='permission_denied'))
+      return NextResponse.json({error:'permissionError'}, {status:403});
     if (data?.error)
       return NextResponse.json(
         {
@@ -354,6 +414,21 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 },
       );
+    if (error && command === 'maintenance_planning_command' && error.code === '40001') {
+      return NextResponse.json({error:'mpPreviewStale',conflict:'STALE_CONTEXT'}, {status:409,headers:{'Cache-Control':'private, no-store'}});
+    }
+    if(error && command==='start_product_item' && error.message==='execution_physical_not_ready') {
+      let condition:Record<string,unknown>={};
+      try{condition=JSON.parse(error.details || '{}');}catch{ /* Keep internal diagnostics out of the response. */ }
+      return NextResponse.json({error:'productionPhysicalNotReady',reason:condition.reason,machine:condition.machine},
+        {status:409,headers:{'Cache-Control':'private, no-store'}});
+    }
+    if(error && command==='start_product_item' && error.code==='40001') {
+      return NextResponse.json({error:'productionQueueChanged'},{status:409,headers:{'Cache-Control':'private, no-store'}});
+    }
+    if (error && maintenanceStopCommands.includes(command) && error.code==='40001') {
+      return NextResponse.json({error:'maintenanceStopStale'}, {status:409,headers:{'Cache-Control':'private, no-store'}});
+    }
     if (error) {
       console.warn("factory_command_failed", { command, code: error.code });
       return NextResponse.json(
@@ -372,6 +447,13 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ data });
   } catch (e) {
-    return NextResponse.json(safeError(e), { status: 400 });
+    if(v3Recording) {
+      const {status,...body}=recordingFailure(e);
+      return NextResponse.json(body,{status,headers:{'Cache-Control':'private, no-store'}});
+    }
+    const maintenanceStatus=maintenancePlanning && e instanceof Error
+      ? e.message==='permission_denied' ? 403 : e.message==='unauthorized' ? 401 : 400
+      : 400;
+    return NextResponse.json(safeError(e), { status: maintenanceStatus });
   }
 }

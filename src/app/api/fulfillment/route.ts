@@ -12,10 +12,13 @@ export async function GET(req: NextRequest) {
       sales: ['sales_orders', 'sales_orders_page'],
       warehouse: ['warehouse', 'warehouse_page'],
       inventory: ['warehouse', 'warehouse_inventory'],
+      stored_wip: ['warehouse','warehouse_stored_unfinished'],
       production: ['orders', 'fulfillment_production_context'],
       slot: ['orders', 'sales_planning_slot'],
       guidance: ['orders', 'sales_planning_guidance'],
       movements: ['warehouse', 'warehouse_movements'],
+      pool: ['warehouse','pooled_dispatch_context'],
+      confirmation: ['sales_orders','sales_confirmation_preview'],
     } as const;
     if (!Object.hasOwn(definitions, mode)) throw Error('invalid_input');
     const [module, rpc] = definitions[mode as keyof typeof definitions];
@@ -24,7 +27,7 @@ export async function GET(req: NextRequest) {
     const filters = mode === 'inventory' ? JSON.parse(req.nextUrl.searchParams.get('filters') || '{}') : {};
     const sort = req.nextUrl.searchParams.get('sort') || 'name', direction = req.nextUrl.searchParams.get('direction') || 'asc';
     if (mode === 'inventory' && (!validInventoryFilters(filters) || !inventoryColumns.some(c => c[0] === sort) || !['asc','desc'].includes(direction))) throw Error('invalid_input');
-    const args = mode === 'inventory' ? { factory, page, filters, sort, direction } : mode === 'movements'
+    const args = mode === 'pool'||mode==='confirmation' ? {factory,sales_order:req.nextUrl.searchParams.get('order')} : mode === 'inventory' ? { factory, page, filters, sort, direction } : mode === 'movements'
       ? { factory, item: req.nextUrl.searchParams.get('item'), item_type: req.nextUrl.searchParams.get('item_type'), page }
       : mode === 'production' || mode === 'slot' || mode === 'guidance'
       ? { factory, item: req.nextUrl.searchParams.get('item') || null }

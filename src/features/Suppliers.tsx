@@ -8,8 +8,8 @@ export default function Suppliers(props: FeatureProps) {
   const read=useSupply(s,'suppliers',{page:String(page)}),action=useSupplyCommand(props.command,s.factory?.id);
   return <section className="panel supply-page" dir={lang==='ar'?'rtl':'ltr'}>
     <header className="section-head"><h2>{t('supplierDirectory')}</h2>{can('suppliers','edit')&&<button className="primary" onClick={()=>{setEditing({});setRelationship('ALTERNATIVE');action.clearError();}}>{t('supplierCreate')}</button>}</header>
-    {read.error&&<p role="alert">{t(read.error)}</p>}{read.busy&&<p role="status">{t('loading')}</p>}
-    {!read.busy&&!read.data?.rows.length&&<p className="empty">{t('supplierEmpty')}</p>}
+    {read.error&&<p role="alert">{t(read.error)}</p>}{read.loading&&<p role="status">{t('loading')}</p>}
+    {read.data&&!read.data.rows.length&&<p className="empty">{t('supplierEmpty')}</p>}
     <div className="supply-directory">{read.data?.rows.map(row=><article key={String(row.id)}>
       <strong>{String(row.name)}</strong><p>{String(row.primary_contact)}</p><p><bdi>{String(row.phone)}</bdi> · <bdi>{String(row.email)}</bdi></p>
       <p>{t(row.active?'supplierActive':'supplierInactive')}</p>{((row.categories||[]) as SupplyRow[]).map(link=><p key={String(link.name)}>{String(link.name)} · {t('supplier_'+String(link.relationship))}</p>)}

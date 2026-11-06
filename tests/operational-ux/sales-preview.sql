@@ -1,0 +1,20 @@
+do $$declare x jsonb;f uuid;pr uuid;job uuid;so uuid;v jsonb;c integer;projected numeric;begin
+ x:=mp_test.fixture('ux-preview');f:=(x->>'factory')::uuid;perform set_config('request.jwt.claim.sub',x->>'owner',false);
+ perform public.update_settings(f,'Sales preview test','UTC',null);perform public.configure_working_calendar(f,127,'00:00','23:59');
+ perform public.adjust_finished_stock(f,(x->>'product')::uuid,'meter',40,'Controlled opening forty',gen_random_uuid());
+ projected:=private.projected_finished(f,(x->>'product')::uuid,'meter');
+ perform public.configure_product_stock(f,(x->>'product')::uuid,'MAKE_TO_STOCK','meter',projected,projected+60);
+ pr:=public.confirm_warehouse_replenishment(f,(x->>'product')::uuid,'produce','meter',projected,60,gen_random_uuid());
+ select id into job from public.production_orders where request_id=pr;perform public.plan_product_item(f,job,(x->>'line')::uuid,clock_timestamp()+interval '1 day');
+ perform public.configure_product_stock(f,(x->>'product')::uuid,'MAKE_TO_ORDER','meter',null,null);
+ so:=public.create_sales_order(f,jsonb_build_object('customer_reference','No duplicate incoming','requested_delivery',clock_timestamp()+interval '4 days','lines',jsonb_build_array(jsonb_build_object('product_id',x->>'product','quantity',200,'unit','meter'))),gen_random_uuid());
+ select count(*) into c from public.production_orders where factory_id=f;
+ v:=public.sales_confirmation_preview(f,so);
+ perform ux_test.ok((select sum((a->>'to_reserve')::numeric)=40 and sum((a->>'incoming')::numeric)=60 and sum((a->>'additional')::numeric)=100 from jsonb_array_elements(v->'rows')a),'preview shares inventory and incoming once');
+ perform ux_test.ok((select count(*)=c from public.production_orders where factory_id=f)and not exists(select 1 from public.finished_goods_reservations where factory_id=f),'preview writes no demand or reservations');
+ perform public.approve_sales_order(f,so,gen_random_uuid());
+ perform ux_test.ok((select sum(quantity)=40 from public.finished_goods_reservations where factory_id=f)and(select sum(quantity)=60 from public.sales_incoming_allocations where factory_id=f and item_id=job),'confirmation matches stock and existing eligible candidate preview');
+ perform ux_test.ok((select count(*)=c+1 from public.production_orders where factory_id=f),'only uncovered100 creates new demand; no duplicate60');
+ perform set_config('request.jwt.claim.sub',x->>'viewer',false);
+ perform late_test.fails(format('select public.sales_confirmation_preview(%L,%L)',f,so),'permission_denied');
+end$$;

@@ -6,6 +6,7 @@ import { formatDuration } from '@/utils/production-flow.mjs';
 import type { Row } from '@/types';
 import type { FeatureProps } from './types';
 import type { MaintenancePage, MaintenanceRequest } from './maintenance-types';
+import { MaintenanceActualStops } from './MaintenanceActualStops';
 
 export function MaintenanceBadge({ status, t }: { status: string; t: FeatureProps['t'] }) {
   return <span className="mr-status" data-status={status}>{t(`maintenanceState_${status}`)}</span>;
@@ -140,6 +141,7 @@ export function MaintenanceDetails({ id, onClose, ...props }: FeatureProps & { i
     {(error || read.error) && <p role="alert">{t(error || read.error)} <button onClick={read.reload}>{t('refresh')}</button></p>}
     {read.loading && <p role="status">{t('loading')}</p>}
     {r && <><MaintenanceDetailBody {...props} request={r} />
+      {r.maintenance_kind==='PLANNED' && <MaintenanceActualStops key={r.id} {...props} id={r.id} />}
       <div className="mr-workflow">
         {actions.includes('assign') && <form onSubmit={event => {event.preventDefault();void run('assign',{assigned_to:assignee});}}>
           <Field label={t('maintenanceAssignedTo')}><select required value={assignee} onChange={event => setAssignee(event.target.value)}>

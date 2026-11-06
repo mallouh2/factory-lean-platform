@@ -1,0 +1,35 @@
+-- Disposable local fixtures only; never the owner's manual-review factory.
+do $$begin if inet_server_addr()<>'127.0.0.1'::inet or inet_server_port()<>55498 then raise exception 'Disposable local only';end if;end$$;
+create schema if not exists qa_actions;
+create table if not exists qa_actions.checks(label text);
+create table if not exists qa_actions.context(x jsonb,output uuid);
+create or replace function qa_actions.ok(v boolean,label text)returns void language plpgsql as $$begin if v is distinct from true then raise exception 'FAIL %',label;end if;insert into qa_actions.checks values(label);end$$;
+do $$declare x jsonb;f uuid;r jsonb;h uuid;g jsonb;p jsonb;s jsonb;k uuid;n bigint;begin
+ x:=late_test.new_context('quality-actions',14400,false);f:=(x->>'factory')::uuid;
+ r:=public.record_manufactured_output(f,output2_test.payload(x,90,0),gen_random_uuid());select id into h from private.manufactured_outputs where entry_id=(r->>'entry_id')::uuid;
+ select recorded_groups into g from private.manufactured_outputs where id=h;
+ select jsonb_agg(v||jsonb_build_object('released',v->'quantity'))into g from jsonb_array_elements(g)v;
+ p:=jsonb_build_object('groups',g,'rejected','0','total','90','actual_rejected_kg','0','reason','Inspection matches physical output');
+ perform public.manufactured_output_command(f,'QUALITY',h,p,1,gen_random_uuid());
+ perform qa_actions.ok(private.production_quality_followup(f,h)is null,'matching without explicit follow-up makes no task');
+ p:=p||jsonb_build_object('requires_followup',true,'observation','Printing is unclear','requested_action','Check and adjust the printer');k:=gen_random_uuid();
+ r:=public.manufactured_output_command(f,'QUALITY',h,p,2,k);perform public.manufactured_output_command(f,'QUALITY',h,p,2,k);
+ s:=private.production_quality_followup(f,h);perform qa_actions.ok(s->>'state'='NEEDS_ACTION'and not(s->>'material_change')::boolean,'matching accepted output can require a process action');
+ perform qa_actions.ok((select count(*)=1 from private.production_quality_followup_events where request_id=k),'Quality UUID replay creates one event');
+ n:=(select count(*)from private.production_quality_followup_events where factory_id=f);r:=public.production_quality_followups(f);
+ perform qa_actions.ok(r->>'outstanding'='1'and(select count(*)=n from private.production_quality_followup_events where factory_id=f),'opening the list leaves action outstanding');
+ k:=gen_random_uuid();p:=jsonb_build_object('quality_revision',s->'quality_revision','note','Taking responsibility');
+ r:=public.production_quality_followup_command(f,h,'START',p,(s->>'status_revision')::bigint,k);
+ perform public.production_quality_followup_command(f,h,'START',p,(s->>'status_revision')::bigint,k);
+ perform qa_actions.ok((select count(*)=1 from private.production_quality_followup_events where request_id=k),'Start UUID replay is idempotent');
+ s:=private.production_quality_followup(f,h);perform qa_actions.ok(s->>'state'='IN_PROGRESS'and public.production_quality_followups(f)->>'outstanding'='1','In Progress remains outstanding');
+ perform public.manufactured_output_command(f,'QUALITY',h,jsonb_build_object('groups',g,'rejected','0','total','90','actual_rejected_kg','0','reason','Output is still accepted; process concern remains open'),(select max(revision)from private.manufactured_output_events where output_id=h),gen_random_uuid());
+ s:=private.production_quality_followup(f,h);perform qa_actions.ok(s->>'state'='IN_PROGRESS','ordinary later inspection cannot silently clear an outstanding action');
+ perform public.production_quality_followup_command(f,h,'RESOLVE',jsonb_build_object('quality_revision',s->'quality_revision','note','Printer adjusted; subsequent output checked'),(s->>'status_revision')::bigint,gen_random_uuid());
+ perform qa_actions.ok(public.production_quality_followups(f)->>'outstanding'='0'and private.production_quality_followup(f,h)->>'state'='RESOLVED','process resolution requires action evidence and clears outstanding count');
+ perform qa_actions.ok((select count(*)=1 from public.production_entries where factory_id=f)and not exists(select 1 from private.manufactured_completion_work where factory_id=f)and not exists(select 1 from public.finished_goods_movements where factory_id=f),'follow-up never creates production, replacement or stock');
+ insert into qa_actions.context values(x,h);
+ perform set_config('request.jwt.claim.sub',x->>'viewer',false);
+ perform late_test.fails(format('select public.production_quality_followup_command(%L,%L,%L,%L,0,%L)',f,h,'START',p,gen_random_uuid()),'permission_denied');
+end$$;
+select count(*)from qa_actions.checks;

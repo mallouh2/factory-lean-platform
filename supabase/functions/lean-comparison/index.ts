@@ -1,5 +1,6 @@
 // Browser supplies identities/settings only. Evidence is calculated from authenticated, paginated database readers.
 import { baselineEvidence, compareEvidence } from '../../../src/utils/lean-comparison.mjs';
+import {decodeConsumerJson} from '../../../src/utils/production-consumer-transport.mjs';
 declare const Deno:{env:{get(key:string):string|undefined};serve(fn:(req:Request)=>Promise<Response>):void};
 const url=Deno.env.get('SUPABASE_URL'),key=Deno.env.get('SUPABASE_ANON_KEY'),service=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const uuid=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -12,7 +13,7 @@ Deno.serve(async req=>{
   if(!b||Object.keys(b).some(k=>!['factory','operation','problem_id','initiative_id','product_id','cutoff','desired_hours','outcome','note','request_id','expected_revision'].includes(k))||!uuid(b.factory)||!['baseline','preview','verify','manual','save_comparison'].includes(b.operation))return json({error:'leanInvalid'},400);
   const request=async(path:string,body?:unknown,trusted=false)=>{
    const r=await fetch(url+path,{method:body===undefined?'GET':'POST',headers:{apikey:trusted?service!:key!,Authorization:trusted?`Bearer ${service}`:bearer,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
-   const result=await r.json();if(!r.ok)throw Object.assign(Error(result.message||'dataWarning'),{status:r.status});return result;
+   const text=await r.text(),result=r.ok&&path==='/rest/v1/rpc/lean_read'?decodeConsumerJson(text):JSON.parse(text);if(!r.ok)throw Object.assign(Error(result.message||'dataWarning'),{status:r.status});return result;
   };
   const actor=await request('/auth/v1/user');if(!uuid(actor.id)||!actor.email_confirmed_at)return json({error:'unauthorized'},401);
   const allowed=await request('/rest/v1/rpc/can_access',{factory:b.factory,module:'lean',action:b.operation==='verify'?'approve':b.operation==='baseline'?'create':'view'});
@@ -39,14 +40,16 @@ Deno.serve(async req=>{
   const [checkpoints,occurrences,entries]=await Promise.all([rows('contexts'),rows('occurrences'),rows('entries')]);
   let evidence:Record<string,unknown>;
   if(b.operation==='baseline'){
-   evidence=baselineEvidence({checkpoints,occurrences,entries,problem,initiative,as_of:stamp});
+   evidence=baselineEvidence({checkpoints,occurrences,entries,problem,initiative,as_of:stamp,evidence_version:detail.evidence_version});
   }else{
    const baseline=official?initiative.baseline_evidence:null;
    if(official&&(!baseline||!initiative.completed_at))return json({error:'leanIncomplete'},422);
-   const desired_hours=official?baseline.runtime_hours==null?null:Number(baseline.runtime_hours):Number(b.desired_hours);
+   // A saved zero-exposure baseline uses compareEvidence's existing incomplete
+   // branch. Do not reject it before an authorized INSUFFICIENT_DATA review.
+   const desired_hours=official?baseline.runtime_hours==null||Number(baseline.runtime_hours)===0?null:Number(baseline.runtime_hours):Number(b.desired_hours);
    const cutoff=official?initiative.completed_at:b.cutoff;
    if((desired_hours!==null&&!(desired_hours>0&&desired_hours<=100000))||!Number.isFinite(Date.parse(cutoff))||Date.parse(cutoff)>Date.parse(stamp))return json({error:'leanInvalid'},400);
-   evidence=compareEvidence({checkpoints,occurrences,entries,problem,product_id,cutoff,desired_hours,baseline,as_of:stamp});
+   evidence=compareEvidence({checkpoints,occurrences,entries,problem,product_id,cutoff,desired_hours,baseline,as_of:stamp,evidence_version:detail.evidence_version});
   }
   evidence.source_revision=source_revision;
   if(['baseline','verify','save_comparison'].includes(b.operation)){

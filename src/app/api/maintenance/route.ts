@@ -9,6 +9,15 @@ export async function GET(req: NextRequest) {
     const params = req.nextUrl.searchParams;
     const factory = historyUuid(params.get('factory'));
     const machine = params.get('context_machine');
+    if (params.has('actual_stop_machine') || params.has('actual_stop_request')) {
+      if (params.has('actual_stop_machine') && params.has('actual_stop_request')) throw {code:'22023'};
+      const {data,error} = await db.rpc('maintenance_stop_context',{factory,
+        machine:params.has('actual_stop_machine')?historyUuid(params.get('actual_stop_machine')):null,
+        maintenance_request:params.has('actual_stop_request')?historyUuid(params.get('actual_stop_request')):null,
+        history_page:historyPage(params.get('history_page'))});
+      if(error) throw error;
+      return NextResponse.json(data,{headers:{'Cache-Control':'private, no-store'}});
+    }
     if (params.has('downtime')) {
       const {data,error} = await db.rpc('maintenance_downtime_context',{factory,event:historyUuid(params.get('downtime'))});
       if(error) throw error;

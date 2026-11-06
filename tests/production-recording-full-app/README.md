@@ -1,0 +1,27 @@
+# Real local application acceptance fixture
+
+Runs the actual Next.js application, ordinary sign-in form, cookie handling, authenticated routes and protected PostgreSQL functions. It does not assemble a replacement application. This is a disposable localhost fixture, **not Supabase GoTrue/PostgREST or hosted acceptance**.
+
+`prepare.ps1 -RuntimeDirectory <existing portable PostgreSQL runtime>` creates an owner-access-only temporary directory, a fresh loopback database, installs the original 95 required local migrations (Export Reader excluded), seeds synthetic operational context, and copies the actual application with a node_modules junction. No repository environment file is copied. The seed uses existing capability, planning, Start, physical-state, shift and recording contracts; both activation gates remain FALSE.
+
+Ports default to database55476, Auth/Data adapter4291 and application4207. All three must be unused. The adapter checks the disposable marker, temporary-directory boundary, actual server data directory/database/port, loopback bind and local-only application configuration. SQL runs as authenticated with the verified fixture user's claims, preserving the original grants and RLS. Generated passwords/session signing material stay in the restricted runtime directory, never repository files.
+
+## Shared owner initialization and API exposure (27 October 2026)
+
+Use `backend.mjs` with its adjacent `local-policy.mjs` directly. Do not create another per-preview RPC allowlist or patch the adapter using string replacement. Existing authenticated EXECUTE grants determine public RPC exposure; existing SELECT grants/RLS determine public table reads. Private functions and direct table writes remain unavailable. Array parameters preserve real JSON-array semantics for permission-package/direct-grant commands. Mutating GETs reject405.
+
+Only when creating a new local credential file, the designated approved owner(s) in `context`/`additionalContexts` receive idempotent factory-local direct grants from the defined permission catalog. Ordinary workers/viewers are untouched. Existing credentials/passwords are preserved, and login/request handling never silently restores revoked permissions. Every writing transaction independently rechecks the disposable target. Never use this fixture setup against hosted projects or an application database outside its owned temporary root.
+
+Current Planning V3 preparation uses `tests/planning-v3/prepare-preview.ps1` and the existing portable runtime. The original Phase4B generator/migration counts below are historical. The 4222 regression reused its verified disposable fixture and exercised repeat initialization twice rather than creating a new account/database. Policy tests: `node --test tests/local-preview-policy.test.mjs`. Controlled operational acceptance: `owner-acceptance.mjs`; grant/revoke/isolation/idempotence: `owner-security.mjs`. These write only after target verification; do not blindly replay already completed operational fixtures. Evidence and limitations: `docs/local-preview-owner-permissions.md`.
+
+This local shim keeps sessions in memory; after an intentional adapter restart, sign in normally again with the unchanged `LOCAL-LOGIN.txt` credentials. Do not reset passwords or weaken application authorization to address an expired session.
+
+Start `node tests/production-recording-full-app/backend.mjs <runtime.json>`, then the installed Next.js development executable from the generated application directory, using `dev --hostname 127.0.0.1 --port 4207 --webpack`. The existing wrapper also supports passing these flags. The runtime path is recorded at `%TEMP%\FactoryLean-Phase4B-FIX-runtime-location.txt`; local-only login details are in its `LOCAL-LOGIN.txt`. Use the normal form. Do not use hosted TESTING or Simulation credentials.
+
+Run `node tests/production-recording-full-app/browser.mjs` from the authoritative repository. It uses installed Microsoft Edge, signs in normally and blocks external browser requests. Empty/loading/failure responses are injected only inside their browser test context; populated History, recording, status recovery and denials use real Next routes and original SQL. Each deliberately submitted recording has its own immutable UUID. Wait for the completed failed-response handling before reloading during recovery tests.
+
+Run `verify.sql` against only this disposable database for a read-only conservation check. The fixture starts with25 Good Meter,0.75 Scrap KG and2 WIP Meter. Each independent browser recording adds1.25 Good Meter and0.05 Scrap KG. Recovery never reposts it. Source credit and stock ledger must equal Good, reservation stays0, and no physical identification is invented.
+
+Keep the owned app/adapter/database running for owner review. To stop later, interrupt only their respective application and adapter terminals, then use the existing portable `pg_ctl -D <runtime>\data -m fast -w stop`. Preserve evidence; do not stop other PostgreSQL or application instances. No automatic cleanup/deletion of retained diagnostics is required.
+
+Factory Floor is `/?view=lines`; History is `/?view=productionHistory`. These are explicit deep links to the existing real application root view, not invented Next route paths. Only recording and relevant reads are certified by this fixture; other operational mutations are intentionally unavailable through its adapter.

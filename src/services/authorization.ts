@@ -8,8 +8,8 @@ export function verifyOrigin(request: NextRequest) {
   )
     throw new Error("invalid_origin");
 }
-export async function authenticatedClient() {
-  const db = await supabaseServer();
+export async function authenticatedClient(fetcher?: typeof fetch) {
+  const db = await supabaseServer(fetcher);
   const {
     data: { user },
     error,

@@ -1,0 +1,38 @@
+do $$begin if inet_server_addr()<>'127.0.0.1'::inet or inet_server_port()<>55498 then raise exception 'Owned local dispatch tests only';end if;end$$;
+create table if not exists ux_test.dispatch_context(x jsonb,order_id uuid,line_id uuid);
+do $$declare x jsonb;f uuid;so uuid;ln uuid;other uuid;k uuid:=gen_random_uuid();r uuid;v jsonb;g uuid;h uuid;receipt jsonb;p jsonb;job uuid;sid uuid;s timestamptz;begin
+ x:=mp_test.fixture('ux-dispatch');f:=(x->>'factory')::uuid;perform set_config('request.jwt.claim.sub',x->>'owner',false);
+ perform public.adjust_finished_stock(f,(x->>'product')::uuid,'meter',40,'Controlled opening stock for partial dispatch',gen_random_uuid());
+ so:=public.create_sales_order(f,jsonb_build_object('customer_reference','Partial 20+20+60','requested_delivery',clock_timestamp()+interval '4 days','lines',jsonb_build_array(jsonb_build_object('product_id',x->>'product','quantity',100,'unit','meter'))),gen_random_uuid());
+ perform public.approve_sales_order(f,so,gen_random_uuid());select id into ln from public.sales_order_lines where order_id=so;
+ perform ux_test.ok((select quantity=40 from public.finished_goods_reservations where line_id=ln)and(select sum(quantity)=60 from public.sales_incoming_allocations where line_id=ln),'100 order reserves40 and links60 production');
+ r:=public.dispatch_sales_quantity(f,so,ln,20,k);
+ perform ux_test.ok((select dispatched_quantity=20 from public.sales_order_lines where id=ln)and(select status='approved' from public.sales_orders where id=so),'first20 keeps order open80');
+ perform ux_test.ok(public.dispatch_sales_quantity(f,so,ln,20,k)=r and(select on_hand=20 and reserved=20 from public.finished_goods_balances where factory_id=f),'UUID retry does not deduct twice');
+ perform late_test.fails(format('select public.dispatch_sales_quantity(%L,%L,%L,21,%L)',f,so,ln,gen_random_uuid()),'pooled_dispatch_unavailable');
+ perform set_config('request.jwt.claim.sub',x->>'viewer',false);
+ perform late_test.fails(format('select public.dispatch_sales_quantity(%L,%L,%L,1,%L)',f,so,ln,gen_random_uuid()),'permission_denied');
+ perform set_config('request.jwt.claim.sub',x->>'owner',false);
+ perform late_test.fails(format('select public.dispatch_sales_quantity(%L,%L,%L,1,%L)',gen_random_uuid(),so,ln,gen_random_uuid()),'permission_denied');
+ perform public.dispatch_sales_quantity(f,so,ln,20,gen_random_uuid());
+ perform ux_test.ok((select on_hand=0 and reserved=0 from public.finished_goods_balances where factory_id=f)and(select dispatched_quantity=40 from public.sales_order_lines where id=ln),'second20 conserves zero stock and remaining60');
+ -- Execute the actual linked60, inspect, physically receive. No final balance seed.
+ select item_id into job from public.sales_incoming_allocations where line_id=ln;
+ perform public.update_settings(f,'Dispatch local test','UTC',null);perform public.configure_working_calendar(f,127,'00:00','23:59');
+ perform public.configure_center_capabilities(f,(x->>'machine')::uuid,jsonb_build_array(jsonb_build_object('product_id',x->>'product','rate',6000,'rate_unit','meter','setup_minutes',0)));
+ s:=clock_timestamp()+interval '.2 seconds';sid:=public.configure_production_shift(f,'Dispatch acceptance','اختبار الإرسال',s::time,(s+interval '4 hours')::time);perform pg_sleep(.3);
+ perform public.plan_product_item(f,job,(x->>'line')::uuid,clock_timestamp()+interval '1 day');perform public.start_product_item(f,job);perform public.finish_product_item(f,job);
+ x:=x||jsonb_build_object('item',job,'shift',sid);g:=gen_random_uuid();
+ p:=late_test.payload(x,60)||jsonb_build_object('output_groups',jsonb_build_array(jsonb_build_object('id',g,'quantity','60','missing_operations','[]'::jsonb)));
+ receipt:=public.record_manufactured_output(f,p,gen_random_uuid());select id into h from private.manufactured_outputs where entry_id=(receipt->>'entry_id')::uuid;
+ perform public.manufactured_output_command(f,'QUALITY',h,jsonb_build_object('groups',jsonb_build_array(jsonb_build_object('id',g,'quantity','60','released','60','missing_operations','[]'::jsonb)),'rejected','0','reason','Matching sixty meters'),1,gen_random_uuid());
+ perform ux_test.ok((select on_hand=0 from public.finished_goods_balances where factory_id=f),'Quality never credits promised60');
+ perform public.receive_manufactured_output(f,h,jsonb_build_object('group_id',g,'quantity','60','location','Synthetic mixed stock bay','physical_confirmation',true),2,gen_random_uuid());
+ perform ux_test.ok((select quantity=60 from public.finished_goods_reservations where line_id=ln)and(select sum(quantity)=0 and sum(received_quantity)=60 from public.sales_incoming_allocations where line_id=ln),'actual receipt converts linked incoming to reservation exactly once, retaining allocation history');
+ perform public.dispatch_sales_quantity(f,so,ln,60,gen_random_uuid());
+ perform ux_test.ok((select dispatched_quantity=100 from public.sales_order_lines where id=ln)and(select status='completed' from public.sales_orders where id=so),'20+20+60 completes line only after actual dispatch100');
+ perform ux_test.ok((select on_hand=0 and reserved=0 from public.finished_goods_balances where factory_id=f)and(select sum(-stock_delta)=100 from public.finished_goods_movements where factory_id=f and kind='dispatch'),'all physical dispatch and stock quantities conserved');
+ perform ux_test.ok(not exists(select 1 from public.finished_goods_source_allocations a join public.finished_goods_movements m on m.id=a.movement_id where m.factory_id=f and m.kind='dispatch' and a.source_id is not null),'pooled shipments do not invent source provenance');
+ insert into ux_test.dispatch_context values(x,so,ln);
+end$$;
+select count(*) assertions from ux_test.checks;

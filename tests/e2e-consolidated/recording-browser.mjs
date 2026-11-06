@@ -1,0 +1,8 @@
+import fs from'node:fs';import assert from'node:assert/strict';import{chromium,login,x}from'./browser.mjs';import{root,sql,quote}from'./local.mjs';
+const after=process.argv.includes('--after'),b=await chromium.launch({channel:'msedge',headless:true}),p=await b.newPage({viewport:{width:1440,height:1000}});p.setDefaultTimeout(60000);const network=[];
+try{await login(p,'owner','lines');await p.locator('.prv3-launch button.primary').click();const d=p.locator('.prv3-dialog');await d.locator('select').first().selectOption(x.item);const input=d.locator('.prv3-fields input').first();await input.fill(after?'4':'3');await p.waitForTimeout(800);
+ p.on('response',async r=>{if(r.url().includes('/api/')&&r.request().method()==='POST'){network.push({url:new URL(r.url()).pathname,status:r.status,timing:r.request().timing()});}});
+ const before=Number(sql(`select count(*) from public.production_entries where order_id=${quote(x.item)}`));const start=performance.now();await d.getByRole('button',{name:'Save production',exact:true}).click();
+ if(after){await d.waitFor({state:'hidden'});await p.getByRole('status').filter({hasText:'Production saved'}).waitFor();}else{await d.locator('.prv3-result h3').filter({hasText:'Production saved'}).waitFor();}
+ const ms=performance.now()-start;assert.equal(Number(sql(`select count(*) from public.production_entries where order_id=${quote(x.item)}`)),before+1);await p.screenshot({path:root+'/screenshots/recording-'+(after?'after':'before')+'.png'});const result={ms,network};fs.writeFileSync(root+'/recording-'+(after?'after':'before')+'.json',JSON.stringify(result,null,2));console.log(result);
+}finally{await b.close()}

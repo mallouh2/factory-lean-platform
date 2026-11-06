@@ -22,12 +22,12 @@ type Screen = "list" | "details" | "create" | "edit" | "materials";
 type Filter = "all" | "active" | "planned" | "delayed" | "completed" | "cancelled";
 const filters: Filter[] = ["all", "active", "planned", "delayed", "completed", "cancelled"];
 
-export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: (itemId: string) => void }) {
+export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: (itemId: string) => void; initialItemId?:string }) {
   const { snapshot: s, t, lang, can, command } = props;
-  const [screen, setScreen] = useState<Screen>("list");
+  const [screen, setScreen] = useState<Screen>(props.initialItemId?"details":"list");
   const [filter, setFilter] = useState<Filter[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(props.initialItemId?String(s.tables.production_orders.find(o=>o.id===props.initialItemId)?.request_id||''):null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(props.initialItemId||null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [createDirty, setCreateDirty] = useState(false);
   const [dailyTargetOpen, setDailyTargetOpen] = useState(false);
@@ -169,7 +169,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
       <header className="orders-v2-detail-head">
         <div><p><bdi dir="ltr">{String(selected.code)}</bdi></p>
           <h2 ref={headingRef} tabIndex={-1} dir="auto">{String(selected.name)}</h2>
-          <strong>{t("itemsCompleted").replace("{completed}", String(completed)).replace("{total}", String(selectedItems.length))}</strong>
+          <strong>{props.initialItemId?(lang==='ar'?'بند الإنتاج المرتبط فقط':'Linked Production Item only'):t("itemsCompleted").replace("{completed}", String(completed)).replace("{total}", String(selectedItems.length))}</strong>
         </div>
         {statusChip(requestStatus(selectedItems), attention)}
       </header>

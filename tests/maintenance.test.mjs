@@ -68,7 +68,7 @@ function api({allowed=true,error=null}={}){
  const auth={authenticatedClient:async()=>context,authorize:async(f,m,a)=>{authorizations.push([f,m,a]);if(!allowed)throw Error('permission_denied');return context;},
   verifyOrigin:()=>{},safeError:e=>({error:e.message==='permission_denied'?'permissionError':'error'})};
  const resolver=name=>name==='@/services/authorization'?auth:require(name);
- return {calls,authorizations,post:async(command,args)=>load(post,resolver).POST({headers:{get:()=>null},json:async()=>({command,args})}),
+ return {calls,authorizations,post:async(command,args)=>load(post,resolver).POST({headers:{get:()=>null},text:async()=>JSON.stringify({command,args}),json:async()=>({command,args})}),
   get:async query=>load(get,resolver).GET(new NextRequest(`http://localhost:3000/api/maintenance?${query}`))};
 }
 test('manual API requires explicit create permission and does not forward forged identity',async()=>{

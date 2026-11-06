@@ -3,8 +3,8 @@ import type { Language, Translate } from '@/types';
 import type { TableDataset } from '@/types/table-export';
 
 type Props = { factory: string; dataset: TableDataset; filters: Record<string, unknown>; total: number;
-  language: Language; t: Translate; disabled?: boolean; sort?: string; direction?: string };
-export default function TableExport({ factory, dataset, filters, total, language, t, disabled, sort, direction }: Props) {
+  language: Language; t: Translate; disabled?: boolean; sort?: string; direction?: string; showScope?: boolean };
+export default function TableExport({ factory, dataset, filters, total, language, t, disabled, sort, direction, showScope=true }: Props) {
   const menu = useRef<HTMLDetailsElement>(null), active = useRef<AbortController | null>(null);
   const popup = useRef<Window | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
@@ -64,7 +64,7 @@ export default function TableExport({ factory, dataset, filters, total, language
     } finally { if (active.current === abort) { active.current = null; setBusy(false); } }
   }
   return <div className="table-export" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-    <div className="table-export-tools"><small className="muted">{t('tableExportScope')} · {total.toLocaleString(language)} {t('tableExportRows')}</small>
+    <div className="table-export-tools">{showScope&&<small className="muted">{t('tableExportScope')} · {total.toLocaleString(language)} {t('tableExportRows')}</small>}
       <details ref={menu} onKeyDown={event => { if (event.key === 'Escape' && event.currentTarget.open) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
         <summary aria-disabled={busy || disabled} onClick={event => { if (busy || disabled) event.preventDefault(); }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>

@@ -1,3 +1,4 @@
+import {ProductMaterialRoute} from './MaterialPreparation';
 import { useRef, useState } from 'react';
 import type { FeatureProps } from './types';
 import type { Row } from '@/types';
@@ -6,6 +7,7 @@ import { useSupply, type SupplyRow } from './useSupply';
 type Component = { key:string; material_id:string; quantity:string };
 export default function Products(props: FeatureProps) {
   const { snapshot:s, t, lang, can, command }=props;
+  const [routeProduct,setRouteProduct]=useState('');
   const [search,setSearch]=useState(''),[editing,setEditing]=useState<Row|null>(null),[kind,setKind]=useState('FINISHED_PRODUCT');
   const [components,setComponents]=useState<Component[]>([]),[changeFormula,setChangeFormula]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -37,7 +39,8 @@ export default function Products(props: FeatureProps) {
     <header className="section-head"><input aria-label={t('search')} placeholder={t('search')} value={search} onChange={e=>setSearch(e.target.value)}/>{can('orders','create')&&<button className="primary" onClick={()=>open({})}>{t('addProduct')}</button>}</header>
     {!rows.length&&<p className="empty">{t('noProductsYet')}</p>}
     <div className="supply-directory">{rows.map(row=><article key={String(row.id)}><strong>{localName(row,lang)}</strong><p><bdi>{String(row.code)}</bdi> · {t(String(row.product_kind||'FINISHED_PRODUCT'))} · {row.stock_unit?t(String(row.stock_unit)):t('inventoryNotConfigured')}</p>
-      <div className="row-actions">{can('orders','edit')&&<button onClick={()=>open(row)}>{t('edit')}</button>}{(row.formula_product_id||row.product_kind==='MANUFACTURED_INTERMEDIATE')&&<button disabled={!row.stock_unit} onClick={()=>{setPreview(row);setQuantity('1');}}>{t('recipeRequirements')}</button>}</div></article>)}</div>
+      <div className="row-actions">{can('orders','edit')&&<button onClick={()=>setRouteProduct(String(row.id))}>{t('materialPhysicalInputs')}</button>}{can('orders','edit')&&<button onClick={()=>open(row)}>{t('edit')}</button>}{(row.formula_product_id||row.product_kind==='MANUFACTURED_INTERMEDIATE')&&<button disabled={!row.stock_unit} onClick={()=>{setPreview(row);setQuantity('1');}}>{t('recipeRequirements')}</button>}</div></article>)}</div>
+    {routeProduct&&<ProductMaterialRoute props={props} product={routeProduct} onClose={()=>setRouteProduct('')}/>}
     {editing&&<Dialog title={t(editing.id?'editProduct':'addProduct')} t={t} onClose={()=>{if(!busy)setEditing(null);}}>
       <form onSubmit={save}><fieldset disabled={busy} className="form-grid">
         <Field label={t('inventoryType')}><select value={kind} onChange={e=>setKind(e.target.value)}>{['FINISHED_PRODUCT','MANUFACTURED_INTERMEDIATE'].map(value=><option key={value} value={value}>{t(value)}</option>)}</select></Field>

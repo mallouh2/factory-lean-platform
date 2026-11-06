@@ -8,7 +8,7 @@ import {shiftWindow} from '../src/utils/production-shifts.mjs';
 import en from '../src/locales/en.json' with {type:'json'};
 import ar from '../src/locales/ar.json' with {type:'json'};
 const require=createRequire(import.meta.url);
-async function component(path){const result=await build({entryPoints:[path],bundle:true,platform:'node',format:'cjs',packages:'external',write:false,logLevel:'silent'});const module={exports:{}};new Function('require','module','exports',result.outputFiles[0].text)(require,module,module.exports);return module.exports.default;}
+async function component(path){const result=await build({entryPoints:[path],bundle:true,platform:'node',format:'cjs',packages:'external',outdir:"test-output",write:false,logLevel:'silent'});const module={exports:{}};new Function('require','module','exports',result.outputFiles[0].text)(require,module,module.exports);return module.exports.default;}
 const Shifts=await component('src/features/ProductionShifts.tsx'),Recording=await component('src/features/ProductionRecording.tsx');
 const night={id:'night',name:'Night',name_ar:'ليل',archived:false,start_time:'22:00:00',end_time:'06:00:00'};
 function render(Component,lang='en',context={shift_id:'night',timezone:'America/New_York',local_time:'02:00'},edit=true,shifts=[night]){

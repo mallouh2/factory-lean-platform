@@ -24,9 +24,10 @@ export function useFulfillment<T>(snapshot: Snapshot, mode: string, page = 1, en
     fetch(`/api/fulfillment?${query}`, { cache: 'no-store', signal: controller.signal })
       .then(async response => { const data = await response.json(); if (!response.ok) throw Error(data.error || 'dataWarning'); return data; })
       .then(data => { if (!controller.signal.aborted) setResult({ query, data }); })
-      .catch(cause => { if (!controller.signal.aborted) setError(cause.message); })
+      .catch(cause => { if (!controller.signal.aborted) { setError(cause.message); if(['permissionError','unauthorized'].includes(cause.message))setResult(null); } })
       .finally(() => { if (!controller.signal.aborted) setBusy(false); });
     return () => controller.abort();
   }, [query, enabled, snapshot.fetchedAt, retry]);
-  return { data: enabled && result?.query === query ? result.data : null, busy, error, refresh: () => setRetry(value => value + 1) };
+  const data=enabled && result?.query===query ? result.data : null;
+  return { data, busy, loading:busy&&data===null, refreshing:busy&&data!==null, error, refresh: () => setRetry(value => value + 1) };
 }

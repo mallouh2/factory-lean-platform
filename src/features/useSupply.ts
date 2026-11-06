@@ -12,11 +12,12 @@ export function useSupply<T = SupplyPage>(snapshot: Snapshot, mode: string, extr
     fetch(query, { cache: 'no-store', signal: abort.signal }).then(async response => {
       const data = await response.json(); if (!response.ok) throw Error(data.error || 'dataWarning'); return data;
     }).then(data => { if (!abort.signal.aborted) setResult({ query, data }); })
-      .catch(cause => { if (!abort.signal.aborted) setError(cause.message); })
+      .catch(cause => { if (!abort.signal.aborted) { setError(cause.message); if(['permissionError','unauthorized'].includes(cause.message))setResult(null); } })
       .finally(() => { if (!abort.signal.aborted) setBusy(false); });
     return () => abort.abort();
   }, [query, enabled, snapshot.fetchedAt, revision]);
-  return { data: enabled && result?.query === query ? result.data : null, busy, error, refresh: () => setRevision(value => value + 1) };
+  const data=enabled && result?.query===query ? result.data : null;
+  return { data, busy, loading:busy&&data===null, refreshing:busy&&data!==null, error, refresh: () => setRevision(value => value + 1) };
 }
 export function useSupplyCommand(command: (name: string, args: Record<string, unknown>) => Promise<unknown>, factory: unknown, rpcName:'supply_command'|'quality_command'='supply_command') {
   const retry = useRef<{ key: string; id: string } | null>(null), submitting = useRef(false);

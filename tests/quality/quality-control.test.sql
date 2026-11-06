@@ -72,7 +72,7 @@ do $$declare x quality_test.fixtures;y quality_test.fixtures;z quality_test.fixt
  p:=jsonb_build_object('unit_kind','line','production_unit',x.line_id,'item',x.item_id,'technician',x.technician_id,'good',7,'discarded_quantity',3,'scrap_kg',0,'unfinished',0,'input_lot',lot,'input_quantity',10);
  perform pg_temp.q_error(format('select public.record_lean_production(%L,%L::jsonb,gen_random_uuid())',x.factory_id,p::text),'quality_weight');
  perform pg_temp.q_assert((select quantity_available=10 from public.unfinished_lots where id=lot) and (select on_hand=90 from public.finished_goods_balances where factory_id=x.factory_id),'failed rework mass validation rolls back all Good/WIP effects');
- entry:=(public.record_lean_production(x.factory_id,p||jsonb_build_object('scrap_kg','0.75'),gen_random_uuid())->>'id')::uuid;
+ entry:=(public.record_lean_production(x.factory_id,p||jsonb_build_object('scrap_kg',0.75),gen_random_uuid())->>'id')::uuid;
  perform pg_temp.q_assert((select quantity_available=0 and warehouse_quantity=0 from public.unfinished_lots where id=lot) and (select on_hand=97 from public.finished_goods_balances where factory_id=x.factory_id),'10 rework -> 7 Good + 3 discarded; exact stock conservation');
  perform pg_temp.q_assert((select default_scrap_kg=.75 and actual_scrap_kg=.75 and not weight_overridden from public.quality_rework_records where entry_id=entry) and (select effective_scrap_kg=.75 from public.production_entries where id=entry),'rework failure records kg through Production exactly once');
  perform pg_temp.q_assert((select status='completed' and actual_finish=finish and good_quantity=107 and accepted_good_quantity=97 from public.production_orders where id=x.item_id),'completed history preserved and recovered Good accepted once');

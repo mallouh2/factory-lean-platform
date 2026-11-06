@@ -19,7 +19,8 @@ export function qualityCommandValid(args) {
 export function sourceCommandValid(args) {
  const fields={identify:['source','quantity','label','physically_identified','note'],mix:['source','quantity','physically_identified','note'],
   reserve:['sales_line_id'],dispatch:['sales_order','line'],adjust:['product','unit','quantity','reason'],issue:['id','revision','reason'],
-  correct:['entry','good','discarded_quantity','scrap_kg','startup_kg','reason','confirm_overproduction','shift','change_shift','unfinished','remaining_work']};
+  correct:['entry','good','discarded_quantity','scrap_kg','startup_kg','reason','confirm_overproduction','shift','change_shift','unfinished','remaining_work','corrected_occurrence_key']};
+ if (Object.hasOwn(args?.payload ?? {},'corrected_occurrence_key') && !/^[0-9a-f]{64}$/.test(args.payload.corrected_occurrence_key)) return false;
  return object(args)&&Object.keys(args).every(k=>['factory','operation','payload','allocations','request_id'].includes(k))&&uuid(args.factory)&&uuid(args.request_id)&&
   object(args.payload)&&Object.hasOwn(fields,args.operation)&&Object.keys(args.payload).every(k=>fields[args.operation].includes(k))&&
   ['source','sales_line_id','sales_order','line','product','id','entry','shift'].every(k=>args.payload[k]===undefined||args.payload[k]===null||uuid(args.payload[k]))&&Array.isArray(args.allocations)&&args.allocations.length<=100&&

@@ -1,6 +1,7 @@
+import {WarehouseDialog} from './WarehouseUi';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FeatureProps } from './types';
-import { Dialog, Field, formatTime } from '@/components/ui';
+import { Field, formatTime } from '@/components/ui';
 import { useSupply, useSupplyCommand, type SupplyRow } from './useSupply';
 import { SourceAllocationFields,useSourceStockCommand,type SourcePick } from './SourceStock';
 export default function MaterialFlow(props: FeatureProps & { warehouse?: boolean }) {
@@ -22,11 +23,11 @@ export default function MaterialFlow(props: FeatureProps & { warehouse?: boolean
     const success=next==='issue'&&selected.product_id?await sourceAction.run('issue',{id:selected.id,revision:selected.revision,reason},picks):await action.run('material_change',{id:selected.id,revision:selected.revision,action:next,reason});
     if(success){setSelected(null);read.refresh();}
   }
-  const panel=(title:string,onClose:()=>void,children:ReactNode)=>warehouse?<Dialog busy={workingBusy} title={title} t={t} onClose={onClose}>{children}</Dialog>:<section className="material-working-screen"><button className="orders-v2-back" disabled={workingBusy} onClick={onClose}>← {t("materialRequests")}</button><h3 ref={heading} tabIndex={-1}>{title}</h3>{children}</section>;
+  const panel=(title:string,onClose:()=>void,children:ReactNode)=>warehouse?<WarehouseDialog {...props} busy={workingBusy} title={title} t={t} onClose={onClose}>{children}</WarehouseDialog>:<section className="material-working-screen"><button className="orders-v2-back" disabled={workingBusy} onClick={onClose}>← {t("materialRequests")}</button><h3 ref={heading} tabIndex={-1}>{title}</h3>{children}</section>;
   return <section className="supply-page" dir={lang==='ar'?'rtl':'ltr'}>
     {(warehouse||(!create&&!selected))&&<><header className="section-head"><h2 ref={warehouse?undefined:heading} tabIndex={-1}>{t(warehouse?'warehouseProductionMaterialRequests':'materialRequests')}</h2>{!warehouse&&can('orders','edit')&&<button className="primary" onClick={()=>{setCreate(true);setChoice(null);action.clearError();}}>{t('materialRequestCreate')}</button>}<button onClick={read.refresh}>{t('refresh')}</button></header>
-    {read.error&&<p role="alert">{t(read.error)}</p>}{read.busy&&<p role="status">{t('loading')}</p>}
-    {!read.busy&&!read.data?.rows.length&&<p className="empty">{t('materialRequestsEmpty')}</p>}
+    {read.error&&<p role="alert">{t(read.error)}</p>}{read.loading&&<p role="status">{t('loading')}</p>}
+    {read.data&&!read.data.rows.length&&<p className="empty">{t('materialRequestsEmpty')}</p>}
     <div className="supply-directory">{read.data?.rows.map(row=><article key={String(row.id)}>
       <strong>{String(row.item_name)}</strong><p>{String(row.quantity)} {t(String(row.unit))} · {t('materialState_'+String(row.status))}</p>
       <p>{String(row.requested_by_name)} · {formatTime(row.created_at,lang,String(s.factory?.timezone||'UTC'))}</p>
@@ -60,7 +61,7 @@ export default function MaterialFlow(props: FeatureProps & { warehouse?: boolean
       {Boolean(selected.reason)&&<p className="supply-note">{String(selected.reason)}</p>}
       {warehouse&&selected.status==='REQUESTED'&&can('warehouse','issue')&&<>
         <p>{t('materialIssueHelp')}</p><Field label={t('supplyReason')}><textarea value={reason} onChange={e=>setReason(e.target.value)} maxLength={2000}/></Field>
-        {!!selected.product_id&&<SourceAllocationFields disabled={workingBusy} snapshot={s} t={t} lang={lang} product={String(selected.product_id)} unit={String(selected.unit)} quantity={String(selected.quantity)} materialRequest={String(selected.id)} onChange={(next,valid)=>{setPicks(next);setPicksValid(valid);}}/>}
+        {!!selected.product_id&&<SourceAllocationFields warehouse={warehouse} disabled={workingBusy} snapshot={s} t={t} lang={lang} product={String(selected.product_id)} unit={String(selected.unit)} quantity={String(selected.quantity)} materialRequest={String(selected.id)} onChange={(next,valid)=>{setPicks(next);setPicksValid(valid);}}/>}
         <div className="row-actions"><button className="primary" disabled={workingBusy||sourceAction.busy||!!selected.product_id&&!picksValid} onClick={()=>void change('issue')}>{t('materialIssueConfirm')}</button>
         <button disabled={workingBusy||!reason.trim()} onClick={()=>void change('reject')}>{t('purchaseStatus_REJECTED')}</button><button disabled={workingBusy||!reason.trim()} onClick={()=>void change('cancel')}>{t('cancel')}</button></div></>}
       {selected.status==='ISSUED'&&selected.requested_by===s.user.id&&<button className="primary" disabled={workingBusy} onClick={()=>void change('receive')}>{t('materialReceiveConfirm')}</button>}

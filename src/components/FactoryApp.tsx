@@ -1,5 +1,10 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {MaterialPreparationWindow} from '@/features/MaterialPreparation';
+import ManufacturedOutputExplorer from '@/features/ManufacturedOutputExplorer';
+import type {OutputDestination} from '@/features/types';
+import {outputDestinationAllowed} from '@/utils/output-navigation.mjs';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import en from "@/locales/en.json";
 import ar from "@/locales/ar.json";
 import type { Language, Row, Snapshot } from "@/types";
@@ -15,6 +20,9 @@ import UnfinishedProducts from '@/features/UnfinishedProducts';
 import SalesOrders from '@/features/SalesOrders';
 import Warehouse from '@/features/Warehouse';
 import ProductionOrdersV2 from "@/features/ProductionOrdersV2";
+import ProductionCorrections from "@/features/ProductionCorrections";
+import {useCorrectionPending} from '@/hooks/useCorrectionPending';
+import ProductionRecording from "@/features/ProductionRecording";
 import ProductionPlanning from "@/features/ProductionPlanning";
 import PlatformDashboard from "@/features/PlatformDashboard";
 import PersonPermissions from "@/features/PersonPermissions";
@@ -31,6 +39,8 @@ import Administration from "@/features/Administration";
 import { formatTime } from "./ui";
 import { permissionModule, previewPermissions, previewPresets } from "@/utils/permission-preview.mjs";
 import HistoryLimitWarning from "./HistoryLimitWarning";
+import SidebarIcon from './NavigationIcon';
+import OperationalNavigation from './OperationalNavigation';
 import { useNavigationOverlay } from './useNavigationOverlay';
 // Floor totals and report tabs own their warnings beside the affected values.
 const pageHistoryTables: Record<string, string[]> = {
@@ -44,6 +54,7 @@ const primary = [
   "myPurchaseRequests",
   "lines",
   "orders",
+  "productionHistory",
   "planning",
   "products",
   "downtime",
@@ -53,42 +64,6 @@ const primary = [
   "reports",
 ];
 const admin = ["employees", "roles", "suppliers", "settings", "support", "audit"];
-const future = [
-  "safety",
-  "costing",
-  "hr",
-];
-const sidebarIconPaths: Record<string, string[]> = {
-  quality:['M12 3 3 7v6c0 5 9 9 9 9s9-4 9-9V7z','M8 12l3 3 5-6'],
-  lean:['M3 3v18h18','M7 15l4-5 4 3 5-7'],
-  purchasing: ['M3 3h2l3 12h11l2-8H6','M9 20h.01','M18 20h.01'],
-  myPurchaseRequests: ['M5 3h14v18H5z','M8 7h8','M8 11h8','M8 16l2 2 5-5'],
-  materialRequests: ['M3 7l9-4 9 4-9 4z','M3 7v10l9 4 9-4V7','M12 11v10'],
-  suppliers: ['M3 21V7l9-4 9 4v14','M7 9h2','M15 9h2','M9 21v-6h6v6'],
-  platform: ["M3 21h18", "M5 21V7l7-4 7 4v14", "M9 10h.01", "M15 10h.01", "M9 14h.01", "M15 14h.01", "M10 21v-4h4v4"],
-  dashboard: ["M3 3h8v8H3z", "M13 3h8v8h-8z", "M3 13h8v8H3z", "M13 13h8v8h-8z"],
-  lines: ["M2 9h5v6H2z", "M10 9h5v6h-5z", "M18 9h4v6h-4z", "M7 12h3", "M15 12h3"],
-  sales: ["M5 3h14v18H5z", "M8 7h8", "M8 11h8", "M8 15h5"],
-  warehouse: ["M3 10 12 3l9 7v11H3z", "M8 21v-8h8v8", "M8 17h8"],
-  orders: ["M8 4h8", "M9 3h6v3H9z", "M7 5H5v16h14V5h-2", "M8 11h8", "M8 15h8", "M8 19h5"],
-  planning: ["M3 5h18v16H3z", "M3 10h18", "M8 3v4", "M16 3v4", "M7 15h4", "M14 15h3"],
-  products: ["M3 7 12 3l9 4v10l-9 4-9-4z", "M3 7l9 4 9-4", "M12 11v10"],
-  downtime: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M10 9v6", "M14 9v6"],
-  maintenance: ['M14 6a5 5 0 0 0-6 6L3 17a3 3 0 0 0 4 4l5-5a5 5 0 0 0 6-6l-3 3-4-4z'],
-  reports: ["M4 20V10h4v10", "M10 20V5h4v15", "M16 20v-8h4v8", "M3 20h18"],
-  employees: ["M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M2 20v-2a7 7 0 0 1 14 0v2", "M17 5a4 4 0 0 1 0 7", "M19 14a6 6 0 0 1 3 5v1"],
-  roles: ["M5 4h14v16H5z", "M9 9a2 2 0 1 0 4 0 2 2 0 0 0-4 0z", "M8 16a3 3 0 0 1 6 0", "M16 9h1", "M16 13h1"],
-  settings: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M10 2h4l.5 2.3 1.5.7 2-.9 2.8 2.8-.9 2 .7 1.5L23 11v2l-2.4.5-.7 1.5.9 2-2.8 2.8-2-.9-1.5.7L14 22h-4l-.5-2.4-1.5-.7-2 .9-2.8-2.8.9-2-.7-1.5L1 13v-2l2.4-.6.7-1.5-.9-2L6 4.1l2 .9 1.5-.7z"],
-  support: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M5.6 5.6 9.2 9.2", "M14.8 14.8l3.6 3.6", "M18.4 5.6l-3.6 3.6", "M9.2 14.8l-3.6 3.6"],
-  audit: ["M6 3h9l4 4v14H6z", "M15 3v4h4", "M9 12h7", "M9 16h4", "M16 16l1.5 1.5L20 15"],
-  preview: ["M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z", "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"],
-};
-function SidebarIcon({ name }: { name: string }) {
-  return <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {(sidebarIconPaths[name] || sidebarIconPaths.dashboard).map((path, index) => <path key={index} d={path} />)}
-  </svg>;
-}
 export default function FactoryApp() {
   const [lang, setLang] = useState<Language>("en"),
     [dirtyLayout, setDirtyLayout] = useState(false),
@@ -103,8 +78,11 @@ export default function FactoryApp() {
     [lineManagementMachineId, setLineManagementMachineId] = useState<string | null>(null),
     [supportFactory, setSupportFactory] = useState(""),
     [center, setCenter] = useState<Row | null>(null);
+  const [outputDestination,setOutputDestination]=useState<OutputDestination|null>(null);
+  useEffect(()=>setOutputDestination(null),[snapshot?.factory?.id]);
   const [planningItemId, setPlanningItemId] = useState<string | null>(null);
   const [loadNotice, setLoadNotice] = useState("");
+  const [languageLoaded, setLanguageLoaded] = useState(false);
   const [downtimeEventId,setDowntimeEventId] = useState<string | null>(null);
   const navigationOverlay = useNavigationOverlay(mobile, setMobile, setSidebarCollapsed);
   const dictionary: Record<string, string> = lang === "ar" ? ar : en;
@@ -154,6 +132,9 @@ export default function FactoryApp() {
   }, [supportFactory]);
   useEffect(() => {
     setLang(localStorage.getItem("factory-language") === "ar" ? "ar" : "en");
+    setLanguageLoaded(true);
+  }, []);
+  useEffect(() => {
     void load();
     const timer = setInterval(() => {
       if (!document.hidden) void load();
@@ -161,9 +142,24 @@ export default function FactoryApp() {
     return () => clearInterval(timer);
   }, [load]);
   useEffect(() => {
+    const restore = () => {
+      const state=window.history.state,known=[...primary,...admin,'lines','productionHistory','productionCorrections'];
+      const requested=new URLSearchParams(window.location.search).get('view');
+      setView(state&&known.includes(state.factoryLeanView)?state.factoryLeanView:requested&&known.includes(requested)?requested:'lines');
+      setHistoryOpen(state?.factoryLeanHistory===true);
+      setHistoryMode(state?.historyMode==='quality'?'quality':'production');
+      setLineManagement(state?.lineManagement===true);
+      setWarehouseSection(state?.warehouseSection==='requests'?'requests':'inventory');
+      if(!state?.factoryLeanHistory)requestAnimationFrame(()=>window.scrollTo(0,historyScroll.current));
+    };
+    restore();
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, []);
+  useEffect(() => {
     if (!snapshot?.factory) return;
     const allowed = (page: string) => can(page);
-    if (!allowed(view)) {
+    if (!allowed(view) && view !== 'productionHistory') {
       const first = [...primary, ...admin].find(allowed);
       if (first) setView(first);
     }
@@ -174,10 +170,11 @@ export default function FactoryApp() {
     return () => window.removeEventListener("factory-error", handler);
   }, []);
   useEffect(() => {
+    if (!languageLoaded) return;
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
     localStorage.setItem("factory-language", lang);
-  }, [lang]);
+  }, [lang, languageLoaded]);
   useEffect(() => {
     if (notice !== 'saved') return;
     const timer = setTimeout(() => setNotice(current => current === 'saved' ? '' : current), 3000);
@@ -209,17 +206,37 @@ export default function FactoryApp() {
       throw new Error(key);
     }
   }
-  const props = snapshot ? { snapshot: previewMode === "full" ? snapshot : { ...snapshot, permissions: visiblePermissions }, t, lang, command, can } : null;
+  const props = snapshot ? { snapshot: previewMode === "full" ? snapshot : { ...snapshot, permissions: visiblePermissions }, t, lang, command, can,
+    onLanguageChange:()=>setLang(value=>value==='en'?'ar':'en'),refreshSnapshot:load,
+    onOutputRelated:(d:OutputDestination)=>{if(outputDestinationAllowed(d,String(snapshot.factory?.id||''),can))setOutputDestination(d);},
+    onProductionHistoryOpen:(mode:'production'|'quality'='production')=>{if(!can(mode==='quality'?'quality':'orders'))return;historyScroll.current=window.scrollY;setHistoryMode(mode);setHistoryOpen(true);const url=new URL(window.location.href);url.searchParams.set('view','productionHistory');window.history.replaceState({...window.history.state,factoryLeanView:view},'',window.location.href);window.history.pushState({factoryLeanView:view,factoryLeanHistory:true,historyMode:mode},'',url);} } : null;
   const previewHome = can("lines") ? "lines" : [...primary, ...admin].find((page) => can(page)) || "lines";
-  const navigate = (x: string) => {
+  const [correctionRevision,setCorrectionRevision]=useState(0);
+  const correctionPending=useCorrectionPending(String(snapshot?.factory?.id||''),snapshot?.user.id||'',can('orders','view')&&can('orders','approve'),String(snapshot?.fetchedAt)+'|'+view+'|'+correctionRevision);
+  const [historyOpen,setHistoryOpen]=useState(false),[historyMode,setHistoryMode]=useState<'production'|'quality'>('production');
+  const [warehouseSection,setWarehouseSection]=useState<'inventory'|'requests'>('inventory');
+  const historyScroll=useRef(0);
+  const navigate = (x: string, warehouseWorkspace?:'inventory'|'requests') => {
     x = x === "dashboard" ? "lines" : x === "unfinishedProducts" ? "warehouse" : x === "materialRequests" ? "orders" : x;
-    if (previewMode !== "full" && !can(x)) return;
-    if (dirtyLayout && !confirm(t("discardChanges"))) return;
+    if (previewMode !== "full" && !can(x)) return false;
+    if (dirtyLayout && !confirm(t("discardChanges"))) return false;
+    setSidebarCollapsed(true);
+    setMobile(false);
+    if(x==='productionHistory'&&view!=='productionHistory'){props?.onProductionHistoryOpen?.();return;}
+    setHistoryOpen(false);
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', x);
+    const nextWarehouse=warehouseWorkspace||warehouseSection;
+    window.history.replaceState({...window.history.state,factoryLeanView:view,lineManagement,warehouseSection},'',window.location.href);
+    if (url.href !== window.location.href || (x==='warehouse'&&nextWarehouse!==warehouseSection))
+      window.history.pushState({factoryLeanView:x,warehouseSection:nextWarehouse}, '', url);
+    if(warehouseWorkspace)setWarehouseSection(warehouseWorkspace);
     setView(x);
     if (x !== "planning") setPlanningItemId(null);
     setLineManagement(false);
     setMobile(false);
     setNotice("");
+    return true;
   };
   useEffect(() => {
     const open = (event: Event) => {
@@ -328,6 +345,7 @@ export default function FactoryApp() {
             className={`sidebar${!sidebarCollapsed ? ' is-expanded' : ''}${mobile ? ' is-open' : ''}`}
             role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-label={t('menu')}
             onPointerEnter={navigationOverlay.onPointerEnter} onPointerLeave={navigationOverlay.onPointerLeave}
+            onScroll={navigationOverlay.onScroll}
             onFocusCapture={navigationOverlay.onFocusCapture} onBlurCapture={navigationOverlay.onBlurCapture}
             onKeyDown={navigationOverlay.onKeyDown}>
             <button
@@ -370,60 +388,13 @@ export default function FactoryApp() {
                 <SidebarIcon name="platform" /><span className="nav-label">{t("platformDashboard")}</span>
               </button>
             )}
-            <div className="nav-section-label">{t("operations")}</div>
-            <nav aria-label={t("operations")}>
-              {primary.map(
-                (x) =>
-                  can(x) && (
-                    <button
-                      key={x}
-                      className={view === x ? "nav-active" : ""}
-                      title={t(x)}
-                      aria-label={t(x)}
-                      aria-current={view === x ? 'page' : undefined}
-                      onClick={() => navigate(x)}
-                    >
-                      <SidebarIcon name={x} />
-                      <span className="nav-label">{t(x)}</span>
-                      {x === "downtime" && (
-                        <small>
-                          {snapshot.tables.downtime_events?.filter(
-                            (e) => !e.ended_at,
-                          ).length || 0}
-                        </small>
-                      )}
-                    </button>
-                  ),
-              )}
-            </nav>
-            <div className="nav-section-label">{t("administration")}</div>
-            <nav aria-label={t("administration")}>
-              {admin.map(
-                (x) =>
-                  can(x) && (
-                    <button
-                      key={x}
-                      className={view === x ? "nav-active" : ""}
-                      title={t(x)}
-                      aria-label={t(x)}
-                      aria-current={view === x ? 'page' : undefined}
-                      onClick={() => navigate(x)}
-                    >
-                      <SidebarIcon name={x} />
-                      <span className="nav-label">{t(x)}</span>
-                    </button>
-                  ),
-              )}
-            </nav>
-            <details className="future">
-              <summary>{t("roadmap")}</summary>
-              {future.map((x) => (
-                <div key={x}>
-                  {t(x)}
-                  <small>{t("later")}</small>
-                </div>
-              ))}
-            </details>
+            <button className="sidebar-toggle" type="button" aria-label={t(sidebarCollapsed?'expandNavigation':'collapseNavigation')}
+              aria-expanded={!sidebarCollapsed} aria-controls="factory-navigation" onClick={()=>setSidebarCollapsed(value=>!value)}>
+              <span aria-hidden="true">{sidebarCollapsed?'»':'«'}</span><span className="nav-label">{t('collapseNavigation')}</span>
+            </button>
+            <OperationalNavigation can={can} t={t} expanded={!sidebarCollapsed||mobile} onExpand={()=>setSidebarCollapsed(false)}
+              active={historyOpen?'productionHistory':view==='lines'?(lineManagement?'manageLinesMachines':'floor'):view==='productionCorrections'?'orders':view==='warehouse'?(warehouseSection==='requests'?'warehouseRequests':'warehouse'):view}
+              onNavigate={destination=>{if(destination==='manageLinesMachines'){if(can('lines','edit')||can('centers','edit')||can('lines','create')||can('centers','create')){if(navigate('lines'))setLineManagement(true);}return;}if(destination==='warehouse'||destination==='warehouseRequests'){navigate('warehouse',destination==='warehouse'?'inventory':'requests');}else navigate(destination==='floor'?'lines':destination);}}/>
             {snapshot.testingPreviewEligible && <div className="sidebar-preview">
               <label htmlFor="testing-view-as">{t("viewAs")}</label>
               <select id="testing-view-as" value={previewMode} onChange={(event) => changePreview(event.target.value)}
@@ -465,7 +436,7 @@ export default function FactoryApp() {
               </button>
             </footer>
           </aside>
-          <div className="workspace">
+          <div className="workspace" inert={mobile||undefined}>
             <header className="topbar">
               <button
                 className="menu-button"
@@ -479,7 +450,7 @@ export default function FactoryApp() {
               </button>
               <div>
                 <p className="breadcrumb">{String(snapshot.factory.name)}</p>
-                <h1>{t(view === 'lines' && !lineManagement ? 'floor' : view)}</h1>
+                <h1>{t(historyOpen?'productionHistory':view === 'lines' && !lineManagement ? 'floor' : view)}</h1>
               </div>
               <div className="topbar-actions">
                 <span className="updated">
@@ -515,9 +486,10 @@ export default function FactoryApp() {
                   </button>
                 </div>
               )}
-              {props &&
+              {historyOpen&&props&&<ProductionRecording {...props} surface="history" historyMode={historyMode} onHistoryBack={()=>window.history.back()}/>}
+              <div hidden={historyOpen}>{props &&
                 (can(view) ? (
-                  view === 'quality' ? <Quality key={String(snapshot.factory.id)} {...props}/> : view === 'lean' ? <LeanAnalysis key={String(snapshot.factory.id)} {...props}/> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'quality' ? <Quality key={String(snapshot.factory.id)} {...props}/> : view === 'lean' ? <><div className="module-navigation">{can('downtime')&&<button onClick={()=>navigate('downtime')}><SidebarIcon name="downtime"/>{t('downtime')}</button>}</div><LeanAnalysis key={String(snapshot.factory.id)} {...props}/></> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} initialWorkspace={warehouseSection} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}
@@ -525,6 +497,7 @@ export default function FactoryApp() {
                     />
                   ) : view === "downtime" ? (
                     <>
+                      {can('lean')&&<button className="module-navigation-back" onClick={()=>navigate('lean')}>{t('back')} · {t('lean')}</button>}
                       <DowntimeCapture {...props} initialEventId={downtimeEventId} onReferenceClose={() => setDowntimeEventId(null)} />
                       <details className="panel"><summary>{t("impactRankedDowntime")}</summary>
                         <DowntimeAnalysis {...props} />
@@ -538,7 +511,7 @@ export default function FactoryApp() {
                         {...props}
                         onManage={(machineId) => {
                           setLineManagementMachineId(machineId || null);
-                          setLineManagement(true);
+                          if(can('lines','edit')||can('centers','edit')||can('lines','create')||can('centers','create'))setLineManagement(true);
                         }}
                       />
                     ) : (
@@ -559,10 +532,12 @@ export default function FactoryApp() {
                         <Administration {...props} view="roles" />
                       </details>
                     </>
-                  ) : view === "orders" ? (
-                    <><QualityNotifications {...props} onPlanItem={itemId=>{setPlanningItemId(itemId);setView('planning');}}/><ProductionOrdersV2 {...props} onPlanItem={(itemId) => {
+                  ) : view === "orders" || view === "productionCorrections" ? (
+                    <><div className="pc-production-tabs" role="group" aria-label={t('production')}><button aria-pressed={view==='orders'} onClick={()=>navigate('orders')}>{t('orders')}</button>{(can('orders','edit')||can('orders','approve'))&&<button className={correctionPending!==null?'pc-needs-approval':undefined} aria-pressed={view==='productionCorrections'} onClick={()=>navigate('productionCorrections')}>{t('productionCorrections')}{correctionPending!==null&&<span className="pc-pending-count" aria-label={t('pcStatus_PENDING')}> {correctionPending.toLocaleString(lang)} · {t('pcStatus_PENDING')}</span>}</button>}</div>{view==='productionCorrections'?<ProductionCorrections {...props} onChanged={()=>setCorrectionRevision(value=>value+1)}/>:<>{can('orders','edit')&&<details className="planning-support"><summary>{t('materialPreparationWindow')}</summary><MaterialPreparationWindow props={props}/></details>}<QualityNotifications {...props} onPlanItem={itemId=>{setPlanningItemId(itemId);setView('planning');}}/><ProductionOrdersV2 {...props} onPlanItem={(itemId) => {
                       setPlanningItemId(itemId); setView("planning");
-                    }} /></>
+                    }} /></>}</>
+                  ) : view === "productionHistory" ? (
+                    <ProductionRecording {...props} surface="history" onHistoryBack={()=>navigate('lines')}/>
                   ) : view === "planning" ? (
                     <ProductionPlanning key={planningItemId || "planning"} {...props} initialItemId={planningItemId} />
                   ) : primary.includes(view) ? (
@@ -572,9 +547,10 @@ export default function FactoryApp() {
                   )
                 ) : (
                   <div className="panel">{t("noPermission")}</div>
-                ))}
+                ))}</div>
             </main>
           </div>
+          {outputDestination&&props&&outputDestination.factory===String(snapshot?.factory?.id||'')&&<ManufacturedOutputExplorer {...props} key={JSON.stringify(outputDestination)} target={outputDestination} onClose={()=>setOutputDestination(null)} onSchedule={id=>{setOutputDestination(null);setPlanningItemId(id);setView('planning');}}/>}
           {center && props && (
             <CenterDetails
               {...props}

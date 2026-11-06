@@ -1,5 +1,6 @@
+import {WarehouseDialog as Dialog} from './WarehouseUi';
 import { useState } from 'react';
-import { Dialog, Field } from '@/components/ui';
+import { Field } from '@/components/ui';
 import type { FeatureProps } from './types';
 import { useSupply, useSupplyCommand, type SupplyRow } from './useSupply';
 
@@ -15,7 +16,7 @@ export default function WarehousePurchase(props: FeatureProps & { onClose:()=>vo
  const options=[...(read.data?.rows||[]),{id:'other',name:t('purchaseOther')}];
  const units=other?['piece','kg','meter']:choice?.unit?[String(choice.unit)]:choice?.item_type==='MANUFACTURED_INTERMEDIATE'?['kg']:['piece','meter'];
  function choose(row:SupplyRow){setChoice(row);setSearch('');setPage(1);setOpen(false);setActive(-1);setUnit(String(row.unit||(row.item_type==='MANUFACTURED_INTERMEDIATE'?'kg':'piece')));}
- return <Dialog title={t('purchaseCreate')} t={t} onClose={()=>{if(!action.busy)onClose();}}>
+ return <Dialog {...props} title={t('purchaseCreate')} t={t} onClose={()=>{if(!action.busy)onClose();}}>
   <form onSubmit={async e=>{e.preventDefault();if(!choice||!props.can('warehouse','edit')||(other&&!details.trim()))return;
    if(await action.run('purchase_inventory',{item:choice.id,unit,quantity:Number(quantity),details:details.trim()})){onChanged();onClose();}
   }}><fieldset disabled={action.busy} className="fulfillment-form">
@@ -33,7 +34,7 @@ export default function WarehousePurchase(props: FeatureProps & { onClose:()=>vo
       else if(e.key==='Escape'&&open){e.preventDefault();setOpen(false);setActive(-1);}}}/>
     <span className="orders-v2-product-caret" aria-hidden="true">⌄</span>
     {open&&<div className="warehouse-purchase-options"><ul id="warehouse-purchase-options" className="orders-v2-product-options" role="listbox" aria-label={t('item')}>
-     {!read.busy&&!read.data?.rows.length&&<li role="presentation">{t('noResults')}</li>}
+     {read.data&&!read.data.rows.length&&<li role="presentation">{t('noResults')}</li>}
      {options.map((row,index)=><li key={String(row.id)} id={'warehouse-purchase-option-'+String(row.id)} role="option" aria-selected={row.id===choice?.id}
       className={index===active?'is-active':''} onPointerDown={e=>e.preventDefault()} onClick={()=>choose(row)}>{name(row)}{row.code?<small>{String(row.code)}</small>:null}</li>)}
     </ul>
@@ -44,7 +45,7 @@ export default function WarehousePurchase(props: FeatureProps & { onClose:()=>vo
    <Field label={t('warehousePurchaseDetails')}><textarea required={other} value={details} maxLength={4000} onChange={e=>setDetails(e.target.value)}/></Field>
    {!choice?.unit&&choice&&!other&&<p className="muted">{t('warehousePurchaseUnitHelp')}</p>}
    {other&&<p className="muted">{t('purchaseOtherHelp')}</p>}
-   {read.busy&&<p role="status">{t('loading')}</p>}{(read.error||action.error)&&<p role="alert">{t(read.error||action.error)}</p>}
+   {read.loading&&<p role="status">{t('loading')}</p>}{(read.error||action.error)&&<p role="alert">{t(read.error||action.error)}</p>}
    <button className="primary" disabled={!choice||!quantity||Number(quantity)<=0||(other&&!details.trim())||read.busy||!props.can('warehouse','edit')}>{t('purchaseConfirm')}</button>
   </fieldset></form>
  </Dialog>;

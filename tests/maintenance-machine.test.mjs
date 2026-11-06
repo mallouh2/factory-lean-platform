@@ -11,7 +11,7 @@ import {evaluateFlow} from '../src/utils/production-flow.mjs';
 const require=createRequire(import.meta.url);
 const bundles=await Promise.all(['FactoryFloorV2','CenterDetails','MaintenanceRequest'].map(async name =>
  (await build({entryPoints:[`src/features/${name}.tsx`],bundle:true,platform:'node',format:'cjs',packages:'external',
- external:['@/hooks/useHistoryData'],write:false,logLevel:'silent'})).outputFiles[0].text));
+ external:['@/hooks/useHistoryData'],outdir:"test-output",write:false,logLevel:'silent'})).outputFiles[0].text));
 function fixture(index,{state='running',lang='en',create=true,rows=[],overrides={}}={}){
  const snapshot=floorSnapshot();snapshot.tables.work_centers[0].status=state;
  if(state==='stopped')snapshot.tables.downtime_events.push({id:'STOP',work_center_id:'M1',started_at:'2026-10-03T07:00:00Z'});

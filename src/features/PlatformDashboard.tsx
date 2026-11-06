@@ -1,3 +1,4 @@
+import FactoryTimezone from '@/components/FactoryTimezone';
 import { useState } from "react";
 import type { FeatureProps } from "./types";
 import { Field, formatTime } from "@/components/ui";
@@ -54,13 +55,7 @@ export default function PlatformDashboard({
           <Field label={t("industry")}>
             <input name="industry" maxLength={120} />
           </Field>
-          <Field label={t("timezone")}>
-            <select name="timezone" defaultValue="Asia/Qatar">
-              {Intl.supportedValuesOf("timeZone").map((z) => (
-                <option key={z}>{z}</option>
-              ))}
-            </select>
-          </Field>
+          <FactoryTimezone lang={lang} t={t}/>
           <button className="primary" disabled={busy}>
             {t("createFactory")}
           </button>

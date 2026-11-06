@@ -1,3 +1,4 @@
+import {formatLocalInput,localDateTimeToUtc} from '@/utils/manufacturing.mjs';
 import { useRef, useState } from 'react';
 import { Field, localName, formatTime } from '@/components/ui';
 import { useHistoryData } from '@/hooks/useHistoryData';
@@ -7,12 +8,12 @@ import type { Row } from '@/types';
 function Observation({entry,causes,...props}:FeatureProps & {entry:Row;causes:Row[]}){
  const {snapshot:s,t,lang,command}=props;
  const [cause,setCause]=useState(''),[note,setNote]=useState(''),[response,setResponse]=useState(''),[downtime,setDowntime]=useState('');
- const [at,setAt]=useState(new Date(Date.parse(String(entry.created_at))-new Date().getTimezoneOffset()*60000).toISOString().slice(0,23));
+ const [at,setAt]=useState(formatLocalInput(String(entry.created_at),String(s.factory?.timezone||'UTC'),true));
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(false);
  const request=useRef(crypto.randomUUID()),id=useRef(crypto.randomUUID());
  if(saved)return <p role="status">{t('leanObservationSaved')}</p>;
  return <form className="recording-form" onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');try{
-  await command('lean_command',{factory:s.factory?.id,request_id:request.current,operation:'scrap_observation',payload:{id:id.current,entry_id:entry.id,occurred_at:new Date(at).toISOString(),preliminary_cause_id:cause||null,observation:note,response,downtime_id:downtime||null}});setSaved(true);
+  await command('lean_command',{factory:s.factory?.id,request_id:request.current,operation:'scrap_observation',payload:{id:id.current,entry_id:entry.id,occurred_at:localDateTimeToUtc(at,String(s.factory?.timezone||'UTC')),preliminary_cause_id:cause||null,observation:note,response,downtime_id:downtime||null}});setSaved(true);
  }catch(e){setError(e instanceof Error?e.message:'error');}finally{setBusy(false);}}}>
   <p>{t('leanAbnormalPrompt')} · <bdi>{formatTime(entry.created_at,lang,String(s.factory?.timezone||'UTC'))}</bdi> · {Number(entry.effective_scrap_kg).toLocaleString(lang)} kg</p>
   <fieldset disabled={busy}><div className="form-grid">

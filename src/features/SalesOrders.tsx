@@ -15,6 +15,8 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]), [editLines, setEditLines] = useState<SalesLine[]>([]);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirming,setConfirming]=useState<SalesOrder|null>(null);
+  const preview=useFulfillment<{rows:{id:string;unit:string;ordered:string;available:string;to_reserve:string;incoming:string;additional:string}[]}>(s,'confirmation',1,!!confirming,{order:confirming?.id||''});
   const retry = useRef<{ key: string; id: string } | null>(null);
   const zone = String(s.factory?.timezone || 'UTC');
   const products = (s.tables.products || []).filter(product => product.stage === 'finished');
@@ -24,7 +26,7 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
     setBusy(true); setNotice('');
     try {
       await command(name, { factory: s.factory?.id, ...args, request_id: retry.current.id });
-      retry.current = null; read.refresh(); setCreating(false); setEditing(null); setNotice('saved');
+      retry.current = null; read.refresh(); setCreating(false); setEditing(null);setConfirming(null); setNotice('saved');
     } catch (cause) { setNotice(cause instanceof Error ? cause.message : 'error'); }
     finally { setBusy(false); }
   }
@@ -42,7 +44,7 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
         setCreating(true); setEditing(null); setCustomer(''); setRequested(''); setBuffer(String(s.factory?.delivery_buffer_days ?? 2)); setNotes(''); setLines([emptyLine()]); setNotice('');
       }}>{t('salesCreate')}</button>}<button onClick={read.refresh}>{t('refresh')}</button></div>
     {(read.error || notice) && <p role="alert">{t(read.error || notice)}</p>}
-    {read.busy && <p role="status">{t('loading')}</p>}
+    {read.loading && <p role="status">{t('loading')}</p>}
     {read.data && !read.data.rows.length && <p className="empty">{t('salesEmpty')}</p>}
     <div className="fulfillment-orders">{read.data?.rows.map(order => <article className="fulfillment-order" key={order.id} data-risk={order.risk}>
       <header><div><strong><bdi dir="ltr">{order.code}</bdi></strong><p dir="auto">{order.customer_reference || t('salesNoReference')}</p></div>
@@ -63,16 +65,21 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
         <span>{t('productionRequired')}: {line.production_required}</span><span>{t('stockDispatched')}: {line.dispatched_quantity}</span>
         {Number(line.external_shortage) > 0 && <span>{t('externalReplenishment')}: {line.external_shortage} {t(line.unit)}</span>}
         {Number(line.source_decision_quantity) > 0 && <span>{t('sourcingDecision')}: {line.source_decision_quantity} {t(line.unit)}</span>}
-        <span>{t(line.release_when_ready ? 'releaseWhenReady' : 'holdCompleteOrder')}</span>
+        <span>{t(order.status==='completed'?'salesDeliveryConfirmed':'salesWarehouseDispatch')}</span>
       </div>)}</div>
       <footer>{order.status === 'draft' && can('sales_orders', 'approve') && <button className="primary" disabled={busy}
-        onClick={() => run('approve_sales_order', { sales_order: order.id })}>{t('salesApprove')}</button>}
+        onClick={() => {setNotice('');setConfirming(order);}}>{t('salesApprove')}</button>}
         {!['completed', 'cancelled'].includes(order.status) && can('sales_orders', 'edit') && (order.status === 'draft' || can('sales_orders', 'approve')) &&
           <button disabled={busy} onClick={() => edit(order)}>{t('edit')}</button>}
-        <span className="muted">{t('salesWarehouseDispatch')}</span></footer>
+        <span className="muted">{t(order.status==='completed'?'salesDeliveryConfirmed':'salesWarehouseDispatch')}</span></footer>
     </article>)}</div>
     <nav className="fulfillment-pagination" aria-label={t('salesOrders')}><button disabled={page === 1 || read.busy} onClick={() => setPage(value => value - 1)}>{t('previous')}</button>
       <span>{page}</span><button disabled={read.busy || page * 25 >= (read.data?.total || 0)} onClick={() => setPage(value => value + 1)}>{t('next')}</button></nav>
+    {confirming&&<Dialog title={t('salesApprove')} t={t} busy={busy} onClose={()=>{if(!busy)setConfirming(null);}}><p><bdi>{confirming.code}</bdi> · {confirming.customer_reference}</p>
+     {preview.loading&&<p role="status">{t('loading')}</p>}{(preview.error||notice)&&<p role="alert">{t(preview.error||notice)}</p>}
+     {preview.data?.rows.map(line=><section key={line.id}><strong>{(()=>{const p=confirming.lines.find(l=>l.id===line.id);return lang==='ar'?p?.product_name_ar||p?.product_name:p?.product_name;})()}</strong><dl className="quality-context">{[[t('quantity'),line.ordered],[t('available'),line.available],[lang==='ar'?'سيتم حجزه':'Will be reserved',line.to_reserve],[t('stockIncoming'),line.incoming],[t('productionRequired'),line.additional]].map(([name,value])=><div key={name}><dt>{name}</dt><dd><bdi>{value} {t(line.unit)}</bdi></dd></div>)}</dl></section>)}
+     <p>{lang==='ar'?'يُعاد التحقق من الكميات عند تأكيد الطلب.':'Availability is checked again when you confirm the order.'}</p><button className="primary" disabled={busy||preview.busy||!!preview.error||!preview.data} onClick={()=>void run('approve_sales_order',{sales_order:confirming.id})}>{t('salesApprove')}</button>
+    </Dialog>}
     {(creating || editing) && <Dialog title={t(creating ? 'salesCreate' : 'edit')} t={t} onClose={() => { if (!busy) { setCreating(false); setEditing(null); } }}>
       <form onSubmit={event => { event.preventDefault(); const payload = dates();
         if (requested && !payload.requested_delivery) { setNotice('planningInvalidStart'); return; }
@@ -101,7 +108,7 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
         </div>)}
         {creating && <button type="button" disabled={lines.length >= 50} onClick={() => setLines(value => [...value, emptyLine()])}>{t('addProduct')}</button>}
         {editing && <Field label={t('reason')}><textarea required minLength={3} maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
-        {notice && <p role="alert">{t(notice)}</p>}<button className="primary">{t('save')}</button>
+        {notice && <p role="alert">{t(notice)}</p>}<button className="primary">{creating?(lang==='ar'?'حفظ مسودة':'Save Draft'):t('save')}</button>
         {editing && !confirmCancel && <button type="button" disabled={reason.trim().length < 3}
           onClick={() => setConfirmCancel(true)}>{t('salesCancel')}</button>}
         {editing && confirmCancel && <div className="fulfillment-cancel-confirm" role="group" aria-label={t('salesCancel')}>

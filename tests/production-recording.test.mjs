@@ -8,7 +8,7 @@ import { build } from "esbuild";
 import en from "../src/locales/en.json" with {type:"json"};
 import ar from "../src/locales/ar.json" with {type:"json"};
 const require=createRequire(import.meta.url);
-const bundle=await build({entryPoints:["src/features/ProductionRecording.tsx"],bundle:true,platform:"node",format:"cjs",packages:"external",write:false,logLevel:"silent"});
+const bundle=await build({entryPoints:["src/features/ProductionRecording.tsx"],bundle:true,platform:"node",format:"cjs",packages:"external",outdir:"test-output",write:false,logLevel:"silent"});
 const module={exports:{}};
 new Function("require","module","exports",bundle.outputFiles[0].text)(require,module,module.exports);
 const snapshot={user:{id:"actor"},factory:{id:"f",timezone:"UTC"},tables:{

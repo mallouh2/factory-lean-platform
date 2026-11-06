@@ -1,0 +1,7 @@
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{spawnSync}from'node:child_process';import{verifyDatabase,databaseGuard}from'../production-recording-full-app/local-policy.mjs';
+const root=fs.readFileSync(path.join(process.env.TEMP,'FactoryLean-OperationalUX-SQL-location.txt'),'utf8').trim(),c=JSON.parse(fs.readFileSync(path.join(root,'runtime.json'),'utf8').replace(/^\ufeff/,''));assert.equal(c.databasePort,55498);
+function sql(q){return spawnSync(path.join(c.bin,'psql.exe'),['-X','-qAt','-h','127.0.0.1','-p','55498','-U','quality_fixture','-d',c.database,'-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',windowsHide:true});}
+const target=sql("select json_build_object('host',inet_server_addr(),'port',inet_server_port(),'database',current_database(),'data',current_setting('data_directory'))");assert.equal(target.status,0,target.stderr);verifyDatabase(c,JSON.parse(target.stdout));
+const files=['tests/warehouse-final/label-reader.sql','tests/unified-ux/wip-reader.sql','tests/unified-ux/wip-hold.sql','tests/operational-ux/dispatch.sql','tests/operational-ux/dispatch-safety.sql','tests/operational-ux/dispatch-revision-permissions.sql'],results=[];
+for(const file of files){const r=sql(databaseGuard(c)+fs.readFileSync(file,'utf8'));results.push({file,status:r.status===0?'PASS':'FAIL',output:r.stdout.trim(),error:r.stderr.trim()});}
+fs.writeFileSync(path.join(root,'warehouse-final-affected-sql.json'),JSON.stringify(results,null,2));console.log(results);process.exitCode=results.some(r=>r.status==='FAIL')?1:0;

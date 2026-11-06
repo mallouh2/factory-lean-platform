@@ -1,6 +1,7 @@
 /** Planning is derived from existing order fields; no second order status is stored. */
 import { formatLocalInput, localDateTimeToUtc } from "./manufacturing.mjs";
 import { productColor } from "./product-colors.mjs";
+import { maintenanceSlots } from './maintenance-planning-view.mjs';
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -58,10 +59,12 @@ export function workingDurationMs(from, until, calendar, zone = "UTC") {
 }
 
 export function finishAfterWorkingMs(start, duration, calendar, zone = "UTC") {
+  if (!Number.isFinite(start) || !Number.isFinite(duration) || duration < 0) return NaN;
   if (!calendar) return start + duration;
   let remaining = duration;
   let cursor = nextWorkingTime(start, calendar, zone);
   for (let i = 0; i < 4000; i++) {
+    if (!Number.isFinite(cursor)) return NaN;
     const day = localDay(cursor, zone);
     const window = dayWindow(day, calendar, zone);
     if (window && cursor < window.finish) {
@@ -156,6 +159,10 @@ export function durationMs(order, line, centers, capabilities) {
 
 /** @param {{mask:number,start:string,end:string}|null} calendar */
 export function plannedInterval(order, line, centers, capabilities, calendar = null, zone = "UTC") {
+  // Protected operational projection is capacity truth; stored Planning times remain unchanged.
+  if(order.operational_occupancy) return {order,
+    start:order.operational_occupancy.start===null?-Infinity:Date.parse(order.operational_occupancy.start),
+    finish:order.operational_occupancy.finish===null?Infinity:Date.parse(order.operational_occupancy.finish)};
   const start = Date.parse(String(order.start_time || ""));
   if (!Number.isFinite(start)) return null;
   const recordedFinish = Date.parse(String(order.expected_finish || ""));
@@ -170,14 +177,15 @@ export function plannedInterval(order, line, centers, capabilities, calendar = n
 /**
  * @param {string|null} [excludeId]
  * @param {{mask:number,start:string,end:string}|null} calendar
+ * @param {unknown} [product]
  */
 export function sortedLineSchedule(line, orders, centers, capabilities, excludeId = null,
-  calendar = null, zone = "UTC") {
+  calendar = null, zone = "UTC", maintenance = [], product = null) {
   return orders.filter((order) => ["planned", "active"].includes(order.status) &&
     String(order.line_id) === String(line.id) && String(order.id) !== String(excludeId))
     .map((order) => plannedInterval(order, line, centers, capabilities, calendar, zone) ||
       { order, start: Date.now(), finish: null, error: "planningUnknownBlock" })
-    .filter(Boolean).sort((a, b) => a.start - b.start);
+    .filter(Boolean).concat(maintenanceSlots(maintenance,line,product)).sort((a, b) => a.start - b.start);
 }
 
 /** Capacity is working time inside the visible window; overlapping reservations add up. */
@@ -187,6 +195,19 @@ export function lineCapacity(schedule, from, until, calendar = null, zone = "UTC
   const availableMs = workingDurationMs(from, until, calendar, zone);
   let bookedMs = 0;
   let incomplete = false;
+  // Combined maintenance/production capacity counts the union, not two resources of one booking.
+  if (schedule.some(slot => slot.maintenance || 'operational_occupancy' in slot.order)) {
+    const intervals = schedule.filter(slot => slot.start < until && (slot.finish === null || slot.finish > from))
+      .map(slot => { if (!Number.isFinite(slot.finish)) incomplete = true;
+        return { start:Math.max(from,slot.start),finish:Math.min(until,slot.finish ?? Infinity) }; })
+      .sort((a,b) => a.start-b.start);
+    let cursor = from;
+    for (const slot of intervals) { const start=Math.max(cursor,slot.start);
+      if (slot.finish>start) bookedMs+=workingDurationMs(start,slot.finish,calendar,zone);
+      cursor=Math.max(cursor,slot.finish); }
+    return {availableMinutes:availableMs/MINUTE,bookedMinutes:bookedMs/MINUTE,
+      percent:availableMs>0 ? bookedMs/availableMs*100 : null,incomplete};
+  }
   for (const slot of schedule) {
     if (!Number.isFinite(slot.finish)) {
       if (slot.start < until) incomplete = true;
@@ -240,7 +261,7 @@ export function firstAvailable(schedule, from, duration, until = from + 365 * 24
 
 /** @param {{mask:number,start:string,end:string}|null} calendar */
 export function proposeSchedule(order, line, start, orders, centers, capabilities, now = Date.now(),
-  calendar = null, zone = "UTC") {
+  calendar = null, zone = "UTC", maintenance = []) {
   if (order.status !== "planned" || Number(order.produced_quantity || 0) > 0)
     return { error: "planningAlreadyStarted" };
   const duration = durationMs(order, line, centers, capabilities);
@@ -249,7 +270,8 @@ export function proposeSchedule(order, line, start, orders, centers, capabilitie
   const placedStart = nextWorkingTime(start, calendar, zone);
   if (start < now - MINUTE) return { error: "planningInvalidStart" };
   const finish = finishAfterWorkingMs(placedStart, duration.totalMs, calendar, zone);
-  const schedule = sortedLineSchedule(line, orders, centers, capabilities, order.id, calendar, zone);
+  if (!Number.isFinite(finish)) return { error: "planningInvalidStart" };
+  const schedule = sortedLineSchedule(line, orders, centers, capabilities, order.id, calendar, zone, maintenance, order.product_id);
   if (schedule.some((slot) => slot.finish === null)) return { error: "planningUnknownBlock" };
   if (schedule.some((slot) => placedStart < slot.finish && finish > slot.start))
     return { error: "planningOverlap" };
@@ -267,7 +289,7 @@ export function deadlineStatus(finish, requiredBy, now = Date.now()) {
 
 /** Derived openings only. Every candidate is checked by the normal placement rules. */
 export function suggestPlanningSlots(order, request, lines, orders, centers, capabilities, options = {}) {
-  const { now = Date.now(), horizonDays = 28, limit = 3, calendar = null, zone = "UTC" } = options;
+  const { now = Date.now(), horizonDays = 28, limit = 3, calendar = null, zone = "UTC", maintenance = [] } = options;
   const until = now + horizonDays * DAY;
   const capable = capableLines(order, lines, centers, capabilities);
   if (!capable.length) return { suggestions: [], reason: "planningNoCapableLine", horizonDays };
@@ -278,14 +300,14 @@ export function suggestPlanningSlots(order, request, lines, orders, centers, cap
     const duration = durationMs(order, line, centers, capabilities);
     if (duration.error) continue;
     validRate = true;
-    const schedule = sortedLineSchedule(line, orders, centers, capabilities, order.id, calendar, zone);
+    const schedule = sortedLineSchedule(line, orders, centers, capabilities, order.id, calendar, zone, maintenance, order.product_id);
     const available = freeGaps(schedule, now, until);
     if (available.error) { unknownBlock = true; continue; }
     for (const gap of available.gaps) {
       const opening = firstAvailable([], gap.start, duration.totalMs, gap.finish, calendar, zone);
       if (opening.error || !Number.isFinite(opening.finish) || opening.finish > until) continue;
       const placement = proposeSchedule(order, line, opening.start, orders, centers, capabilities,
-        now, calendar, zone);
+        now, calendar, zone, maintenance);
       if (placement.error || placement.finish > gap.finish) continue;
       candidates.push({ lineId: String(line.id), start: placement.start, finish: placement.finish,
         setupMs: placement.setupMs, productionMs: placement.productionMs,
@@ -377,7 +399,7 @@ export function planningProductTones(products) {
 /** A drop and its ghost use the same capability, gap, and overlap rules. */
 export function previewPlacement(order, line, rawStart, orders, centers, capabilities, options = {}) {
   const { from = rawStart, until = rawStart + 7 * 24 * 60 * MINUTE,
-    increment = 15 * MINUTE, now = Date.now(), calendar = null, zone = "UTC" } = options;
+    increment = 15 * MINUTE, now = Date.now(), calendar = null, zone = "UTC", maintenance = [] } = options;
   const start = Math.round(rawStart / increment) * increment;
   const duration = durationMs(order, line, centers, capabilities);
   if (duration.error) return { error: duration.error, start, finish: start };
@@ -386,13 +408,13 @@ export function previewPlacement(order, line, rawStart, orders, centers, capabil
   const visual = { start: placedStart, requestedStart: start, finish,
     durationMs: duration.totalMs, productionMs: duration.productionMs,
     setupMs: duration.setupMs, rate: duration.rate };
-  const schedule = sortedLineSchedule(line, orders, centers, capabilities, order.id, calendar, zone);
+  const schedule = sortedLineSchedule(line, orders, centers, capabilities, order.id, calendar, zone, maintenance, order.product_id);
   const available = freeGaps(schedule, from, Math.max(until, finish));
   if (available.error) return { ...visual, error: available.error };
   if (!available.gaps.some((gap) => placedStart >= gap.start && finish <= gap.finish))
     return { ...visual, error: "planningNoFit" };
   return { ...visual, ...proposeSchedule(order, line, start, orders, centers, capabilities,
-    now, calendar, zone) };
+    now, calendar, zone, maintenance) };
 }
 
 // ---------------------------------------------------------------------------
@@ -413,4 +435,11 @@ export function wheelViewStart(viewStart, span, widthPx, deltaPx) {
 /** Zoom changes keep the window centered on the same period. */
 export function zoomViewStart(viewStart, currentSpan, nextSpan) {
   return viewStart + Math.round((currentSpan - nextSpan) / 2);
+}
+
+/** Timeline stays chronological LTR even in the Arabic shell. Rect includes horizontal scroll. */
+export function dragTimelineStart(from, until, clientX, left, width, grabOffset = 0) {
+  if (![from, until, clientX, left, width, grabOffset].every(Number.isFinite) || width <= 0 || until <= from)
+    return NaN;
+  return from + Math.max(0, Math.min(1, (clientX - left) / width)) * (until - from) - grabOffset;
 }

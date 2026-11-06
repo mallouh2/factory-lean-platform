@@ -1,3 +1,4 @@
+import {exactJsonNumbers} from './exact-json.mjs';
 const keys = ['request','product','unit','technician','shift','from','to','scrap','minimum_scrap','corrected','measurement_unit','scrap_metric','scrap_scope', ...['good','scrap','unfinished'].flatMap(k=>[`${k}_op`,`${k}_min`,`${k}_max`])];
 export function historyQuery(factory, filters, sort = 'date', direction = 'desc', page = 1) {
   const query = new URLSearchParams({factory, sort, direction, page:String(page)});
@@ -30,4 +31,19 @@ export function scrapPercentage(good,scrap,unfinished=0) {
 export function selectedHistoryValues(previous, visible, selected) {
   const onPage=new Set(visible);
   return [...new Set([...previous.filter(value=>!onPage.has(value)),...selected])];
+}
+
+// Preserve authoritative numeric text before the installed client parses legacy History and its KG supplement.
+// Integer navigation controls retain their existing types. Authentication, permissions and SQL are unchanged.
+export function historyFetch(fetcher=globalThis.fetch){
+ return async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url),response=await fetcher(input,init);
+  if(!response.ok||!['/rest/v1/rpc/production_history','/rest/v1/production_entries'].includes(url.pathname))return response;
+  const integers=new Set(['total','page','page_size','records','count','correction_count','correction_revision','revision']);
+  const body=JSON.parse(exactJsonNumbers(await response.text()),(key,value)=>{
+   if(integers.has(key)&&typeof value==='string'&&/^\d+$/.test(value)){const n=Number(value);if(!Number.isSafeInteger(n))throw Error('history_invalid');return n;}return value;
+  });
+  const headers=new Headers(response.headers);headers.delete('content-length');headers.delete('content-encoding');
+  return new Response(JSON.stringify(body),{status:response.status,statusText:response.statusText,headers});
+ };
 }

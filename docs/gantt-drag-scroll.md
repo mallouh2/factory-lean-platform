@@ -1,0 +1,16 @@
+# Gantt drag viewport and edge scrolling —3 November2026
+
+Local interaction fix only;4242 preview. No scheduling formula, permission, conflict, duration, lock or reason rule changed.
+
+## Causes and implementation
+The scheduled-bar focus handler unconditionally scrolled its detached caption into view on pointer focus. In the many-line fixture grabbing PO-0001116 moved windowY7420→11177. Caption reveal is now keyboard-focus-visible only; pointer grab7420→7420 and cancellation retain the viewport. Existing chronological grab offset remains unchanged.
+There was no continuous queue-to-chart edge scroller. A drag-scoped animation-frame controller tracks dragenter AND dragover (some header targets initially emit enter only), chooses the innermost movable overflow ancestor with document fallback for vertical movement, and timeline-only physical horizontal movement.56px edge band/maximum720px per second/delta-time cap; center is inert. Scroll updates dispatch preview-only dragover at the actual pointer to reuse authoritative existing preview calculations. No synthetic drop or schedule writer. Stop/unmount removes listeners and frame; Escape retains the reached viewport once after native source-focus restoration. No global CSS or permanent scroll handling.
+
+## Evidence
+76 focused Node tests PASS; TypeScript PASS; isolated optimized Next build PASS.
+Authenticated native browser: existing scheduled bar remains7420→7420; queue down305→567, center stable, up590→0; cancellation stable;700px timeline horizontal scroll322px. Browser JS errors0. Evidence:gantt-drag-scroll.json in the existing Consolidated QA runtime.
+Continuous native held queue drag reached capable Consolidated Scheduling line and saved PO-0001118 HTTP200,13:00→15:00UTC3November, preserving120min. The first post-save test assertion used an incorrect database column; no retry of that saved job. A later attempted conflicting drop produced no business POST and left PO-0001120 unscheduled. A separate valid continuous queue drag saved PO-0001120 HTTP200 at09:00–09:02UTC, exact preview start/finish and capable-line equality verified against PostgreSQL. Arabic/Week with single-line filter retained484→484 and cancellation stayed stable. Evidence:gantt-drag-reach.json and gantt-scroll-ar-week.json. A combined test that grabbed near the viewport edge intentionally auto-scrolled; the separate centered-grab check distinguishes this from the former multi-thousand-pixel focus jump. Successful scheduled fixtures must not be replayed.
+
+## Scope and review
+Changed:src/features/ProductionPlanning.tsx;src/utils/gantt-drag-scroll.mjs;tests/planning.test.mjs(mock browser lifecycle);tests/gantt-drag-scroll.test.mjs;tests/gantt-drag-scroll-browser.mjs;tests/gantt-drag-reach-browser.mjs;this report;HANDOFF.md.
+Review at http://127.0.0.1:4242/?view=planning. Existing QA credentials unchanged in its LOCAL-LOGIN.txt. No new lines/accounts/passwords, no migration/activation/hosted/Git write. Owner4222 not operated on or restarted. Existing many-line fixture retained. Complete device/browser factorial, nested vertical overflow with a different layout, and touch drag remain manual acceptance; current layout uses document vertical and nested timeline horizontal scrolling.

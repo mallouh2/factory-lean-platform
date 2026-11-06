@@ -22,5 +22,5 @@ export function hasEveryDefinedPermission(realPermissions, definitions) {
 
 // Page names may differ from the permission module. Navigation and actions share this mapping.
 export function permissionModule(page) {
-  return page === 'sales' ? 'sales_orders' : ['products', 'planning', 'unfinishedProducts', 'materialRequests'].includes(page) ? 'orders' : page;
+  return page === 'sales' ? 'sales_orders' : ['products', 'planning', 'unfinishedProducts', 'materialRequests', 'productionHistory', 'productionCorrections'].includes(page) ? 'orders' : page;
 }

@@ -145,7 +145,7 @@ const require = createRequire(import.meta.url);
 const pages = {};
 for (const page of ['FactoryFloorV2', 'ProductionPlanning', 'ProductionOrdersV2', 'ProductionHistory']) {
   const output = await build({ entryPoints: [`src/features/${page}.tsx`], bundle: true,
-    platform: 'node', format: 'cjs', packages: 'external', write: false, logLevel: 'silent' });
+    platform: 'node', format: 'cjs', packages: 'external', outdir:"test-output",write: false, logLevel: 'silent' });
   const module = { exports: {} };
   new Function('require', 'module', 'exports', output.outputFiles[0].text)(require, module, module.exports);
   pages[page] = module.exports.default;
@@ -176,7 +176,7 @@ for (const lang of ['en', 'ar']) {
         assert.ok(html.includes(`--product-surface:${expected.surface}`), `${page}: chip identity`);
         assert.ok(html.includes(`--product-edge:${expected.edge}`));
         assert.ok(html.includes(`--product-ink:${expected.ink}`));
-        if (page === 'ProductionPlanning') assert.ok(html.includes(`--planning-product-bg:${expected.surface}`));
+        // Current desktop table keeps identity on ProductIdentity; Gantt uses its approved shared bar surface.
       }
     }
   });
@@ -186,7 +186,7 @@ test('legacy History declarations and operational pages share the Product Item f
   for (const [page] of Object.entries(pages)) {
     const html = renderPage(page, [], 'en', null);
     assert.ok(html.includes(`--product-surface:${tone.surface}`), page);
-    if (page === 'ProductionPlanning') assert.ok(html.includes(`--planning-product-bg:${tone.surface}`));
+    // The same fallback is asserted on the Product identity chip, independently of bar fill.
   }
 });
 

@@ -1,0 +1,2193 @@
+{
+  "source": "https://data.iana.org/time-zones/tzdb/zone1970.tab",
+  "retrieved": "2026-11-02",
+  "license": "IANA tz database public domain",
+  "countries": {
+    "AD": [
+      {
+        "zone": "Europe/Andorra",
+        "region": "Andorra"
+      }
+    ],
+    "AE": [
+      {
+        "zone": "Asia/Dubai",
+        "region": "Crozet"
+      }
+    ],
+    "OM": [
+      {
+        "zone": "Asia/Dubai",
+        "region": "Crozet"
+      }
+    ],
+    "RE": [
+      {
+        "zone": "Asia/Dubai",
+        "region": "Crozet"
+      }
+    ],
+    "SC": [
+      {
+        "zone": "Asia/Dubai",
+        "region": "Crozet"
+      }
+    ],
+    "TF": [
+      {
+        "zone": "Asia/Dubai",
+        "region": "Crozet"
+      },
+      {
+        "zone": "Indian/Maldives",
+        "region": "Kerguelen, St Paul I, Amsterdam I"
+      }
+    ],
+    "AF": [
+      {
+        "zone": "Asia/Kabul",
+        "region": "Kabul"
+      }
+    ],
+    "AL": [
+      {
+        "zone": "Europe/Tirane",
+        "region": "Tirane"
+      }
+    ],
+    "AM": [
+      {
+        "zone": "Asia/Yerevan",
+        "region": "Yerevan"
+      }
+    ],
+    "AQ": [
+      {
+        "zone": "Antarctica/Casey",
+        "region": "Casey"
+      },
+      {
+        "zone": "Antarctica/Davis",
+        "region": "Davis"
+      },
+      {
+        "zone": "Antarctica/Mawson",
+        "region": "Mawson"
+      },
+      {
+        "zone": "Antarctica/Palmer",
+        "region": "Palmer"
+      },
+      {
+        "zone": "Antarctica/Rothera",
+        "region": "Rothera"
+      },
+      {
+        "zone": "Antarctica/Troll",
+        "region": "Troll"
+      },
+      {
+        "zone": "Antarctica/Vostok",
+        "region": "Vostok"
+      },
+      {
+        "zone": "Pacific/Auckland",
+        "region": "New Zealand time"
+      },
+      {
+        "zone": "Pacific/Port_Moresby",
+        "region": "Papua New Guinea (most areas), Chuuk, Yap, Dumont d’Urville"
+      },
+      {
+        "zone": "Asia/Riyadh",
+        "region": "Syowa"
+      },
+      {
+        "zone": "Asia/Singapore",
+        "region": "peninsular Malaysia, Concordia"
+      }
+    ],
+    "AR": [
+      {
+        "zone": "America/Argentina/Buenos_Aires",
+        "region": "Buenos Aires (BA, CF)"
+      },
+      {
+        "zone": "America/Argentina/Cordoba",
+        "region": "most areas: CB, CC, CN, ER, FM, MN, SE, SF"
+      },
+      {
+        "zone": "America/Argentina/Salta",
+        "region": "Salta (SA, LP, NQ, RN)"
+      },
+      {
+        "zone": "America/Argentina/Jujuy",
+        "region": "Jujuy (JY)"
+      },
+      {
+        "zone": "America/Argentina/Tucuman",
+        "region": "Tucumán (TM)"
+      },
+      {
+        "zone": "America/Argentina/Catamarca",
+        "region": "Catamarca (CT), Chubut (CH)"
+      },
+      {
+        "zone": "America/Argentina/La_Rioja",
+        "region": "La Rioja (LR)"
+      },
+      {
+        "zone": "America/Argentina/San_Juan",
+        "region": "San Juan (SJ)"
+      },
+      {
+        "zone": "America/Argentina/Mendoza",
+        "region": "Mendoza (MZ)"
+      },
+      {
+        "zone": "America/Argentina/San_Luis",
+        "region": "San Luis (SL)"
+      },
+      {
+        "zone": "America/Argentina/Rio_Gallegos",
+        "region": "Santa Cruz (SC)"
+      },
+      {
+        "zone": "America/Argentina/Ushuaia",
+        "region": "Tierra del Fuego (TF)"
+      }
+    ],
+    "AS": [
+      {
+        "zone": "Pacific/Pago_Pago",
+        "region": "Midway"
+      }
+    ],
+    "UM": [
+      {
+        "zone": "Pacific/Pago_Pago",
+        "region": "Midway"
+      },
+      {
+        "zone": "Pacific/Tarawa",
+        "region": "Gilberts, Marshalls, Wake"
+      }
+    ],
+    "AT": [
+      {
+        "zone": "Europe/Vienna",
+        "region": "Vienna"
+      }
+    ],
+    "AU": [
+      {
+        "zone": "Australia/Lord_Howe",
+        "region": "Lord Howe Island"
+      },
+      {
+        "zone": "Antarctica/Macquarie",
+        "region": "Macquarie Island"
+      },
+      {
+        "zone": "Australia/Hobart",
+        "region": "Tasmania"
+      },
+      {
+        "zone": "Australia/Melbourne",
+        "region": "Victoria"
+      },
+      {
+        "zone": "Australia/Sydney",
+        "region": "New South Wales (most areas)"
+      },
+      {
+        "zone": "Australia/Broken_Hill",
+        "region": "New South Wales (Yancowinna)"
+      },
+      {
+        "zone": "Australia/Brisbane",
+        "region": "Queensland (most areas)"
+      },
+      {
+        "zone": "Australia/Lindeman",
+        "region": "Queensland (Whitsunday Islands)"
+      },
+      {
+        "zone": "Australia/Adelaide",
+        "region": "South Australia"
+      },
+      {
+        "zone": "Australia/Darwin",
+        "region": "Northern Territory"
+      },
+      {
+        "zone": "Australia/Perth",
+        "region": "Western Australia (most areas)"
+      },
+      {
+        "zone": "Australia/Eucla",
+        "region": "Western Australia (Eucla)"
+      },
+      {
+        "zone": "Asia/Tokyo",
+        "region": "Eyre Bird Observatory"
+      }
+    ],
+    "AZ": [
+      {
+        "zone": "Asia/Baku",
+        "region": "Baku"
+      }
+    ],
+    "BB": [
+      {
+        "zone": "America/Barbados",
+        "region": "Barbados"
+      }
+    ],
+    "BD": [
+      {
+        "zone": "Asia/Dhaka",
+        "region": "Dhaka"
+      }
+    ],
+    "BE": [
+      {
+        "zone": "Europe/Brussels",
+        "region": "Brussels"
+      }
+    ],
+    "LU": [
+      {
+        "zone": "Europe/Brussels",
+        "region": "Brussels"
+      }
+    ],
+    "NL": [
+      {
+        "zone": "Europe/Brussels",
+        "region": "Brussels"
+      }
+    ],
+    "BG": [
+      {
+        "zone": "Europe/Sofia",
+        "region": "Sofia"
+      }
+    ],
+    "BM": [
+      {
+        "zone": "Atlantic/Bermuda",
+        "region": "Bermuda"
+      }
+    ],
+    "BO": [
+      {
+        "zone": "America/La_Paz",
+        "region": "La Paz"
+      }
+    ],
+    "BR": [
+      {
+        "zone": "America/Noronha",
+        "region": "Atlantic islands"
+      },
+      {
+        "zone": "America/Belem",
+        "region": "Pará (east), Amapá"
+      },
+      {
+        "zone": "America/Fortaleza",
+        "region": "Brazil (northeast: MA, PI, CE, RN, PB)"
+      },
+      {
+        "zone": "America/Recife",
+        "region": "Pernambuco"
+      },
+      {
+        "zone": "America/Araguaina",
+        "region": "Tocantins"
+      },
+      {
+        "zone": "America/Maceio",
+        "region": "Alagoas, Sergipe"
+      },
+      {
+        "zone": "America/Bahia",
+        "region": "Bahia"
+      },
+      {
+        "zone": "America/Sao_Paulo",
+        "region": "Brazil (southeast: GO, DF, MG, ES, RJ, SP, PR, SC, RS)"
+      },
+      {
+        "zone": "America/Campo_Grande",
+        "region": "Mato Grosso do Sul"
+      },
+      {
+        "zone": "America/Cuiaba",
+        "region": "Mato Grosso"
+      },
+      {
+        "zone": "America/Santarem",
+        "region": "Pará (west)"
+      },
+      {
+        "zone": "America/Porto_Velho",
+        "region": "Rondônia"
+      },
+      {
+        "zone": "America/Boa_Vista",
+        "region": "Roraima"
+      },
+      {
+        "zone": "America/Manaus",
+        "region": "Amazonas (east)"
+      },
+      {
+        "zone": "America/Eirunepe",
+        "region": "Amazonas (west)"
+      },
+      {
+        "zone": "America/Rio_Branco",
+        "region": "Acre"
+      }
+    ],
+    "BT": [
+      {
+        "zone": "Asia/Thimphu",
+        "region": "Thimphu"
+      }
+    ],
+    "BY": [
+      {
+        "zone": "Europe/Minsk",
+        "region": "Minsk"
+      }
+    ],
+    "BZ": [
+      {
+        "zone": "America/Belize",
+        "region": "Belize"
+      }
+    ],
+    "CA": [
+      {
+        "zone": "America/St_Johns",
+        "region": "Newfoundland, Labrador (SE)"
+      },
+      {
+        "zone": "America/Halifax",
+        "region": "Atlantic - NS (most areas), PE"
+      },
+      {
+        "zone": "America/Glace_Bay",
+        "region": "Atlantic - NS (Cape Breton)"
+      },
+      {
+        "zone": "America/Moncton",
+        "region": "Atlantic - New Brunswick"
+      },
+      {
+        "zone": "America/Goose_Bay",
+        "region": "Atlantic - Labrador (most areas)"
+      },
+      {
+        "zone": "America/Toronto",
+        "region": "Eastern - ON & QC (most areas)"
+      },
+      {
+        "zone": "America/Iqaluit",
+        "region": "Eastern - NU (most areas)"
+      },
+      {
+        "zone": "America/Winnipeg",
+        "region": "EST - Manitoba, ON (northwest)"
+      },
+      {
+        "zone": "America/Resolute",
+        "region": "Central - NU (Resolute)"
+      },
+      {
+        "zone": "America/Rankin_Inlet",
+        "region": "Central - NU (central)"
+      },
+      {
+        "zone": "America/Regina",
+        "region": "CST - SK (most areas)"
+      },
+      {
+        "zone": "America/Swift_Current",
+        "region": "CST - SK (midwest)"
+      },
+      {
+        "zone": "America/Edmonton",
+        "region": "CST - AB, BC(E), NT(E), SK(W)"
+      },
+      {
+        "zone": "America/Cambridge_Bay",
+        "region": "Mountain - NU (west)"
+      },
+      {
+        "zone": "America/Inuvik",
+        "region": "CST - NT (west)"
+      },
+      {
+        "zone": "America/Vancouver",
+        "region": "MST - BC (most areas)"
+      },
+      {
+        "zone": "America/Dawson_Creek",
+        "region": "MST - BC (Dawson Cr, Ft St John)"
+      },
+      {
+        "zone": "America/Fort_Nelson",
+        "region": "MST - BC (Ft Nelson)"
+      },
+      {
+        "zone": "America/Whitehorse",
+        "region": "MST - Yukon (east)"
+      },
+      {
+        "zone": "America/Dawson",
+        "region": "MST - Yukon (west)"
+      },
+      {
+        "zone": "America/Panama",
+        "region": "EST - ON (Atikokan), NU (Coral H)"
+      },
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      },
+      {
+        "zone": "America/Phoenix",
+        "region": "MST - AZ (most areas), Creston BC"
+      }
+    ],
+    "BS": [
+      {
+        "zone": "America/Toronto",
+        "region": "Eastern - ON & QC (most areas)"
+      }
+    ],
+    "CH": [
+      {
+        "zone": "Europe/Zurich",
+        "region": "Büsingen"
+      }
+    ],
+    "DE": [
+      {
+        "zone": "Europe/Zurich",
+        "region": "Büsingen"
+      },
+      {
+        "zone": "Europe/Berlin",
+        "region": "most of Germany"
+      }
+    ],
+    "LI": [
+      {
+        "zone": "Europe/Zurich",
+        "region": "Büsingen"
+      }
+    ],
+    "CI": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "BF": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "GH": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "GM": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "GN": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "IS": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "ML": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "MR": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "SH": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "SL": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "SN": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "TG": [
+      {
+        "zone": "Africa/Abidjan",
+        "region": "Abidjan"
+      }
+    ],
+    "CK": [
+      {
+        "zone": "Pacific/Rarotonga",
+        "region": "Rarotonga"
+      }
+    ],
+    "CL": [
+      {
+        "zone": "America/Santiago",
+        "region": "most of Chile"
+      },
+      {
+        "zone": "America/Coyhaique",
+        "region": "Aysén Region"
+      },
+      {
+        "zone": "America/Punta_Arenas",
+        "region": "Magallanes Region"
+      },
+      {
+        "zone": "Pacific/Easter",
+        "region": "Easter Island"
+      }
+    ],
+    "CN": [
+      {
+        "zone": "Asia/Shanghai",
+        "region": "Beijing Time"
+      },
+      {
+        "zone": "Asia/Urumqi",
+        "region": "Xinjiang Time"
+      }
+    ],
+    "CO": [
+      {
+        "zone": "America/Bogota",
+        "region": "Bogota"
+      }
+    ],
+    "CR": [
+      {
+        "zone": "America/Costa_Rica",
+        "region": "Costa Rica"
+      }
+    ],
+    "CU": [
+      {
+        "zone": "America/Havana",
+        "region": "Havana"
+      }
+    ],
+    "CV": [
+      {
+        "zone": "Atlantic/Cape_Verde",
+        "region": "Cape Verde"
+      }
+    ],
+    "CY": [
+      {
+        "zone": "Asia/Nicosia",
+        "region": "most of Cyprus"
+      },
+      {
+        "zone": "Asia/Famagusta",
+        "region": "Northern Cyprus"
+      }
+    ],
+    "CZ": [
+      {
+        "zone": "Europe/Prague",
+        "region": "Prague"
+      }
+    ],
+    "SK": [
+      {
+        "zone": "Europe/Prague",
+        "region": "Prague"
+      }
+    ],
+    "DK": [
+      {
+        "zone": "Europe/Berlin",
+        "region": "most of Germany"
+      }
+    ],
+    "NO": [
+      {
+        "zone": "Europe/Berlin",
+        "region": "most of Germany"
+      }
+    ],
+    "SE": [
+      {
+        "zone": "Europe/Berlin",
+        "region": "most of Germany"
+      }
+    ],
+    "SJ": [
+      {
+        "zone": "Europe/Berlin",
+        "region": "most of Germany"
+      }
+    ],
+    "DO": [
+      {
+        "zone": "America/Santo_Domingo",
+        "region": "Santo Domingo"
+      }
+    ],
+    "DZ": [
+      {
+        "zone": "Africa/Algiers",
+        "region": "Algiers"
+      }
+    ],
+    "EC": [
+      {
+        "zone": "America/Guayaquil",
+        "region": "Ecuador (mainland)"
+      },
+      {
+        "zone": "Pacific/Galapagos",
+        "region": "Galápagos Islands"
+      }
+    ],
+    "EE": [
+      {
+        "zone": "Europe/Tallinn",
+        "region": "Tallinn"
+      }
+    ],
+    "EG": [
+      {
+        "zone": "Africa/Cairo",
+        "region": "Cairo"
+      }
+    ],
+    "EH": [
+      {
+        "zone": "Africa/El_Aaiun",
+        "region": "El Aaiun"
+      }
+    ],
+    "ES": [
+      {
+        "zone": "Europe/Madrid",
+        "region": "Spain (mainland)"
+      },
+      {
+        "zone": "Africa/Ceuta",
+        "region": "Ceuta, Melilla"
+      },
+      {
+        "zone": "Atlantic/Canary",
+        "region": "Canary Islands"
+      }
+    ],
+    "FI": [
+      {
+        "zone": "Europe/Helsinki",
+        "region": "Helsinki"
+      }
+    ],
+    "AX": [
+      {
+        "zone": "Europe/Helsinki",
+        "region": "Helsinki"
+      }
+    ],
+    "FJ": [
+      {
+        "zone": "Pacific/Fiji",
+        "region": "Fiji"
+      }
+    ],
+    "FK": [
+      {
+        "zone": "Atlantic/Stanley",
+        "region": "Stanley"
+      }
+    ],
+    "FM": [
+      {
+        "zone": "Pacific/Kosrae",
+        "region": "Kosrae"
+      },
+      {
+        "zone": "Pacific/Port_Moresby",
+        "region": "Papua New Guinea (most areas), Chuuk, Yap, Dumont d’Urville"
+      },
+      {
+        "zone": "Pacific/Guadalcanal",
+        "region": "Pohnpei"
+      }
+    ],
+    "FO": [
+      {
+        "zone": "Atlantic/Faroe",
+        "region": "Faroe"
+      }
+    ],
+    "FR": [
+      {
+        "zone": "Europe/Paris",
+        "region": "Paris"
+      }
+    ],
+    "MC": [
+      {
+        "zone": "Europe/Paris",
+        "region": "Paris"
+      }
+    ],
+    "GB": [
+      {
+        "zone": "Europe/London",
+        "region": "London"
+      }
+    ],
+    "GG": [
+      {
+        "zone": "Europe/London",
+        "region": "London"
+      }
+    ],
+    "IM": [
+      {
+        "zone": "Europe/London",
+        "region": "London"
+      }
+    ],
+    "JE": [
+      {
+        "zone": "Europe/London",
+        "region": "London"
+      }
+    ],
+    "GE": [
+      {
+        "zone": "Asia/Tbilisi",
+        "region": "Tbilisi"
+      }
+    ],
+    "GF": [
+      {
+        "zone": "America/Cayenne",
+        "region": "Cayenne"
+      }
+    ],
+    "GI": [
+      {
+        "zone": "Europe/Gibraltar",
+        "region": "Gibraltar"
+      }
+    ],
+    "GL": [
+      {
+        "zone": "America/Nuuk",
+        "region": "most of Greenland"
+      },
+      {
+        "zone": "America/Danmarkshavn",
+        "region": "National Park (east coast)"
+      },
+      {
+        "zone": "America/Scoresbysund",
+        "region": "Scoresbysund/Ittoqqortoormiit"
+      },
+      {
+        "zone": "America/Thule",
+        "region": "Thule/Pituffik"
+      }
+    ],
+    "GR": [
+      {
+        "zone": "Europe/Athens",
+        "region": "Athens"
+      }
+    ],
+    "GS": [
+      {
+        "zone": "Atlantic/South_Georgia",
+        "region": "South Georgia"
+      }
+    ],
+    "GT": [
+      {
+        "zone": "America/Guatemala",
+        "region": "Guatemala"
+      }
+    ],
+    "GU": [
+      {
+        "zone": "Pacific/Guam",
+        "region": "Guam"
+      }
+    ],
+    "MP": [
+      {
+        "zone": "Pacific/Guam",
+        "region": "Guam"
+      }
+    ],
+    "GW": [
+      {
+        "zone": "Africa/Bissau",
+        "region": "Bissau"
+      }
+    ],
+    "GY": [
+      {
+        "zone": "America/Guyana",
+        "region": "Guyana"
+      }
+    ],
+    "HK": [
+      {
+        "zone": "Asia/Hong_Kong",
+        "region": "Hong Kong"
+      }
+    ],
+    "HN": [
+      {
+        "zone": "America/Tegucigalpa",
+        "region": "Tegucigalpa"
+      }
+    ],
+    "HT": [
+      {
+        "zone": "America/Port-au-Prince",
+        "region": "Port-au-Prince"
+      }
+    ],
+    "HU": [
+      {
+        "zone": "Europe/Budapest",
+        "region": "Budapest"
+      }
+    ],
+    "ID": [
+      {
+        "zone": "Asia/Jakarta",
+        "region": "Java, Sumatra"
+      },
+      {
+        "zone": "Asia/Pontianak",
+        "region": "Borneo (west, central)"
+      },
+      {
+        "zone": "Asia/Makassar",
+        "region": "Borneo (east, south), Sulawesi/Celebes, Bali, Nusa Tengarra, Timor (west)"
+      },
+      {
+        "zone": "Asia/Jayapura",
+        "region": "New Guinea (West Papua / Irian Jaya), Malukus/Moluccas"
+      }
+    ],
+    "IE": [
+      {
+        "zone": "Europe/Dublin",
+        "region": "Dublin"
+      }
+    ],
+    "IL": [
+      {
+        "zone": "Asia/Jerusalem",
+        "region": "Jerusalem"
+      }
+    ],
+    "IN": [
+      {
+        "zone": "Asia/Kolkata",
+        "region": "Kolkata"
+      }
+    ],
+    "IO": [
+      {
+        "zone": "Indian/Chagos",
+        "region": "Chagos"
+      }
+    ],
+    "IQ": [
+      {
+        "zone": "Asia/Baghdad",
+        "region": "Baghdad"
+      }
+    ],
+    "IR": [
+      {
+        "zone": "Asia/Tehran",
+        "region": "Tehran"
+      }
+    ],
+    "IT": [
+      {
+        "zone": "Europe/Rome",
+        "region": "Rome"
+      }
+    ],
+    "SM": [
+      {
+        "zone": "Europe/Rome",
+        "region": "Rome"
+      }
+    ],
+    "VA": [
+      {
+        "zone": "Europe/Rome",
+        "region": "Rome"
+      }
+    ],
+    "JM": [
+      {
+        "zone": "America/Jamaica",
+        "region": "Jamaica"
+      }
+    ],
+    "JO": [
+      {
+        "zone": "Asia/Amman",
+        "region": "Amman"
+      }
+    ],
+    "JP": [
+      {
+        "zone": "Asia/Tokyo",
+        "region": "Eyre Bird Observatory"
+      }
+    ],
+    "KE": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "DJ": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "ER": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "ET": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "KM": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "MG": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "SO": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "TZ": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "UG": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "YT": [
+      {
+        "zone": "Africa/Nairobi",
+        "region": "Nairobi"
+      }
+    ],
+    "KG": [
+      {
+        "zone": "Asia/Bishkek",
+        "region": "Bishkek"
+      }
+    ],
+    "KI": [
+      {
+        "zone": "Pacific/Tarawa",
+        "region": "Gilberts, Marshalls, Wake"
+      },
+      {
+        "zone": "Pacific/Kanton",
+        "region": "Phoenix Islands"
+      },
+      {
+        "zone": "Pacific/Kiritimati",
+        "region": "Line Islands"
+      }
+    ],
+    "MH": [
+      {
+        "zone": "Pacific/Tarawa",
+        "region": "Gilberts, Marshalls, Wake"
+      },
+      {
+        "zone": "Pacific/Kwajalein",
+        "region": "Kwajalein"
+      }
+    ],
+    "TV": [
+      {
+        "zone": "Pacific/Tarawa",
+        "region": "Gilberts, Marshalls, Wake"
+      }
+    ],
+    "WF": [
+      {
+        "zone": "Pacific/Tarawa",
+        "region": "Gilberts, Marshalls, Wake"
+      }
+    ],
+    "KP": [
+      {
+        "zone": "Asia/Pyongyang",
+        "region": "Pyongyang"
+      }
+    ],
+    "KR": [
+      {
+        "zone": "Asia/Seoul",
+        "region": "Seoul"
+      }
+    ],
+    "KZ": [
+      {
+        "zone": "Asia/Almaty",
+        "region": "most of Kazakhstan"
+      },
+      {
+        "zone": "Asia/Qyzylorda",
+        "region": "Qyzylorda/Kyzylorda/Kzyl-Orda"
+      },
+      {
+        "zone": "Asia/Qostanay",
+        "region": "Qostanay/Kostanay/Kustanay"
+      },
+      {
+        "zone": "Asia/Aqtobe",
+        "region": "Aqtöbe/Aktobe"
+      },
+      {
+        "zone": "Asia/Aqtau",
+        "region": "Mangghystaū/Mankistau"
+      },
+      {
+        "zone": "Asia/Atyrau",
+        "region": "Atyraū/Atirau/Gur’yev"
+      },
+      {
+        "zone": "Asia/Oral",
+        "region": "West Kazakhstan"
+      }
+    ],
+    "LB": [
+      {
+        "zone": "Asia/Beirut",
+        "region": "Beirut"
+      }
+    ],
+    "LK": [
+      {
+        "zone": "Asia/Colombo",
+        "region": "Colombo"
+      }
+    ],
+    "LR": [
+      {
+        "zone": "Africa/Monrovia",
+        "region": "Monrovia"
+      }
+    ],
+    "LT": [
+      {
+        "zone": "Europe/Vilnius",
+        "region": "Vilnius"
+      }
+    ],
+    "LV": [
+      {
+        "zone": "Europe/Riga",
+        "region": "Riga"
+      }
+    ],
+    "LY": [
+      {
+        "zone": "Africa/Tripoli",
+        "region": "Tripoli"
+      }
+    ],
+    "MA": [
+      {
+        "zone": "Africa/Casablanca",
+        "region": "Casablanca"
+      }
+    ],
+    "MD": [
+      {
+        "zone": "Europe/Chisinau",
+        "region": "Chisinau"
+      }
+    ],
+    "MM": [
+      {
+        "zone": "Asia/Yangon",
+        "region": "Yangon"
+      }
+    ],
+    "CC": [
+      {
+        "zone": "Asia/Yangon",
+        "region": "Yangon"
+      }
+    ],
+    "MN": [
+      {
+        "zone": "Asia/Ulaanbaatar",
+        "region": "most of Mongolia"
+      },
+      {
+        "zone": "Asia/Hovd",
+        "region": "Bayan-Ölgii, Hovd, Uvs"
+      }
+    ],
+    "MO": [
+      {
+        "zone": "Asia/Macau",
+        "region": "Macau"
+      }
+    ],
+    "MQ": [
+      {
+        "zone": "America/Martinique",
+        "region": "Martinique"
+      }
+    ],
+    "MT": [
+      {
+        "zone": "Europe/Malta",
+        "region": "Malta"
+      }
+    ],
+    "MU": [
+      {
+        "zone": "Indian/Mauritius",
+        "region": "Mauritius"
+      }
+    ],
+    "MV": [
+      {
+        "zone": "Indian/Maldives",
+        "region": "Kerguelen, St Paul I, Amsterdam I"
+      }
+    ],
+    "MX": [
+      {
+        "zone": "America/Mexico_City",
+        "region": "Central Mexico"
+      },
+      {
+        "zone": "America/Cancun",
+        "region": "Quintana Roo"
+      },
+      {
+        "zone": "America/Merida",
+        "region": "Campeche, Yucatán"
+      },
+      {
+        "zone": "America/Monterrey",
+        "region": "Durango; Coahuila, Nuevo León, Tamaulipas (most areas)"
+      },
+      {
+        "zone": "America/Matamoros",
+        "region": "Coahuila, Nuevo León, Tamaulipas (US border)"
+      },
+      {
+        "zone": "America/Chihuahua",
+        "region": "Chihuahua (most areas)"
+      },
+      {
+        "zone": "America/Ciudad_Juarez",
+        "region": "Chihuahua (US border - west)"
+      },
+      {
+        "zone": "America/Ojinaga",
+        "region": "Chihuahua (US border - east)"
+      },
+      {
+        "zone": "America/Mazatlan",
+        "region": "Baja California Sur, Nayarit (most areas), Sinaloa"
+      },
+      {
+        "zone": "America/Bahia_Banderas",
+        "region": "Bahía de Banderas"
+      },
+      {
+        "zone": "America/Hermosillo",
+        "region": "Sonora"
+      },
+      {
+        "zone": "America/Tijuana",
+        "region": "Baja California"
+      }
+    ],
+    "MY": [
+      {
+        "zone": "Asia/Kuching",
+        "region": "Sabah, Sarawak"
+      },
+      {
+        "zone": "Asia/Singapore",
+        "region": "peninsular Malaysia, Concordia"
+      }
+    ],
+    "BN": [
+      {
+        "zone": "Asia/Kuching",
+        "region": "Sabah, Sarawak"
+      }
+    ],
+    "MZ": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      }
+    ],
+    "BI": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      }
+    ],
+    "BW": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      }
+    ],
+    "CD": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      },
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "MW": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      }
+    ],
+    "RW": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      }
+    ],
+    "ZM": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      }
+    ],
+    "ZW": [
+      {
+        "zone": "Africa/Maputo",
+        "region": "Central Africa Time"
+      }
+    ],
+    "NA": [
+      {
+        "zone": "Africa/Windhoek",
+        "region": "Windhoek"
+      }
+    ],
+    "NC": [
+      {
+        "zone": "Pacific/Noumea",
+        "region": "Noumea"
+      }
+    ],
+    "NF": [
+      {
+        "zone": "Pacific/Norfolk",
+        "region": "Norfolk"
+      }
+    ],
+    "NG": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "AO": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "BJ": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "CF": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "CG": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "CM": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "GA": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "GQ": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "NE": [
+      {
+        "zone": "Africa/Lagos",
+        "region": "West Africa Time"
+      }
+    ],
+    "NI": [
+      {
+        "zone": "America/Managua",
+        "region": "Managua"
+      }
+    ],
+    "NP": [
+      {
+        "zone": "Asia/Kathmandu",
+        "region": "Kathmandu"
+      }
+    ],
+    "NR": [
+      {
+        "zone": "Pacific/Nauru",
+        "region": "Nauru"
+      }
+    ],
+    "NU": [
+      {
+        "zone": "Pacific/Niue",
+        "region": "Niue"
+      }
+    ],
+    "NZ": [
+      {
+        "zone": "Pacific/Auckland",
+        "region": "New Zealand time"
+      },
+      {
+        "zone": "Pacific/Chatham",
+        "region": "Chatham Islands"
+      }
+    ],
+    "PA": [
+      {
+        "zone": "America/Panama",
+        "region": "EST - ON (Atikokan), NU (Coral H)"
+      }
+    ],
+    "KY": [
+      {
+        "zone": "America/Panama",
+        "region": "EST - ON (Atikokan), NU (Coral H)"
+      }
+    ],
+    "PE": [
+      {
+        "zone": "America/Lima",
+        "region": "Lima"
+      }
+    ],
+    "PF": [
+      {
+        "zone": "Pacific/Tahiti",
+        "region": "Society Islands"
+      },
+      {
+        "zone": "Pacific/Marquesas",
+        "region": "Marquesas Islands"
+      },
+      {
+        "zone": "Pacific/Gambier",
+        "region": "Gambier Islands"
+      }
+    ],
+    "PG": [
+      {
+        "zone": "Pacific/Port_Moresby",
+        "region": "Papua New Guinea (most areas), Chuuk, Yap, Dumont d’Urville"
+      },
+      {
+        "zone": "Pacific/Bougainville",
+        "region": "Bougainville"
+      }
+    ],
+    "PH": [
+      {
+        "zone": "Asia/Manila",
+        "region": "Manila"
+      }
+    ],
+    "PK": [
+      {
+        "zone": "Asia/Karachi",
+        "region": "Karachi"
+      }
+    ],
+    "PL": [
+      {
+        "zone": "Europe/Warsaw",
+        "region": "Warsaw"
+      }
+    ],
+    "PM": [
+      {
+        "zone": "America/Miquelon",
+        "region": "Miquelon"
+      }
+    ],
+    "PN": [
+      {
+        "zone": "Pacific/Pitcairn",
+        "region": "Pitcairn"
+      }
+    ],
+    "PR": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "AG": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "AI": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "AW": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "BL": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "BQ": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "CW": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "DM": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "GD": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "GP": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "KN": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "LC": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "MF": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "MS": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "SX": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "TT": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "VC": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "VG": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "VI": [
+      {
+        "zone": "America/Puerto_Rico",
+        "region": "AST - QC (Lower North Shore)"
+      }
+    ],
+    "PS": [
+      {
+        "zone": "Asia/Gaza",
+        "region": "Gaza Strip"
+      },
+      {
+        "zone": "Asia/Hebron",
+        "region": "West Bank"
+      }
+    ],
+    "PT": [
+      {
+        "zone": "Europe/Lisbon",
+        "region": "Portugal (mainland)"
+      },
+      {
+        "zone": "Atlantic/Madeira",
+        "region": "Madeira Islands"
+      },
+      {
+        "zone": "Atlantic/Azores",
+        "region": "Azores"
+      }
+    ],
+    "PW": [
+      {
+        "zone": "Pacific/Palau",
+        "region": "Palau"
+      }
+    ],
+    "PY": [
+      {
+        "zone": "America/Asuncion",
+        "region": "Asuncion"
+      }
+    ],
+    "QA": [
+      {
+        "zone": "Asia/Qatar",
+        "region": "Qatar"
+      }
+    ],
+    "BH": [
+      {
+        "zone": "Asia/Qatar",
+        "region": "Qatar"
+      }
+    ],
+    "RO": [
+      {
+        "zone": "Europe/Bucharest",
+        "region": "Bucharest"
+      }
+    ],
+    "RS": [
+      {
+        "zone": "Europe/Belgrade",
+        "region": "Belgrade"
+      }
+    ],
+    "BA": [
+      {
+        "zone": "Europe/Belgrade",
+        "region": "Belgrade"
+      }
+    ],
+    "HR": [
+      {
+        "zone": "Europe/Belgrade",
+        "region": "Belgrade"
+      }
+    ],
+    "ME": [
+      {
+        "zone": "Europe/Belgrade",
+        "region": "Belgrade"
+      }
+    ],
+    "MK": [
+      {
+        "zone": "Europe/Belgrade",
+        "region": "Belgrade"
+      }
+    ],
+    "SI": [
+      {
+        "zone": "Europe/Belgrade",
+        "region": "Belgrade"
+      }
+    ],
+    "RU": [
+      {
+        "zone": "Europe/Kaliningrad",
+        "region": "MSK-01 - Kaliningrad"
+      },
+      {
+        "zone": "Europe/Moscow",
+        "region": "MSK+00 - Moscow area"
+      },
+      {
+        "zone": "Europe/Simferopol",
+        "region": "Crimea"
+      },
+      {
+        "zone": "Europe/Kirov",
+        "region": "MSK+00 - Kirov"
+      },
+      {
+        "zone": "Europe/Volgograd",
+        "region": "MSK+00 - Volgograd"
+      },
+      {
+        "zone": "Europe/Astrakhan",
+        "region": "MSK+01 - Astrakhan"
+      },
+      {
+        "zone": "Europe/Saratov",
+        "region": "MSK+01 - Saratov"
+      },
+      {
+        "zone": "Europe/Ulyanovsk",
+        "region": "MSK+01 - Ulyanovsk"
+      },
+      {
+        "zone": "Europe/Samara",
+        "region": "MSK+01 - Samara, Udmurtia"
+      },
+      {
+        "zone": "Asia/Yekaterinburg",
+        "region": "MSK+02 - Urals"
+      },
+      {
+        "zone": "Asia/Omsk",
+        "region": "MSK+03 - Omsk"
+      },
+      {
+        "zone": "Asia/Novosibirsk",
+        "region": "MSK+04 - Novosibirsk"
+      },
+      {
+        "zone": "Asia/Barnaul",
+        "region": "MSK+04 - Altai"
+      },
+      {
+        "zone": "Asia/Tomsk",
+        "region": "MSK+04 - Tomsk"
+      },
+      {
+        "zone": "Asia/Novokuznetsk",
+        "region": "MSK+04 - Kemerovo"
+      },
+      {
+        "zone": "Asia/Krasnoyarsk",
+        "region": "MSK+04 - Krasnoyarsk area"
+      },
+      {
+        "zone": "Asia/Irkutsk",
+        "region": "MSK+05 - Irkutsk, Buryatia"
+      },
+      {
+        "zone": "Asia/Chita",
+        "region": "MSK+06 - Zabaykalsky"
+      },
+      {
+        "zone": "Asia/Yakutsk",
+        "region": "MSK+06 - Lena River"
+      },
+      {
+        "zone": "Asia/Khandyga",
+        "region": "MSK+06 - Tomponsky, Ust-Maysky"
+      },
+      {
+        "zone": "Asia/Vladivostok",
+        "region": "MSK+07 - Amur River"
+      },
+      {
+        "zone": "Asia/Ust-Nera",
+        "region": "MSK+07 - Oymyakonsky"
+      },
+      {
+        "zone": "Asia/Magadan",
+        "region": "MSK+08 - Magadan"
+      },
+      {
+        "zone": "Asia/Sakhalin",
+        "region": "MSK+08 - Sakhalin Island"
+      },
+      {
+        "zone": "Asia/Srednekolymsk",
+        "region": "MSK+08 - Sakha (E), N Kuril Is"
+      },
+      {
+        "zone": "Asia/Kamchatka",
+        "region": "MSK+09 - Kamchatka"
+      },
+      {
+        "zone": "Asia/Anadyr",
+        "region": "MSK+09 - Bering Sea"
+      }
+    ],
+    "UA": [
+      {
+        "zone": "Europe/Simferopol",
+        "region": "Crimea"
+      },
+      {
+        "zone": "Europe/Kyiv",
+        "region": "most of Ukraine"
+      }
+    ],
+    "SA": [
+      {
+        "zone": "Asia/Riyadh",
+        "region": "Syowa"
+      }
+    ],
+    "KW": [
+      {
+        "zone": "Asia/Riyadh",
+        "region": "Syowa"
+      }
+    ],
+    "YE": [
+      {
+        "zone": "Asia/Riyadh",
+        "region": "Syowa"
+      }
+    ],
+    "SB": [
+      {
+        "zone": "Pacific/Guadalcanal",
+        "region": "Pohnpei"
+      }
+    ],
+    "SD": [
+      {
+        "zone": "Africa/Khartoum",
+        "region": "Khartoum"
+      }
+    ],
+    "SG": [
+      {
+        "zone": "Asia/Singapore",
+        "region": "peninsular Malaysia, Concordia"
+      }
+    ],
+    "SR": [
+      {
+        "zone": "America/Paramaribo",
+        "region": "Paramaribo"
+      }
+    ],
+    "SS": [
+      {
+        "zone": "Africa/Juba",
+        "region": "Juba"
+      }
+    ],
+    "ST": [
+      {
+        "zone": "Africa/Sao_Tome",
+        "region": "Sao Tome"
+      }
+    ],
+    "SV": [
+      {
+        "zone": "America/El_Salvador",
+        "region": "El Salvador"
+      }
+    ],
+    "SY": [
+      {
+        "zone": "Asia/Damascus",
+        "region": "Damascus"
+      }
+    ],
+    "TC": [
+      {
+        "zone": "America/Grand_Turk",
+        "region": "Grand Turk"
+      }
+    ],
+    "TD": [
+      {
+        "zone": "Africa/Ndjamena",
+        "region": "Ndjamena"
+      }
+    ],
+    "TH": [
+      {
+        "zone": "Asia/Bangkok",
+        "region": "north Vietnam"
+      }
+    ],
+    "CX": [
+      {
+        "zone": "Asia/Bangkok",
+        "region": "north Vietnam"
+      }
+    ],
+    "KH": [
+      {
+        "zone": "Asia/Bangkok",
+        "region": "north Vietnam"
+      }
+    ],
+    "LA": [
+      {
+        "zone": "Asia/Bangkok",
+        "region": "north Vietnam"
+      }
+    ],
+    "VN": [
+      {
+        "zone": "Asia/Bangkok",
+        "region": "north Vietnam"
+      },
+      {
+        "zone": "Asia/Ho_Chi_Minh",
+        "region": "south Vietnam"
+      }
+    ],
+    "TJ": [
+      {
+        "zone": "Asia/Dushanbe",
+        "region": "Dushanbe"
+      }
+    ],
+    "TK": [
+      {
+        "zone": "Pacific/Fakaofo",
+        "region": "Fakaofo"
+      }
+    ],
+    "TL": [
+      {
+        "zone": "Asia/Dili",
+        "region": "Dili"
+      }
+    ],
+    "TM": [
+      {
+        "zone": "Asia/Ashgabat",
+        "region": "Ashgabat"
+      }
+    ],
+    "TN": [
+      {
+        "zone": "Africa/Tunis",
+        "region": "Tunis"
+      }
+    ],
+    "TO": [
+      {
+        "zone": "Pacific/Tongatapu",
+        "region": "Tongatapu"
+      }
+    ],
+    "TR": [
+      {
+        "zone": "Europe/Istanbul",
+        "region": "Istanbul"
+      }
+    ],
+    "TW": [
+      {
+        "zone": "Asia/Taipei",
+        "region": "Taipei"
+      }
+    ],
+    "US": [
+      {
+        "zone": "America/New_York",
+        "region": "Eastern (most areas)"
+      },
+      {
+        "zone": "America/Detroit",
+        "region": "Eastern - MI (most areas)"
+      },
+      {
+        "zone": "America/Kentucky/Louisville",
+        "region": "Eastern - KY (Louisville area)"
+      },
+      {
+        "zone": "America/Kentucky/Monticello",
+        "region": "Eastern - KY (Wayne)"
+      },
+      {
+        "zone": "America/Indiana/Indianapolis",
+        "region": "Eastern - IN (most areas)"
+      },
+      {
+        "zone": "America/Indiana/Vincennes",
+        "region": "Eastern - IN (Da, Du, K, Mn)"
+      },
+      {
+        "zone": "America/Indiana/Winamac",
+        "region": "Eastern - IN (Pulaski)"
+      },
+      {
+        "zone": "America/Indiana/Marengo",
+        "region": "Eastern - IN (Crawford)"
+      },
+      {
+        "zone": "America/Indiana/Petersburg",
+        "region": "Eastern - IN (Pike)"
+      },
+      {
+        "zone": "America/Indiana/Vevay",
+        "region": "Eastern - IN (Switzerland)"
+      },
+      {
+        "zone": "America/Chicago",
+        "region": "Central (most areas)"
+      },
+      {
+        "zone": "America/Indiana/Tell_City",
+        "region": "Central - IN (Perry)"
+      },
+      {
+        "zone": "America/Indiana/Knox",
+        "region": "Central - IN (Starke)"
+      },
+      {
+        "zone": "America/Menominee",
+        "region": "Central - MI (Wisconsin border)"
+      },
+      {
+        "zone": "America/North_Dakota/Center",
+        "region": "Central - ND (Oliver)"
+      },
+      {
+        "zone": "America/North_Dakota/New_Salem",
+        "region": "Central - ND (Morton rural)"
+      },
+      {
+        "zone": "America/North_Dakota/Beulah",
+        "region": "Central - ND (Mercer)"
+      },
+      {
+        "zone": "America/Denver",
+        "region": "Mountain (most areas)"
+      },
+      {
+        "zone": "America/Boise",
+        "region": "Mountain - ID (south), OR (east)"
+      },
+      {
+        "zone": "America/Phoenix",
+        "region": "MST - AZ (most areas), Creston BC"
+      },
+      {
+        "zone": "America/Los_Angeles",
+        "region": "Pacific"
+      },
+      {
+        "zone": "America/Anchorage",
+        "region": "Alaska (most areas)"
+      },
+      {
+        "zone": "America/Juneau",
+        "region": "Alaska - Juneau area"
+      },
+      {
+        "zone": "America/Sitka",
+        "region": "Alaska - Sitka area"
+      },
+      {
+        "zone": "America/Metlakatla",
+        "region": "Alaska - Annette Island"
+      },
+      {
+        "zone": "America/Yakutat",
+        "region": "Alaska - Yakutat"
+      },
+      {
+        "zone": "America/Nome",
+        "region": "Alaska (west)"
+      },
+      {
+        "zone": "America/Adak",
+        "region": "Alaska - western Aleutians"
+      },
+      {
+        "zone": "Pacific/Honolulu",
+        "region": "Hawaii"
+      }
+    ],
+    "UY": [
+      {
+        "zone": "America/Montevideo",
+        "region": "Montevideo"
+      }
+    ],
+    "UZ": [
+      {
+        "zone": "Asia/Samarkand",
+        "region": "Uzbekistan (west)"
+      },
+      {
+        "zone": "Asia/Tashkent",
+        "region": "Uzbekistan (east)"
+      }
+    ],
+    "VE": [
+      {
+        "zone": "America/Caracas",
+        "region": "Caracas"
+      }
+    ],
+    "VU": [
+      {
+        "zone": "Pacific/Efate",
+        "region": "Efate"
+      }
+    ],
+    "WS": [
+      {
+        "zone": "Pacific/Apia",
+        "region": "Apia"
+      }
+    ],
+    "ZA": [
+      {
+        "zone": "Africa/Johannesburg",
+        "region": "Johannesburg"
+      }
+    ],
+    "LS": [
+      {
+        "zone": "Africa/Johannesburg",
+        "region": "Johannesburg"
+      }
+    ],
+    "SZ": [
+      {
+        "zone": "Africa/Johannesburg",
+        "region": "Johannesburg"
+      }
+    ]
+  }
+}

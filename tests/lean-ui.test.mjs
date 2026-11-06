@@ -66,6 +66,17 @@ test('drill-down uses refreshed metrics rather than the stale selected table row
  const html=h.html();assert.ok(html.includes('<strong>4</strong>'));assert.ok(html.includes('37 kg'));assert.ok(html.includes('8.33%'));assert.ok(html.includes('27 min'));assert.ok(!html.includes('7.95%'));
 });
 
+test('Lean maintenance context localizes every request status in EN and AR',()=>{
+ for(const lang of ['en','ar']){
+  const statuses=['OPEN','ASSIGNED','IN_PROGRESS','COMPLETED','VERIFIED','CANCELLED'];
+  const h=harness('LeanProblem',{lang,detail:{maintenance:statuses.map((status,i)=>({id:'M'+i,code:'MR-'+i,title:'Local service',status})),initiatives:[],actions:[]}});
+  const html=h.html();
+  for(const status of statuses)assert.ok(html.includes(h.words['maintenanceState_'+status]),`${lang}: ${status}`);
+  assert.ok(!html.includes('maintenanceStatus_'));
+  assert.equal(h.writes.length,0);
+ }
+});
+
 test('one filter area contains every capability and table headers contain no filter controls',()=>{
  const h=harness('LeanAnalysis');h.draw();
  const filters=h.nodes().find(n=>n.props?.className==='lean-filter-area');assert.ok(filters);

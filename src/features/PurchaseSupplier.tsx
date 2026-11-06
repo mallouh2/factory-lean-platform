@@ -32,7 +32,7 @@ export default function PurchaseSupplier(props: FeatureProps & { value: Supplier
     {!rows.length&&!read.busy&&<li role="presentation">{t('purchaseSupplierLocalHelp')}</li>}
    </ul><nav className="fulfillment-pagination"><button type="button" disabled={page===1||read.busy} onPointerDown={e=>e.preventDefault()} onClick={()=>{setPage(p=>p-1);setActive(-1);}}>{t('previous')}</button><span>{page}</span><button type="button" disabled={page*50>=(read.data?.total||0)||read.busy} onPointerDown={e=>e.preventDefault()} onClick={()=>{setPage(p=>p+1);setActive(-1);}}>{t('next')}</button></nav></div>}
   </div></Field>
-  {read.busy&&<p role="status">{t('loading')}</p>}{read.error&&<p role="alert">{t(read.error)}</p>}
+  {read.loading&&<p role="status">{t('loading')}</p>}{read.error&&<p role="alert">{t(read.error)}</p>}
   <div className="row-actions"><button type="button" disabled={props.busy||action.busy||!value.name.trim()||read.busy||!!read.error||exact?.active===false} onMouseDown={e=>e.preventDefault()} onClick={()=>{setOpen(false);props.onSave(value);}}>{t('purchaseSaveSupplier')}</button>
    {!value.id&&!exact&&value.name.trim()&&!read.busy&&!read.error&&props.can('suppliers','edit')&&<button type="button" disabled={props.busy||action.busy} onMouseDown={e=>e.preventDefault()} onClick={()=>{setOpen(false);setAdding(true);action.clearError();}}>{t('purchaseAddSupplier')}</button>}
   </div>

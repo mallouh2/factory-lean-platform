@@ -14,12 +14,12 @@ test('WIP conservation instructions distinguish discarded production units from 
   assert.match(ar[key],/وزن التوالف بالكيلوغرام بشكل منفصل/);
  }
 });
-const bundle=(await build({entryPoints:['src/features/Quality.tsx'],bundle:true,platform:'node',format:'cjs',packages:'external',write:false,logLevel:'silent',plugins:[{name:'quality-fixture',setup(b){
+const bundle=(await build({entryPoints:['src/features/Quality.tsx'],bundle:true,platform:'node',format:'cjs',loader:{'.css':'empty'},packages:'external',write:false,logLevel:'silent',plugins:[{name:'quality-fixture',setup(b){
  b.onResolve({filter:/useSupply$/},()=>({path:'fixture:supply',external:true}));
  b.onResolve({filter:/components\/ui$/},()=>({path:'fixture:ui',external:true}));
 }}]})).outputFiles[0].text;
 const row={id:'entry',source_id:'source',unit:'meter',recorded_good:'100',current_good:'100',accepted:'100',rejected:'0',eligible:'100',physical_label:'PIPE-A-01',weight_kg_per_unit:'.35',product_name:'Pipe',product_name_ar:'أنبوب',product_code:'P-25',request_code:'PR-44',item_code:'PI-44',line_name:'Line 1',line_name_ar:'الخط ١',created_at:'2026-10-10T03:00:00Z',shift_name:'Night',shift_name_ar:'ليل',shift_date:'2026-10-09'};
-function harness(exportName,{lang='en',can=()=>true,success=true,weight='.35',unit='meter',reasonRows=null,reasonsBusy=false,scrap=undefined}={}){
+function harness(exportName,{lang='en',can=()=>true,success=true,weight='.35',unit='meter',reasonRows=null,reasonsBusy=false,scrap=undefined,detail=null}={}){
  const states=[],calls=[],queries=[];let cursor=0;
  const fixtureRow={...row,unit,weight_kg_per_unit:weight,scrap};
  const dictionary=lang==='ar'?ar:en,mod={exports:{}};
@@ -28,9 +28,9 @@ function harness(exportName,{lang='en',can=()=>true,success=true,weight='.35',un
   const matching=all.filter(r=>r.active&&!r.is_other&&[r.name,r.name_ar].some(n=>(n||'').toLowerCase().includes((extra?.search||'').toLowerCase())));
   const paged=matching.slice((Number(extra?.page||1)-1)*100,Number(extra?.page||1)*100);
   const rows=[...paged,...all.filter(r=>r.active&&(r.is_other||r.id===extra?.selected)&&!paged.includes(r))];
-  return{busy:mode==='reasons'&&reasonsBusy,error:'',refresh(){},data:mode==='reasons'?{rows,total:matching.length}:{rows:[fixtureRow],total:1}};
+  return{busy:mode==='reasons'&&reasonsBusy,error:'',refresh(){},data:mode==='reasons'?{rows,total:matching.length}:mode==='detail'?detail:{rows:[fixtureRow],total:1}};
  },useSupplyCommand:()=>({busy:false,error:'',clearError(){},async run(operation,payload){calls.push({operation,payload});return success;}})};
- new Function('require','module','exports',bundle)(n=>n==='fixture:supply'?hooks:n==='fixture:ui'?{Dialog:({children})=>react.createElement('div',null,children),Field:({label,children})=>react.createElement('label',null,label,children),formatTime:()=> '10 Oct 2026'}:n==='react'?{...react,useState(initial){const i=cursor++;if(!(i in states))states[i]=initial;return[states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];}}:require(n),mod,mod.exports);
+ new Function('require','module','exports',bundle)(n=>n==='fixture:supply'?hooks:n==='fixture:ui'?{Dialog:({children})=>react.createElement('div',null,children),Field:({label,children})=>react.createElement('label',null,label,children),formatTime:()=> '10 Oct 2026'}:n==='react'?{...react,useRef:v=>({current:v}),useId:()=>"quality-test",useEffect(){},useState(initial){const i=cursor++;if(!(i in states))states[i]=initial;return[states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];}}:require(n),mod,mod.exports);
  const props={snapshot:{factory:{id:'factory',timezone:'Asia/Riyadh'},user:{id:'actor'},fetchedAt:'now',tables:{products:[],production_lines:[],production_shifts:[]}},t:k=>dictionary[k]||k,lang,can,command:async()=>{},row:{...row,unit,weight_kg_per_unit:weight},onClose(){},onChanged(){calls.push('changed');}};
  const tree=()=>{cursor=0;return mod.exports[exportName](props);};
  const walk=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(walk):[n,...walk(n.props?.children)];
@@ -74,9 +74,9 @@ test('Rework omits Scrap kg and preserves exact production-unit quantity',async(
  assert.equal(h.nodes().filter(n=>n.type==='input'&&n.props.type==='number').length,1);
  await h.nodes().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(h.calls[0].payload.actual_scrap_kg,null);assert.equal(h.calls[0].payload.disposition,'REWORK');
 });
-for(const lang of ['en','ar'])test(`Quality board separates gross and acceptance, with per-person actions in ${lang}`,()=>{
- const h=harness('default',{lang,can:(_m,a='view')=>a==='view'}),html=h.html(),d=lang==='ar'?ar:en;
- for(const key of ['qualityRecorded','qualityRejected','qualityAccepted','qualityShiftDate'])assert.ok(html.includes(d[key]));
+for(const lang of ['en','ar'])test(`Quality history separates gross and acceptance, with per-person actions in ${lang}`,()=>{
+ const h=harness('QualityHistoryLookup',{lang,can:(_m,a='view')=>a==='view'}),html=h.html(),d=lang==='ar'?ar:en;
+ for(const key of ['qvProduction','qvRejected','qualityShiftDate'])assert.ok(html.includes(d[key]));
  assert.ok(!html.includes(d.qualityRecordRejection));assert.ok(html.includes('2026-10-09'));assert.equal(h.queries[0].mode,'board');
 });
 const manyReasons=[...Array.from({length:105},(_,n)=>({id:'r'+n,name:'Reason '+String(n).padStart(3,'0'),name_ar:'سبب '+String(n).padStart(3,'0'),active:true})),
@@ -115,17 +115,24 @@ for(const lang of ['en','ar'])test('Single reason input keyboard, Other text and
 
 for(const lang of ['en','ar'])test('Actual Quality board warning, allowance and unknown states in '+lang,()=>{
  const d=lang==='ar'?ar:en,base={version:1,product_id:'P',line_id:'L',unit:'meter',production_scrap_kg:'2',quality_scrap_kg:'1',produced_kg:'100',weight_kg_per_unit:'.5',running_standard_percent:'2',standard_revision:1,startup_context_complete:true,startup_allowance_kg:'0',above_running_standard:true,running_excess_kg:'1'};
- const high=harness('default',{lang,scrap:base}).html();
- assert.ok(high.includes('<tr class="high-scrap">'));assert.ok(high.includes(d.qualityHighScrap));assert.ok(high.includes('⚠'));
- for(const key of ['qualityActualScrapRate','qualityNormalScrapRate','qualityScrapAllowance','qualityExcessScrap'])assert.ok(high.includes(d[key]));
+ const high=harness('QualityHistoryLookup',{lang,scrap:base}).html();
+ assert.ok(high.includes(d.qualityHighScrap));assert.ok(high.includes('⚠'));
+ for(const key of ['qualityActualScrapRate','qualityNormalScrapRate','qualityScrapAllowance','qualityExcessScrap'])assert.ok(!high.includes(d[key]));
  assert.ok(high.includes(`dir="${lang==='ar'?'rtl':'ltr'}"`));assert.ok(high.includes('<bdi>'));
- const normal=harness('default',{lang,scrap:{...base,production_scrap_kg:'1',above_running_standard:false,running_excess_kg:'0'}}).html();
+ const normal=harness('QualityHistoryLookup',{lang,scrap:{...base,production_scrap_kg:'1',above_running_standard:false,running_excess_kg:'0'}}).html();
  assert.ok(!normal.includes('class="high-scrap"'));assert.ok(!normal.includes(d.qualityHighScrap));
- const missingStandard=harness('default',{lang,scrap:{...base,running_standard_percent:null,standard_revision:null,startup_context_complete:false}}).html();
- assert.ok(missingStandard.includes(d.qualityStandardMissing));assert.ok(missingStandard.includes(d.qualityActualScrapRate));assert.ok(missingStandard.includes('<bdi>3%</bdi>'));
+ const missingStandard=harness('QualityHistoryLookup',{lang,scrap:{...base,running_standard_percent:null,standard_revision:null,startup_context_complete:false}}).html();
+ assert.ok(missingStandard.includes(d.qualityStandardMissing));assert.ok(!missingStandard.includes(d.qualityActualScrapRate));
  assert.ok(!missingStandard.includes(d.qualityCalculationUnavailable));assert.ok(!missingStandard.includes(d.qualityHighScrap));
- const missingContext=harness('default',{lang,scrap:{...base,line_id:null}}).html();
- assert.ok(missingContext.includes(d.qualityActualScrapRate));assert.ok(missingContext.includes(d.qualityCalculationUnavailable));
- const unavailable=harness('default',{lang,scrap:{...base,produced_kg:null}}).html();
+ const missingContext=harness('QualityHistoryLookup',{lang,scrap:{...base,line_id:null}}).html();
+ assert.ok(!missingContext.includes(d.qualityActualScrapRate));assert.ok(missingContext.includes(d.qualityCalculationUnavailable));
+ const unavailable=harness('QualityHistoryLookup',{lang,scrap:{...base,produced_kg:null}}).html();
  assert.ok(unavailable.includes(d.qualityCalculationUnavailable));assert.ok(!unavailable.includes(d.qualityHighScrap));
+});
+
+test('Excess rejection explains the source limit and never submits',async()=>{const h=harness('RejectionDrawer');complete(h,'101');assert.equal(confirm(h).props.disabled,true);assert.ok(h.html().includes(en.qvExceeds));await h.nodes().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(h.calls.length,0);});
+for(const allowed of [true,false])test('Corrective form is disclosed only for an eligible authorized action: '+allowed,()=>{
+ const h=harness('QualityDetail',{can:(module,action)=>module==='orders'&&action==='create'&&allowed,detail:{...row,disposition:'SCRAP',shortfall:'10',notification:{status:'OPEN'}}});
+ assert.equal(h.nodes().filter(n=>n.type==='form').length,0);const action=h.nodes().find(n=>n.type==='button'&&n.props.children===en.qualityReplacement);assert.equal(!!action,allowed);
+ if(action){action.props.onClick();assert.equal(h.nodes().filter(n=>n.type==='form').length,1);assert.equal(h.calls.length,0);}
 });

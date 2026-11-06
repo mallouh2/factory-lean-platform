@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hasEveryDefinedPermission, previewPermissions, previewPresets } from "../src/utils/permission-preview.mjs";
+import { hasEveryDefinedPermission, previewPermissions, previewPresets, permissionModule } from "../src/utils/permission-preview.mjs";
+
+test('Production History uses existing Orders grants without adding privileges', () => {
+  assert.equal(permissionModule('productionHistory'), 'orders');
+  assert.deepEqual(previewPermissions(['lines:view'], 'full'), ['lines:view']);
+  assert.equal(previewPermissions(['lines:view'], 'full').includes('orders:view'), false);
+});
 
 const catalog = [
   { module: "factory", action: "view" },

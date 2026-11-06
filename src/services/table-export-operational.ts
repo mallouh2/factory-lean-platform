@@ -1,3 +1,4 @@
+import {warehouseColumnTitle} from '@/utils/warehouse-view.mjs';
 import en from '@/locales/en.json';
 import ar from '@/locales/ar.json';
 import { historyUuid } from './history-response';
@@ -6,11 +7,15 @@ import { inventoryColumns, warehouseVisibleColumns, inventoryChoices, validInven
 import { readProductionHistory } from './production-history';
 import type { authenticatedClient } from './authorization';
 import type { ExportColumn } from '@/types/table-export';
+import {warehouseSupplementReport} from './table-export-warehouse';
+import {warehouseRequestLabels} from '@/utils/warehouse-request-rows.mjs';
 
 export const operationalDatasets = {
   'production-history': { permission: 'orders', title: 'productionHistory', pageSize: 50, identity: 'id' },
   'warehouse-stock': { permission: 'warehouse', title: 'inventoryCatalogue', pageSize: 50, identity: 'row_key' },
   'warehouse-movements': { permission: 'warehouse', title: 'stockMovements', pageSize: 25, identity: 'id' },
+  'warehouse-stored-wip': {permission:'warehouse',title:'warehouseStoredWip',pageSize:50,identity:'row_key'},
+  'warehouse-requests': {permission:'warehouse',title:'navWarehouseRequests',pageSize:50,identity:'row_key'},
 } as const;
 export type OperationalDataset = keyof typeof operationalDatasets;
 type Client = Awaited<ReturnType<typeof authenticatedClient>>['db'];
@@ -22,6 +27,11 @@ const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !value
 
 export function operationalRequest(dataset: OperationalDataset, filters: Row, sort: unknown, direction: unknown) {
   if ((sort !== undefined && typeof sort !== 'string') || (direction !== undefined && typeof direction !== 'string')) invalid();
+  if(dataset==='warehouse-stored-wip'){if(sort!==undefined||direction!==undefined||Object.keys(filters).length)invalid();return{filters,sort:undefined,direction:undefined};}
+  if(dataset==='warehouse-requests'){
+    if(sort!==undefined||direction!==undefined||Object.keys(filters).some(k=>!['department_page','kind','search'].includes(k))||!Number.isSafeInteger(filters.department_page)||Number(filters.department_page)<1||Number(filters.department_page)>1000000||typeof filters.search!=='string'||filters.search.length>200||typeof filters.kind!=='string'||!['','issue','unfinished','receipt','acknowledge','dispatch'].includes(filters.kind))invalid();
+    return{filters,sort:undefined,direction:undefined};
+  }
   if (dataset === 'production-history') {
     if (Object.entries(filters).some(([key, v]) => !historyKeys.includes(key) || typeof v !== 'string' || v.length > 3000)) invalid();
     const f = filters as Record<string, string>;
@@ -61,6 +71,7 @@ export function operationalRequest(dataset: OperationalDataset, filters: Row, so
 }
 
 export async function operationalPage(db: Client, factory: string, dataset: OperationalDataset, filters: Row, sort: string | undefined, direction: string | undefined, page: number) {
+  if(dataset==='warehouse-stored-wip'){const r=await db.rpc('warehouse_stored_unfinished',{factory,page});if(r.error)throw r.error;return r.data;}
   if (dataset === 'production-history') {
     const data = await readProductionHistory(db, factory, { filters, sort_key: sort, sort_direction: direction, page });
     if (data?.rows?.length) {
@@ -97,6 +108,7 @@ export async function movementIdentity(db: Client, factory: string, filters: Row
 }
 
 export function operationalReport(dataset: OperationalDataset, language: 'en' | 'ar', rows: Row[], identity?: Row) {
+  if(dataset==='warehouse-stored-wip'||dataset==='warehouse-requests')return warehouseSupplementReport(dataset,language,rows);
   const dictionary: Record<string, string> = language === 'ar' ? ar : en, t = (key: string) => dictionary[key] || key;
   const name = (r: Row, key: string) => (language === 'ar' ? r[key + '_ar'] || r[key] : r[key]) ?? null;
   const unit = (value: unknown) => value == null ? null : t(String(value));
@@ -106,7 +118,7 @@ export function operationalReport(dataset: OperationalDataset, language: 'en' | 
     ['technician_name', 'recordingTechnician'], ['good_quantity', 'tableExportGross', 'number'], ['effective_good', 'tableExportCorrectedGross', 'number'],
     ['effective_scrap', 'leanDiscardedLegacy', 'number'], ['effective_unfinished', 'unfinishedQuantity', 'number'], ['unit', 'unit'],
     ['effective_scrap_kg', 'leanScrapKg', 'number'], ['corrected', 'historyCorrections'], ['submitter_name', 'recordingSubmittedBy'],
-  ] : dataset === 'warehouse-stock' ? (warehouseVisibleColumns as string[][]).map(([key, label, kind]) => [key, label, kind === 'number' ? 'number' : undefined]) : [
+  ] : dataset === 'warehouse-stock' ? (warehouseVisibleColumns as string[][]).map(([key, label, kind]) => [key, warehouseColumnTitle(key), kind === 'number' ? 'number' : undefined]) : [
     ['id', 'tableExportMovement'], ['reference', 'externalReference'], ['created_at', 'tableExportRecordedAt', 'datetime'],
     ['item_name', 'item'], ['item_code', 'code'], ['kind', 'inventoryType'], ['quantity', 'stockMovementDelta', 'number'],
     ['reserved_delta', 'reservedMovementDelta', 'number'], ['unit', 'unit'], ['actor_name', 'receivingActor'], ['note', 'notes'],
@@ -128,6 +140,8 @@ export function operationalReport(dataset: OperationalDataset, language: 'en' | 
 }
 
 export function operationalFilterText(dataset: OperationalDataset, filters: Row, sort: string | undefined, direction: string | undefined, t: (key: string) => string, identity?: Row, language: 'en' | 'ar' = 'en') {
+  if(dataset==='warehouse-stored-wip')return t('all');
+  if(dataset==='warehouse-requests')return `${language==='ar'?'صفحة':'Page'} ${filters.department_page} · ${filters.search||t('all')} · ${filters.kind?warehouseRequestLabels(language)[filters.kind as keyof ReturnType<typeof warehouseRequestLabels>]:t('all')}`;
   const labels: Record<string, string> = { from: 'historyFrom', to: 'historyTo', request: 'productionOrder', product: 'product', unit: 'recordingUnit', technician: 'recordingTechnician', shift: 'productionShift', corrected: 'historyCorrections', measurement_unit: 'unit', scrap: 'leanDiscardedLegacy', minimum_scrap: 'historyMinimum', scrap_metric: 'historyMetric', scrap_scope: 'historyScope' };
   const translated = (key: string, value: unknown) => {
     const v = String(value);

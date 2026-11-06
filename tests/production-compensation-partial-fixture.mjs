@@ -1,0 +1,7 @@
+// Reuse the actual initial-condition fixture, changing only this new scenario's
+// initial request/recording inputs. Never edit an existing production record.
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';
+const root=fs.readFileSync(path.join(process.env.TEMP,'FactoryLean-OperationalUX-SQL-location.txt'),'utf8').trim(),c=JSON.parse(fs.readFileSync(path.join(root,'runtime.json')));assert.equal(c.databaseHost,'127.0.0.1');assert.equal(c.databasePort,55498);assert.equal(c.marker,'FACTORY_LEAN_DISPOSABLE_LOOPBACK_ONLY');
+const s=fs.readFileSync('tests/production-compensation.sql','utf8'),a=s.indexOf('create or replace function compensation_test.fixture'),b=s.indexOf('create or replace function compensation_test.replace',a);assert.ok(a>=0&&b>a);
+const fixture=s.slice(a,b).replace('compensation_test.fixture(','compensation_test.partial_fixture(').replace('late_test.payload(x,q)','late_test.payload(x,50)').replace("'quantity',q::text,'missing_operations'","'quantity','50','missing_operations'").replaceAll("then '95' else '903'","then '48' else '903'").replace("'total',q::text","'total','50'").replace("then '5' else '2'","then '2' else '2'").replace("then '2.5' else '1'","then '1' else '1'");
+fs.writeFileSync(path.join(root,'compensation-partial-fixture.sql'),fixture);console.log('New partial-record fixture prepared; no database write performed');

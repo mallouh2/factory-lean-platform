@@ -5,24 +5,31 @@ import { maintenanceStates, maintenancePriorities } from '@/utils/maintenance.mj
 import { MaintenanceBadge, MaintenanceCreate, MaintenanceDetails } from './MaintenanceRequest';
 import type { MaintenancePage } from './maintenance-types';
 import type { FeatureProps } from './types';
+import MaintenancePlanning from './MaintenancePlanning';
 
 export default function Maintenance(props: FeatureProps) {
   const { snapshot:s,t,lang,can } = props;
   const [page,setPage] = useState(1), [filters,setFilters] = useState<Record<string,string>>({status:'ACTIVE'});
   const [creating,setCreating] = useState(false), [selected,setSelected] = useState('');
+  const [scheduling,setScheduling] = useState(false);
   useEffect(() => {
     const open = (event: Event) => setSelected(String((event as CustomEvent).detail));
     window.addEventListener('factory-maintenance-open',open);
     return () => window.removeEventListener('factory-maintenance-open',open);
   },[]);
   const query = new URLSearchParams({factory:String(s.factory?.id || ''),page:String(page),...filters});
-  const read = useHistoryData<MaintenancePage>(`/api/maintenance?${query}`,s.fetchedAt);
+  const read = useHistoryData<MaintenancePage>(scheduling ? null : `/api/maintenance?${query}`,s.fetchedAt);
   const options = read.data?.options;
   const zone = String(s.factory?.timezone || 'UTC');
   function filter(key:string,value:string) {setPage(1);setFilters(previous => {
     const next={...previous};if(value) next[key]=value;else delete next[key];return next;
   });}
-  return <section className="mr-page" dir={lang==='ar' ? 'rtl' : 'ltr'}>
+  const views = can('maintenance','view') && <nav className="mp-views" aria-label={t('maintenance')}>
+    <button aria-pressed={!scheduling} onClick={() => setScheduling(false)}>{t('mpRepairs')}</button>
+    <button aria-pressed={scheduling} onClick={() => setScheduling(true)}>{t('mpScheduling')}</button></nav>;
+  if (scheduling && can('maintenance','view')) return <section className="mr-page">{views}<MaintenancePlanning {...props}/>
+    {selected && <MaintenanceDetails key={selected} {...props} id={selected} onClose={() => setSelected('')}/>}</section>;
+  return <section className="mr-page" dir={lang==='ar' ? 'rtl' : 'ltr'}>{views}
     <header className="mr-tools"><p>{t(read.data?.wide ? 'maintenanceHelp' : 'maintenanceMyWorkHelp')}</p><div className="mr-actions">
       {can('maintenance','create') && <button className="primary" onClick={() => setCreating(true)}>{t('maintenanceCreate')}</button>}
       <button onClick={read.reload}>{t('refresh')}</button></div></header>

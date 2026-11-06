@@ -82,7 +82,7 @@ test('dependent read failures identify their stage without exposing internals',a
 });
 function appHarness(lang='en'){
   const snapshot=floorSnapshot('running');snapshot.permissions.push('dashboard:view','factory:view','lines:view');
-  const states=[lang,false,'dashboard',snapshot,false,'',false,false,'full',false,null,'',null,null,''];
+  const states=[lang,false,'dashboard',snapshot,false,'',false,false,'full',false,null,'',null,null,null,''];
   let hook=0;let load;const effects=[];
   const react=require('react');
   const App=loadModule(appBundle,name=>name==='react'?{...react,
@@ -99,10 +99,10 @@ test('failed refresh preserves the loaded factory and recovery clears only the l
   for(const lang of ['en','ar']){
     const app=appHarness(lang);app.states[5]='saved';
     await withFetch({status:503,ok:false,json:async()=>({error:'dataWarning'})},app.refresh);
-    assert.equal(app.states[3],app.snapshot);assert.equal(app.states[14],'dataWarning');
+    assert.equal(app.states[3],app.snapshot);assert.equal(app.states[15],'dataWarning');
     const fresh={...app.snapshot,fetchedAt:'later'};
     await withFetch({status:200,ok:true,json:async()=>fresh},app.refresh);
-    assert.equal(app.states[3],fresh);assert.equal(app.states[14],'');assert.equal(app.states[5],'saved');
+    assert.equal(app.states[3],fresh);assert.equal(app.states[15],'');assert.equal(app.states[5],'saved');
   }
 });
 test('real permission denial or expired sign-in discards the inaccessible snapshot',async()=>{
@@ -110,19 +110,35 @@ test('real permission denial or expired sign-in discards the inaccessible snapsh
     const app=appHarness();
     await withFetch({status,ok:false,json:async()=>({error:'permissionError'})},app.refresh);
     assert.equal(app.states[3],null);
-    assert.equal(app.states[14],status===401?'':'permissionError');
+    assert.equal(app.states[15],status===401?'':'permissionError');
   }
 });
 test('normal Factory Floor navigation issues no write command or snapshot request',()=>{
   const app=appHarness();
   function find(node){if(!node||typeof node!=='object')return null;
-    if(node.type==='button'&&node.props?.title==='Lines & Machines')return node;
+    if(node.type?.name==='OperationalNavigation')return node;
     for(const child of [node.props?.children].flat(Infinity)){const found=find(child);if(found)return found;}return null;}
   const button=find(app.render());assert.ok(button);
-  const original=globalThis.fetch;
-  try{globalThis.fetch=()=>{throw new Error('navigation must not call an API');};button.props.onClick();}
-  finally{globalThis.fetch=original;}
+  const original=globalThis.fetch,originalWindow=globalThis.window;let destination;
+  try{globalThis.window={location:{href:'http://localhost/?view=productionHistory'},history:{pushState:(_state,_title,url)=>{destination=String(url);},replaceState:()=>{}}};globalThis.fetch=()=>{throw new Error('navigation must not call an API');};button.props.onNavigate('floor');}
+  finally{globalThis.fetch=original;globalThis.window=originalWindow;}
+  assert.equal(new URL(destination).searchParams.get('view'),'lines');
   assert.equal(app.states[2],'lines');assert.equal(app.states[3],app.snapshot);
+});
+
+test('Strict Mode initialization never overwrites stored Arabic with the initial English default',()=>{
+  const app=appHarness(),originalStorage=globalThis.localStorage,originalDocument=globalThis.document;
+  const values=new Map([['factory-language','ar']]),writes=[];
+  try{
+    globalThis.localStorage={getItem:k=>values.get(k),setItem:(k,v)=>{writes.push(v);values.set(k,v);}};
+    globalThis.document={documentElement:{lang:'en',dir:'ltr'}};
+    const initialize=app.effects.find(fn=>fn.toString().includes('getItem("factory-language")'));
+    const persist=app.effects.find(fn=>fn.toString().includes('setItem("factory-language"'));
+    assert.ok(initialize);assert.ok(persist);
+    initialize();persist();initialize();persist();assert.deepEqual(writes,[]);assert.equal(app.states[0],'ar');
+    app.render();app.effects.find(fn=>fn.toString().includes('setItem("factory-language"'))();
+    assert.deepEqual(writes,['ar']);assert.equal(document.documentElement.dir,'rtl');
+  }finally{globalThis.localStorage=originalStorage;globalThis.document=originalDocument;}
 });
 test('save notice expires after three seconds, while a subsequent error remains visible',()=>{
   const app=appHarness();app.states[5]='saved';app.render();

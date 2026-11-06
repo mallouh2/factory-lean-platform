@@ -1,0 +1,36 @@
+begin;
+create function pg_temp.ok(v boolean,label text) returns void language plpgsql as $$begin if v is distinct from true then raise exception 'FAIL %',label;end if;raise notice 'PASS %',label;end$$;
+create function pg_temp.fails(q text,expected text) returns void language plpgsql as $$begin begin execute q;exception when others then if sqlerrm=expected or sqlstate=expected then raise notice 'PASS rejection %',expected;return;end if;raise;end;raise exception 'Expected rejection %',expected;end$$;
+do $$declare x jsonb;f uuid;page jsonb;row jsonb;src uuid;reason uuid;p jsonb;rejection uuid;req uuid;item uuid;begin
+ select c.x into x from local_preview.context c;f:=(x->>'factory')::uuid;perform set_config('request.jwt.claim.sub',x->>'owner',true);perform set_config('request.jwt.claim.role','authenticated',true);
+ page:=public.quality_read(f,'{"mode":"board"}');
+ perform pg_temp.ok(jsonb_array_length(page->'rows')=2 and (select bool_and(value#>>'{shift_quantity,quantity}'='500') from jsonb_array_elements(page->'rows')),'two receipts expose full same-context500, not receipt25 or475');
+ select value into row from jsonb_array_elements(page->'rows')where value->>'id'=x->>'quality_entry';src:=(row->>'source_id')::uuid;
+ perform pg_temp.ok(row->>'eligible'='475' and row->>'unit'='meter','physical source availability separate from shift production');
+ select id into reason from public.quality_reasons where factory_id=f and name='QA measurement defect';
+ p:=jsonb_build_object('source',src,'quantity','100','reason',reason,'disposition','SCRAP','actual_scrap_kg','40','physically_identified',true);
+ rejection:=public.quality_command(f,'reject',p,gen_random_uuid());
+ row:=public.quality_read(f,jsonb_build_object('mode','board','entry',x->>'quality_entry'))#>'{rows,0}';
+ perform pg_temp.ok(row#>>'{shift_quantity,quantity}'='500' and row#>>'{shift_quantity,rejected}'='100' and row->>'eligible'='375','prior rejection changes stock availability, never gross effective shift output');
+ perform pg_temp.fails(format('select public.quality_command(%L,''reject'',%L,gen_random_uuid())',f,p||'{"quantity":"450"}'),'quality_unavailable');
+ perform pg_temp.ok((select on_hand=400 and reserved=0 from public.finished_goods_balances where factory_id=f),'excess rejected transaction leaves400 stock');
+ perform pg_temp.ok((select count(*)=1 from public.quality_rejections where factory_id=f),'no duplicate rejection from failed write');
+ perform pg_temp.fails(format('select public.quality_command(%L,''reject'',%L,gen_random_uuid())',f,p||'{"physically_identified":false}'),'quality_unavailable');
+ -- A different item/product-line context does not join the original shift total.
+ req:=public.create_production_request(f,'Other order','normal',null,'Local reader regression',jsonb_build_array(jsonb_build_object('product_id',x->>'product','quantity',10,'unit','meter')));
+ select id into item from public.production_orders where request_id=req;
+ perform public.plan_product_item(f,item,(x->>'other_line')::uuid,date_trunc('day',clock_timestamp())+interval '3 days');perform public.start_product_item(f,item);
+ select value into row from jsonb_array_elements(public.production_shift_work(f,null,100)->'rows')where value->>'item_id'=item::text;
+ p:=jsonb_build_object('unit_kind','line','production_unit',x->>'other_line','item',item,'technician',x->>'technician','good',7,'scrap_kg',0,'discarded_quantity',0,'recording_context',jsonb_build_object('version',3,'execution_key',row->>'execution_key','context_hash',row->>'context_hash','occurrence_key',public.production_shift_work(f)#>>'{occurrence,occurrence_key}','current_shift_quantity_confirmed',true));
+ perform public.record_lean_production(f,p,gen_random_uuid());
+ perform pg_temp.ok(public.quality_read(f,jsonb_build_object('mode','board','entry',x->>'quality_entry'))#>>'{rows,0,shift_quantity,quantity}'='500','other order and line cannot inflate shift total');
+ perform set_config('request.jwt.claim.sub',x->>'viewer',true);
+ perform pg_temp.fails(format('select public.quality_read(%L,''{"mode":"board"}'')',f),'42501');
+ p:=jsonb_build_object('source',src,'quantity','1','reason',reason,'disposition','SCRAP','actual_scrap_kg','.5','physically_identified',true);
+ perform pg_temp.fails(format('select public.quality_command(%L,''reject'',%L,gen_random_uuid())',f,p),'42501');
+ perform set_config('request.jwt.claim.sub',x->>'worker',true);
+ perform pg_temp.ok(public.quality_read(f,jsonb_build_object('mode','board','entry',x->>'quality_entry'))#>'{rows,0,scrap_evidence}'='null'::jsonb,'no Lean evidence leak to Quality-only worker');
+ perform pg_temp.fails(format('select public.quality_read(%L,''{"mode":"board"}'')',gen_random_uuid()),'42501');
+ perform pg_temp.ok(not has_function_privilege('anon','public.quality_read(uuid,jsonb)','execute') and not has_function_privilege('authenticated','private.quality_read_before_m3c(uuid,jsonb)','execute'),'protected public reader and revoked helper grants remain');
+end$$;
+rollback;

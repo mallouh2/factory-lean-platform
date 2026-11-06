@@ -24,7 +24,8 @@ export function maintenanceCommandValid(command, args) {
     : ['factory','maintenance_request','operation','payload','expected_revision','request_id'];
   if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).some(key => !keys.includes(key))) return false;
   if (!args.payload || typeof args.payload !== 'object' || Array.isArray(args.payload)) return false;
-  const payloadKeys = create ? ['work_center_id','downtime_id','title','description','priority','assigned_to','separate_problem']
+  const payloadKeys = create ? ['work_center_id','downtime_id','title','description','priority','assigned_to','separate_problem',
+    'maintenance_kind','estimated_duration_minutes','preferred_start','preferred_end','planning_notes']
     : { assign:['assigned_to'], priority:['priority'], start:[], note:['work_note'], complete:['work_note'],
       verify:['result','verification_note'], cancel:['cancellation_note'] }[args.operation];
   return Boolean(payloadKeys && Object.keys(args.payload).every(key => payloadKeys.includes(key))

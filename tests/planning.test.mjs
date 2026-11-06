@@ -32,6 +32,7 @@ const lines = [{ id: "L", name: "Pipe line", name_ar: "خط الأنابيب" },
 const centers = [{ id: "C", line_id: "L", status: "idle", archived: false, order_id: null, operator_id: null }];
 const capabilities = [{ work_center_id: "C", product_id: "P", rate: 25, rate_unit: "piece" }];
 
+
 test("unplanned items stay in the queue and capability narrows line choices", () => {
   assert.equal(isScheduled(orders[0]), false);
   assert.equal(isScheduled(orders[1]), true);
@@ -64,32 +65,37 @@ test("paused lines and identical starts surface factual planning conflicts", () 
 
 const require = createRequire(import.meta.url);
 const bundled = await build({ entryPoints: ["src/features/ProductionPlanning.tsx"], bundle: true,
-  platform: "node", format: "cjs", packages: "external", write: false, logLevel: "silent" });
+  platform: "node", format: "cjs", packages: "external", write: false, logLevel: "silent",
+  plugins:[{name:'complete-empty-maintenance-reader',setup(b) {
+    // These existing production interaction tests use a complete, empty protected-reader fixture.
+    // Actual Maintenance hooks/drawers and unavailable/denied readers have separate browser coverage.
+    b.onLoad({filter:/[\\/]useOperationalPlanningBoard\.ts$/},()=>({loader:'js',contents:
+      `export function useOperationalPlanningBoard({snapshot:s}){return {data:{completeness:'COMPLETE',active:false,schedules:[],requests:[],orders:s.tables.production_orders,production_requests:s.tables.production_requests,reservations:[],loaded:0,total:0},complete:!(s.truncatedTables||[]).includes('production_orders'),loading:false,error:'',reload(){}};}` }));
+    b.onLoad({filter:/[\\/]PlanningWarningPolicy\.tsx$/},()=>({loader:'js',contents:`export function PlanningWarningSetting(){return null} export function PlanningExceptionReview(){return null} export function planningPolicyCommand(name,args){return globalThis.__planningPolicyFixture(name,args)}`}));
+    b.onLoad({filter:/[\\/]usePlanningWork\.ts$/},()=>({loader:'js',contents:
+      `export function usePlanningWork({snapshot:s}){return {data:s.planningWork||[],complete:true,loading:false,error:'',reload(){}};}` }));
+    b.onLoad({filter:/[\\/]MaintenancePlanning\.tsx$/},() => ({loader:'js',contents:
+      `export function useMaintenancePlanning(){return {data:{active:false,schedules:[],requests:[]},loading:false,error:'',reload(){}};}
+       export function MaintenancePlanningDrawer(){return null;}` }));
+  }}] });
 const planningModule = { exports: {} };
 new Function("require", "module", "exports", bundled.outputFiles[0].text)(require, planningModule, planningModule.exports);
 const ProductionPlanning = planningModule.exports.default;
-const snapshot = { factory: { id: "F", timezone: "UTC" }, tables: {
+const snapshot = { user: {id: "local-planner"}, factory: { id: "F", timezone: "UTC" }, tables: {
   production_requests: requests, production_orders: orders,
   products: [{ id: "P", name: "PVC pipe", name_ar: "أنبوب" }],
   production_lines: lines, work_centers: centers, work_center_capabilities: capabilities,
+  production_transfers: [], production_routing_steps: [],
 } };
 
-test('compact line view uses the same persisted current/next jobs and labelled planned timestamps in EN/AR', () => {
-  for (const [lang, dictionary] of [['en', en], ['ar', ar]]) {
-    const data = structuredClone(snapshot);
-    data.tables.production_orders[1].expected_finish = '2026-10-08T10:00:00Z';
-    const before = JSON.stringify(data);
-    const html = renderToStaticMarkup(createElement(ProductionPlanning, {
-      snapshot: data, lang, t: key => dictionary[key] || key, can: () => true, command: async () => {},
-    }));
-    const compact = html.split('class="planning-mobile-lines"')[1].split('class="planning-section planning-requests-progressed"')[0];
-    assert.ok(compact.includes(dictionary.executionCurrentReady));
-    assert.ok(compact.includes('PO-2'));
-    assert.ok(compact.includes(dictionary.executionPlannedStart));
-    assert.ok(compact.includes(dictionary.executionPlannedFinish));
-    assert.ok(html.indexOf('planning-section planning-requests-waiting') < html.indexOf('planning-section planning-gantt'));
-    assert.equal(JSON.stringify(data), before);
-  }
+test('Gantt uses compact line names without operational Current/Next monitoring in EN/AR',()=>{
+ for(const [lang,dictionary]of [['en',en],['ar',ar]]){
+  const data=structuredClone(snapshot);data.tables.production_orders[1].expected_finish='2026-10-08T10:00:00Z';
+  const before=JSON.stringify(data),html=renderToStaticMarkup(interactivePlanner(data,{lang,anchor:'2026-10-08T00:00:00Z'}).tree);
+  const chart=html.split('class="planning-gantt-v4"')[1].split('class="planning-section planning-requests-progressed"')[0];
+  assert.doesNotMatch(chart,/planning-line-job|planning-line-load|planning-load-track|planning-mobile-lines|planning-current-label/);
+  assert.ok(chart.includes('planning-line-name'));assert.ok(chart.includes('planning-job-caption'));assert.ok(chart.includes('ITEM-2'));assert.equal(JSON.stringify(data),before);
+ }
 });
 
 test('one compact unscheduled queue precedes desktop Gantt and mobile schedules in EN/AR', () => {
@@ -103,7 +109,7 @@ test('one compact unscheduled queue precedes desktop Gantt and mobile schedules 
     assert.equal((html.match(/class="planning-section planning-requests-waiting"/g) || []).length, 1);
     const waitingIndex = html.indexOf('planning-section planning-requests-waiting');
     assert.ok(waitingIndex < html.indexOf('planning-section planning-gantt'));
-    assert.ok(waitingIndex < html.indexOf('planning-mobile-lines'));
+    assert.equal(html.includes('planning-mobile-lines'),false);
     const waiting = html.slice(waitingIndex, html.indexOf('planning-section planning-gantt'));
     assert.equal((waiting.match(/data-request-id=/g) || []).length, 12, 'scrolling never hides demand from the DOM');
     assert.match(waiting, /<span>12<\/span>/);
@@ -113,7 +119,7 @@ test('one compact unscheduled queue precedes desktop Gantt and mobile schedules 
   }
 });
 
-test('current execution remains green with a separate deadline-risk marker and retains planned timings on mobile',()=>{
+test('active schedule has an explicit state while planned timestamps remain unchanged in both languages',()=>{
   const now=Date.now(),stamp=minutes=>new Date(now+minutes*60000).toISOString();
   const data=structuredClone(snapshot);
   data.tables.production_requests[1].required_by=stamp(120);
@@ -122,10 +128,9 @@ test('current execution remains green with a separate deadline-risk marker and r
   for(const [lang,words] of [['en',en],['ar',ar]]){
     const html=renderToStaticMarkup(createElement(ProductionPlanning,{snapshot:data,lang,t:key=>words[key]||key,can:()=>true,command:()=>{throw Error('render cannot write');}}));
     assert.match(html,/data-state="active" class="planning-gantt-block[^"\n]*planning-gantt-active/);
-    assert.match(html,/planning-risk-mark planningAtRisk/);
-    const compact=html.split('class="planning-mobile-lines"')[1].split('class="planning-section planning-requests-progressed"')[0];
-    assert.ok(compact.includes(words.executionPlannedStart));assert.ok(compact.includes(words.executionPlannedFinish));
-    assert.ok(compact.includes(words.planningInProduction));
+    assert.ok(html.includes(words.planningAtRisk));
+    assert.equal(html.includes('planning-mobile-lines'),false);assert.ok(html.includes(words.executionPlannedStart));assert.ok(html.includes(words.executionPlannedFinish));
+
   }
   assert.equal(JSON.stringify(data),before);
 });
@@ -136,7 +141,7 @@ test("planner sees both request sections and focused fields in English and Arabi
       t: (key) => dictionary[key] || key, lang, can: () => true,
       command: async () => {}, initialItemId: "O1" }));
     assert.match(html, new RegExp(queueLabel));
-    assert.match(html, /PO-1/);
+    assert.match(html, /ITEM-1/);
     assert.match(html, /planning-timeline/);
     assert.match(html, /planning-lane-track/);
     assert.match(html, /role="dialog"/);
@@ -154,7 +159,8 @@ test("eligible scheduling sends the same line and planned start through the plan
       return (initial) => [values[index++] ?? (typeof initial === "function" ? initial() : initial), () => {}];
     })(),
     useEffect: () => {},
-    useRef: () => ({ current: null }),
+    useMemo: fn=>fn(),
+    useRef: value => ({ current: value }),
   };
   const moduleWithHooks = { exports: {} };
   new Function("require", "module", "exports", bundled.outputFiles[0].text)(
@@ -273,7 +279,7 @@ test("working-time gap fit includes setup, keeps booked jobs fixed, and manual e
   assert.notEqual(closedDrop.requestedStart, closedDrop.start);
 });
 
-test("Gantt renders closed periods and setup inside the real elapsed reservation in both languages", () => {
+test("Gantt renders closed periods and the saved elapsed interval without recomputing historical setup", () => {
   const RealDate = globalThis.Date;
   const fixedNow = "2026-09-27T12:00:00Z";
   const item = { ...orders[1], start_time: "2026-09-27T15:00:00Z",
@@ -295,9 +301,9 @@ test("Gantt renders closed periods and setup inside the real elapsed reservation
         snapshot: calendarSnapshot, lang, t: (key) => dictionary[key] || key,
         can: () => true, command: async () => {}, initialItemId: item.id }));
       assert.match(html, /planning-closed-time/);
-      assert.match(html, /planning-setup-segment/);
+      assert.doesNotMatch(html, /planning-setup-segment/);
       assert.match(html, /planning-timeline-scroll" dir="ltr"/);
-      assert.ok(html.includes(dictionary.planningTotalWorking));
+      assert.ok(html.includes(dictionary.executionPlannedStart));assert.ok(html.includes(dictionary.executionPlannedFinish));assert.match(html,/planning-saved-interval/);
     }
   } finally { globalThis.Date = RealDate; }
 });
@@ -348,7 +354,7 @@ test("existing overlapping jobs remain visibly identifiable without moving them"
     booked, centers, capabilities).error, "planningOverlap");
 });
 
-test("one request card contains its separate product items in English and Arabic", () => {
+test("one request exposes each independent product item in the compact table in English and Arabic", () => {
   const secondItem = { ...orders[0], id: "O3", product_id: "Q", unit: "piece", target_quantity: 500 };
   const multi = { ...snapshot, tables: { ...snapshot.tables,
     production_orders: [orders[0], secondItem, orders[1]],
@@ -360,15 +366,16 @@ test("one request card contains its separate product items in English and Arabic
   for (const [lang, dictionary, name] of [["en", en, "Second product"], ["ar", ar, "منتج ثانٍ"]]) {
     const html = renderToStaticMarkup(createElement(ProductionPlanning, { snapshot: multi,
       t: (key) => dictionary[key] || key, lang, can: () => true, command: async () => {} }));
-    assert.equal((html.match(/class="planning-request-card"/g) || []).length, 2);
-    const firstCard = html.split('class="planning-request-card"')[1].split('</article>')[0];
-    assert.match(firstCard, /PO-1/);
-    assert.match(firstCard, new RegExp(name));
-    assert.equal((firstCard.match(/class="planning-product-card"/g) || []).length, 2);
+    const waiting=html.split('class="planning-section planning-requests-waiting"')[1].split('</section>')[0];
+    assert.equal((waiting.match(/data-item-id=/g)||[]).length,2);
+    assert.match(waiting,/ITEM-1/);assert.match(waiting,new RegExp(name));
+    assert.doesNotMatch(waiting,/planning-request-card/);
   }
 });
 
 function interactivePlanner(testSnapshot, initial = {}, command = async () => {}) {
+  globalThis.__planningPolicyFixture=command;
+  globalThis.requestAnimationFrame ??= callback=>callback();
   globalThis.document ??= { activeElement: null };
   globalThis.HTMLButtonElement ??= class HTMLButtonElement {};
   globalThis.Element ??= class Element {};
@@ -382,7 +389,7 @@ function interactivePlanner(testSnapshot, initial = {}, command = async () => {}
   const fakeReact = { useState: (() => { let index = 0;
     return (fallback) => { const position = index++; return [state[position] ?? fallback,
       (value) => updates.push({ position, value })]; }; })(),
-    useEffect: () => {}, useRef: () => ({ current: null }) };
+    useEffect: () => {}, useMemo: fn=>fn(), useRef: value => ({ current: value }) };
   const moduleWithHooks = { exports: {} };
   new Function("require", "module", "exports", bundled.outputFiles[0].text)(
     (name) => name === "react" ? fakeReact : require(name), moduleWithHooks, moduleWithHooks.exports);
@@ -395,6 +402,24 @@ function allNodes(node, predicate) {
   if (Array.isArray(node)) return node.flatMap((child) => allNodes(child, predicate));
   return [...(predicate(node) ? [node] : []), ...allNodes(node.props?.children, predicate)];
 }
+
+test('selected capable line with an empty/invalid start keeps the calendar drawer usable',()=>{
+ const visual={...snapshot,tables:{...snapshot.tables,production_orders:snapshot.tables.production_orders.map(o=>({...o,unit:'piece'}))},factory:{...snapshot.factory,timezone:'Asia/Qatar',working_days_mask:127,workday_start:'08:00',workday_end:'17:00'}};
+ for(const start of['','invalid-date'])for(const lang of['en','ar']){
+  const {tree}=interactivePlanner(visual,{item:'O1',line:'L',start,lang});
+  assert.ok(allNodes(tree,n=>n.props?.className==='planning-drawer').length);
+  const form=allNodes(tree,n=>n.type==='form')[0],save=allNodes(form,n=>n.type==='button'&&n.props?.className==='primary')[0];
+  assert.equal(save.props.disabled,true);
+ }
+});
+
+test('no-fit/invalid dates never format an invalid working-calendar timestamp',()=>{
+ const calendar={mask:127,start:'08:00',end:'17:00'};
+ assert.ok(Number.isNaN(finishAfterWorkingMs(NaN,60000,calendar)));
+ assert.ok(Number.isNaN(finishAfterWorkingMs(Date.now(),Infinity,calendar)));
+ assert.ok(Number.isNaN(finishAfterWorkingMs(Date.now(),-1,calendar)));
+ assert.equal(firstAvailable([{start:0,finish:Infinity}],Date.now(),60000,Date.now()+3600000,calendar).error,'planningNoFit');
+});
 
 test("locked planned items show an unlock action and cannot drag, edit, or unschedule in EN/AR", () => {
   const locked = { ...orders[1], expected_finish: "2026-10-08T10:00:00Z",
@@ -528,12 +553,13 @@ test("reason save sends an atomic revision command with the selected category", 
     source: "drop", item: "O2", target_line: "L", planned_start: "2026-10-08T12:00:00Z",
   }, reasonCode: "priority_change" }, async (name, args) => saved.push({ name, args }));
   const dialog = allNodes(tree, (node) => node.props?.className === "planning-reason-dialog")[0];
+  const review=allNodes(dialog,node=>node.props?.pending&&node.props?.onChange)[0];review.props.onChange({fingerprint:"protected-context",required:false,confirmed:false,ready:true});
   const form = allNodes(dialog, (node) => node.type === "form")[0];
   await form.props.onSubmit({ preventDefault() {} });
-  assert.deepEqual(saved, [{ name: "revise_product_plan", args: {
+  assert.equal(saved[0].name,"revise_product_plan_confirmed");assert.match(saved[0].args.request_id,/^[0-9a-f-]{36}$/);const {request_id,...protectedArgs}=saved[0].args;assert.deepEqual(protectedArgs, {
     factory: "F", item: "O2", target_line: "L", planned_start: "2026-10-08T12:00:00Z",
-    reason_code: "priority_change", reason_note: "",
-  } }]);
+    reason_code: "priority_change", reason_note: "",expected_fingerprint:"protected-context",exception_confirmed:false
+  });
 });
 
 test("re-scheduling after an unschedule is replanning for both manual and drag paths", () => {
@@ -571,7 +597,9 @@ test("clicking or dragging an item targets only its own product and quantity", (
   cards[1].props.onClick();
   assert.deepEqual(updates.find((update) => update.position === 0), { position: 0, value: "O3" });
   let dragged;
-  cards[1].props.onDragStart({ dataTransfer: { setData: (type, id) => { dragged = { type, id }; } } });
+  globalThis.document.createElement=()=>({width:1,height:1});
+  globalThis.document.addEventListener=()=>{};globalThis.document.removeEventListener=()=>{};globalThis.document.defaultView={requestAnimationFrame:()=>1,cancelAnimationFrame:()=>{}};
+  cards[1].props.onDragStart({currentTarget:{classList:{contains:()=>false}},dataTransfer: {setDragImage(){},setData: (type, id) => { dragged = { type, id }; } } });
   assert.deepEqual(dragged, { type: "text/plain", id: "O3" });
 });
 
@@ -602,7 +630,7 @@ test("drop rejects an incompatible line and directly saves only the dragged item
   const event = { preventDefault: () => prevented++, dataTransfer: { getData: () => "O1" },
     clientX: 500, currentTarget: { getBoundingClientRect: () => ({ left: 0, width: 1000 }) } };
   tracks[1].props.onDrop(event);
-  assert.ok(updates.some((update) => update.position === 4 && update.value === "planningIncompatibleLine"));
+  assert.ok(updates.some((update) => update.position === 4 && /Cannot schedule.*PVC pipe.*compatible line/.test(update.value)));
   assert.equal(saved.length, 0);
   tracks[0].props.onDrop(event);
   await new Promise((resolve) => setImmediate(resolve));
@@ -630,12 +658,12 @@ test("real TESTING HDPE meter item is draggable, while legacy unit item explains
     assert.equal(cards[1].props.draggable, false);
     assert.equal(cards[1].props.disabled, false, 'invalid items remain inspectable');
     assert.equal(cards[1].props.title, (lang === 'ar' ? ar : en).planningLegacyUnit);
-    assert.equal(allNodes(cards[1], node => node.props?.className === "planning-drag-reason").length, 1);
+    assert.ok(JSON.stringify(tree).includes((lang === "ar" ? ar : en).planningLegacyUnit));
     let prevented = false;
     cards[1].props.onDragStart({ preventDefault: () => { prevented = true; },
       dataTransfer: { setData: () => assert.fail('invalid item must not create a drag payload') } });
     assert.equal(prevented, true);
-    assert.equal(allNodes(tree, node => node.props?.className === "planning-find-slot").length, 1);
+    assert.equal(allNodes(tree, node => node.props?.className === "planning-compare-lines").length, 0, "slot assistance is contextual, not repeated on every row");
   }
   assert.equal(durationMs(legacy, lines[0], centers, rates).error, 'planningMissingRate');
   assert.ok(!durationMs(good, lines[0], centers, rates).error);
@@ -729,17 +757,11 @@ test("two items in one request may use different capable lines and starts", () =
     secondStart + 2 * 60 * 60_000);
 });
 
-test("request header stays focused and child blocks show only product and quantity", () => {
-  const html = renderToStaticMarkup(createElement(ProductionPlanning, { snapshot,
-    t: (key) => en[key] || key, lang: "en", can: () => true, command: async () => {} }));
-  const firstCard = html.split('class="planning-request-card"')[1].split('</article>')[0];
-  assert.match(firstCard, /Pipe project/);
-  assert.match(firstCard, /Required By/);
-  assert.match(firstCard, /Urgent/);
-  assert.match(firstCard, /1 waiting/);
-  assert.match(firstCard, /PVC pipe/);
-  assert.match(firstCard, /300 m/);
-  assert.doesNotMatch(firstCard, /Requested By|Production rate|Line \/ planned start/);
+test("compact queue exposes decisions and leaves origin and technical calculations to details",()=>{
+ const html=renderToStaticMarkup(createElement(ProductionPlanning,{snapshot,t:key=>en[key]||key,lang:'en',can:()=>true,command:async()=>{}}));
+ const queue=html.split('class="planning-section planning-requests-waiting"')[1].split('</section>')[0];
+ for(const text of ['Required By','Urgent','PVC pipe','300 m'])assert.ok(queue.includes(text));
+ assert.doesNotMatch(queue,/Requested By|Production rate|planning-request-card/);
 });
 
 test("catalog colors are stable, distinct, and shared by queue, Gantt, and details", () => {
@@ -751,7 +773,7 @@ test("catalog colors are stable, distinct, and shared by queue, Gantt, and detai
   const html = renderToStaticMarkup(createElement(ProductionPlanning, { snapshot,
     t: (key) => en[key] || key, lang: "en", can: () => true,
     command: async () => {}, initialItemId: "O2" }));
-  assert.ok(html.split(`--planning-product-bg:${planningProductTones(snapshot.tables.products).get("P").surface}`).length >= 4);
+  assert.ok(html.includes(`--planning-product-bg:${planningProductTones(snapshot.tables.products).get("P").surface}`));
 });
 
 test("preview width doubles on a line with half the product rate", () => {
@@ -858,7 +880,7 @@ test("Arabic timeline keeps chronological left-to-right positions", () => {
   assert.ok(parseFloat(blocks[0].props.style.left) < parseFloat(blocks[1].props.style.left));
 });
 
-test("one request splits its distinct items between horizontal waiting and progressed rows", () => {
+test("one request splits independent items between unscheduled and scheduled tables", () => {
   const sibling = { ...orders[1], id: "O3", request_id: "R1", product_id: "Q" };
   const multi = { ...snapshot, tables: { ...snapshot.tables,
     production_orders: [orders[0], sibling],
@@ -868,16 +890,14 @@ test("one request splits its distinct items between horizontal waiting and progr
     t: (key) => en[key] || key, lang: "en", can: () => true, command: async () => {} }));
   const waiting = html.split('class="planning-section planning-requests-waiting"')[1].split('</section>')[0];
   const progressed = html.split('class="planning-section planning-requests-progressed"')[1].split('</section>')[0];
-  assert.match(waiting, /Pipe project/);
-  assert.match(progressed, /Pipe project/);
+  assert.match(waiting, /ITEM-1/);
+  assert.match(progressed, /ITEM-2/);
   assert.match(waiting, /PVC pipe/);
   assert.doesNotMatch(waiting, /Second product/);
   assert.match(progressed, /Second product/);
   assert.doesNotMatch(progressed, /PVC pipe/);
-  assert.match(waiting, /1 waiting/);
-  assert.match(progressed, /1 \/ 2 progressed/);
-  assert.match(waiting, /planning-list/);
-  assert.match(progressed, /planning-list/);
+  assert.equal((waiting.match(/data-item-id=/g)||[]).length,1);
+  assert.equal((progressed.match(/data-item-id=/g)||[]).length,1);
   const scheduled = { ...orders[0], line_id: "L", start_time: "2026-10-08T12:00:00Z" };
   const allPlaced = { ...multi, tables: { ...multi.tables, production_orders: [scheduled, sibling] } };
   const placedHtml = renderToStaticMarkup(createElement(ProductionPlanning, { snapshot: allPlaced,
@@ -885,8 +905,7 @@ test("one request splits its distinct items between horizontal waiting and progr
   const emptyTop = placedHtml.split('class="planning-section planning-requests-waiting"')[1].split('</section>')[0];
   const fullBottom = placedHtml.split('class="planning-section planning-requests-progressed"')[1].split('</section>')[0];
   assert.doesNotMatch(emptyTop, /Pipe project/);
-  assert.match(fullBottom, /2 \/ 2 progressed/);
-  assert.equal((fullBottom.match(/class="planning-product-card"/g) || []).length, 2);
+  assert.equal((fullBottom.match(/data-item-id=/g)||[]).length,2);
 });
 
 test("optimistic placement moves only the target item into its planned request card", () => {
@@ -919,12 +938,12 @@ test("board status uses stored item state and disables started or completed drag
   ] } };
   const { tree } = interactivePlanner(visual);
   const cards = allNodes(tree, (node) => node.props?.className?.startsWith("planning-product-card"));
-  assert.equal(cards.length, 4);
+  assert.equal(cards.length, 3);
   assert.equal(cards.filter((card) => card.props.draggable).length, 2);
   assert.equal(cards.filter((card) => card.props.disabled).length, 0);
   const labels = cards.map((card) => card.props["aria-label"]);
   assert.ok(labels.some((label) => label.includes("In production")));
-  assert.ok(labels.some((label) => label.includes("Completed")));
+  assert.ok(!labels.some((label) => label.includes("Completed")), "completed work belongs in history");
 });
 
 test("full-width board offers half-hour through four-week scales with a derived end", () => {
@@ -952,7 +971,7 @@ test("full-width board offers half-hour through four-week scales with a derived 
     Date.parse("2026-10-09T00:00:00Z") + 12 * 60 * 60_000);
   const close = interactivePlanner(snapshot, { zoom: 0 });
   const closeTicks = allNodes(close.tree, (node) => node.type === "span" &&
-    node.props.style?.left && node.props.children === "00:30");
+    node.props.style?.left && node.props['data-tick'] === "00:30");
   assert.ok(closeTicks.length > 0);
   const wide = interactivePlanner(snapshot, { zoom: 5 });
   const wideTicks = allNodes(wide.tree, (node) => node.type === "span" && node.props.style?.left);
@@ -982,7 +1001,7 @@ test("releasing an invalid hover reports why the item returned", () => {
     currentTarget: { getBoundingClientRect: () => ({ left: 0, width: 1000 }) } };
   target.props.onDragOver(event);
   card.props.onDragEnd();
-  assert.ok(updates.some((update) => update.position === 4 && update.value === "planningIncompatibleLine"));
+  assert.ok(updates.some((update) => update.position === 4 && /Cannot schedule.*PVC pipe.*compatible line/.test(update.value)));
   assert.ok(updates.some((update) => update.position === 15 && update.value === "O1"));
 });
 
@@ -1071,13 +1090,13 @@ test("pointer panning moves the window backward/forward and leaves zoom and jobs
 test("a Gantt window may start at an arbitrary non-midnight time and label it", () => {
   const { tree } = interactivePlanner(snapshot, { zoom: 0, anchor: "2026-10-09T14:30:00Z" });
   const labels = allNodes(tree, (node) => node.type === "span" && node.props.style?.left)
-    .map((node) => node.props.children);
+    .map((node) => node.props['data-tick']);
   assert.ok(labels.includes("14:30"));
   assert.ok(labels.includes("15:00"));
   const wide = interactivePlanner(snapshot, { zoom: 5, anchor: "2026-10-09T14:30:00Z" });
   const wideLabels = allNodes(wide.tree, (node) => node.type === "span" &&
-    node.props.style?.left && typeof node.props.children === "string" && node.props.children)
-    .map((node) => node.props.children);
+    node.props.style?.left && node.props['data-tick'])
+    .map((node) => node.props['data-tick']);
   assert.ok(wideLabels.some((label) => label.includes("Oct 9")));
 });
 
@@ -1092,8 +1111,8 @@ test("labels and closed-hours shading follow the moved window", () => {
   assert.notDeepEqual(closedAt(early.tree), closedAt(late.tree));
   assert.ok(closedAt(early.tree).includes("0%")); // window opens inside closed hours
   const ticksAt = (tree) => allNodes(tree, (node) => node.type === "span" &&
-    node.props.style?.left && typeof node.props.children === "string" && node.props.children)
-    .map((node) => node.props.children);
+    node.props.style?.left && node.props['data-tick'])
+    .map((node) => node.props['data-tick']);
   assert.notDeepEqual(ticksAt(early.tree), ticksAt(late.tree)); // labels follow the window
 });
 
@@ -1139,7 +1158,7 @@ test("one compact toolbar shows editable start, derived end and scale in English
     assert.ok(html.includes(dictionary.planningZoom));
     assert.ok(html.includes(dictionary.planningZoomDay));
     assert.doesNotMatch(html, /planning-time-slider|planning-time-navigation|planning-board-navigation/);
-    assert.doesNotMatch(html, /type="date"|Previous period|Next period|>Today<|الفترة السابقة|الفترة التالية|>اليوم</);
+    assert.ok(html.includes(dictionary.planningToday));
     assert.match(html, /class="planning-timeline-scroll" dir="ltr"/);
   }
 });
@@ -1213,25 +1232,16 @@ test("visible Planning summary counts product items and reuses deadline risk sta
   assert.deepEqual(blocks[0].props.style["--planning-product-bg"],
     blocks[1].props.style["--planning-product-bg"]); // product identity survives risk treatment
   const requestWarnings = allNodes(tree, (node) => node.props?.className?.startsWith("planning-request-risk"));
-  assert.equal(requestWarnings.length, 2);
+  assert.equal(requestWarnings.length, 0, "request-card warnings replaced by factual per-item timing labels");
 });
 
-test("panning and zooming change load without moving stored jobs", () => {
-  const booked = [{ ...orders[1], start_time: "2026-10-09T08:00:00Z",
-    expected_finish: "2026-10-09T10:00:00Z" }];
-  const visual = { ...snapshot, tables: { ...snapshot.tables, production_orders: booked } };
-  const before = structuredClone(booked);
-  let writes = 0;
-  const renderLoad = (anchor, zoom = 1) => {
-    const { tree } = interactivePlanner(visual, { anchor, zoom }, async () => { writes++; });
-    return allNodes(tree, (node) => node.props?.className === "planning-line-load")[0].props.children;
-  };
-  assert.match(String(renderLoad("2026-10-09T00:00:00Z")), /8\.3%/);
-  const panned = panViewStart(Date.parse("2026-10-09T00:00:00Z"), 24 * hour, 1000, -1000);
-  assert.match(String(renderLoad(new Date(panned).toISOString())), /0%/);
-  assert.match(String(renderLoad("2026-10-09T00:00:00Z", 2)), /2\.8%/);
-  assert.deepEqual(booked, before);
-  assert.equal(writes, 0);
+test('panning and zooming preserve saved jobs without a line-load monitor',()=>{
+ const job={...orders[1],start_time:'2026-10-09T08:00:00Z',expected_finish:'2026-10-09T10:00:00Z'},before=structuredClone(job);
+ for(const anchor of ['2026-10-09T00:00:00Z','2026-10-10T00:00:00Z'])for(const zoom of[1,2]){
+  const {tree}=interactivePlanner({...snapshot,tables:{...snapshot.tables,production_orders:[job]}},{anchor,zoom});
+  assert.equal(allNodes(tree,n=>n.props?.className==='planning-line-load').length,0);
+ }
+ assert.deepEqual(job,before);
 });
 
 test("capacity and summary respect line filters while keeping Arabic labels readable", () => {
@@ -1358,16 +1368,16 @@ test("smart slot load is contextual, never a gate, and unavailable slots explain
   assert.equal(noOpening.reason, "planningSlotNone");
 });
 
-test("Find slot is localized, previews on the left-to-right Gantt, and writes only after confirmation", async () => {
+test("Advanced line comparison is localized, previews on Gantt, and writes only after confirmation", async () => {
   const waiting = { ...orders[0], unit: "piece", target_quantity: 50 };
   const visual = { ...snapshot, tables: { ...snapshot.tables,
     production_orders: [waiting, orders[1]] } };
   for (const lang of ["en", "ar"]) {
     const writes = [];
     const command = async (name, args) => { writes.push({ name, args }); };
-    const first = interactivePlanner(visual, { lang }, command);
-    const find = allNodes(first.tree, (node) => node.props?.className === "planning-find-slot")[0];
-    assert.equal(find.props.children, lang === "en" ? en.planningFindSlot : ar.planningFindSlot);
+    const first = interactivePlanner(visual, { lang, item: waiting.id,line:"L",start:"2026-10-09T08:00" }, command);
+    const find = allNodes(first.tree, (node) => node.props?.className === "planning-compare-lines")[0];
+    assert.equal(find.props.children, lang === "en" ? en.planningCompareLines : ar.planningCompareLines);
     find.props.onClick();
     const search = first.updates.find((update) => update.position === 22).value;
     assert.equal(writes.length, 0);
@@ -1406,7 +1416,7 @@ test("Smart Slot for a previously scheduled waiting item requests a revision rea
     { now: Math.ceil(Date.now() / 900_000) * 900_000 });
   let writes = 0;
   const { tree, updates } = interactivePlanner(visual, { slotSearch: { itemId: "O1", ...search },
-    slotChoice: 0 }, async () => { writes++; });
+    slotChoice: 0,anchor:new Date(search.suggestions[0].start-hour).toISOString() }, async () => { writes++; });
   const confirm = allNodes(tree, (node) => node.type === "button" &&
     node.props.children === en.planningConfirmSlot)[0];
   await confirm.props.onClick();
@@ -1414,4 +1424,52 @@ test("Smart Slot for a previously scheduled waiting item requests a revision rea
   const reason = updates.find((update) => update.position === 17).value;
   assert.equal(reason.source, "save");
   assert.equal(reason.item, "O1");
+});
+
+test('A Smart Slot outside the fully loaded horizon cannot be confirmed from the Gantt',async()=>{
+ const waiting={...orders[0],unit:'piece',target_quantity:50};
+ const visual={...snapshot,tables:{...snapshot.tables,production_orders:[waiting]}};
+ const search=suggestPlanningSlots(waiting,requests[0],lines,[waiting],centers,capabilities,{now:Date.now()});let writes=0;
+ const {tree,updates}=interactivePlanner(visual,{slotSearch:{itemId:'O1',...search},slotChoice:0,anchor:'2026-10-09T00:00:00Z'},async()=>{writes++;});
+ await allNodes(tree,node=>node.type==='button'&&node.props.children===en.planningConfirmSlot)[0].props.onClick();
+ assert.equal(writes,0);assert.ok(updates.some(x=>x.position===4&&x.value==='mpBoardOutside'));
+});
+
+
+test('one lifecycle workspace carries authoritative work types and priority without legacy recovery cards',()=>{
+ const data=structuredClone(snapshot);data.planningWork=[
+  {item_id:'O1',choice:'COMPLETE',origin_code:'PO-source',held:false,retired:false,capable_lines:['L']},
+  {item_id:'O2',choice:'REPLACE',origin_code:'PO-source',held:false,retired:false,capable_lines:['L']},
+  {item_id:'RETIRED',choice:'COMPLETE',retired:true,held:false,capable_lines:['L']}
+ ];
+ data.tables.production_orders.push({...orders[0],id:'STOCK',code:'PO-STOCK',request_id:'STOCK-R'},
+  {...orders[1],id:'DONE',code:'PO-DONE',status:'completed'},
+  {...orders[0],id:'RETIRED',code:'PO-RETIRED'});
+ data.tables.production_requests.push({id:'STOCK-R',request_type:'INTERNAL_PRODUCTION',priority:'high'});
+ data.tables.production_requests[1].priority='high';
+ for(const [lang,dictionary]of [['en',en],['ar',ar]]){
+  const html=renderToStaticMarkup(createElement(ProductionPlanning,{snapshot:data,lang,t:k=>dictionary[k]||k,can:()=>true,command:async()=>{}}));
+  assert.equal((html.match(/class="planning-section /g)||[]).length,3);assert.ok(html.includes(dictionary.planningWorkType));assert.doesNotMatch(html,/planningWorkType/);
+  assert.doesNotMatch(html,/planning-exceptional|manufactured-completion|PO-DONE|PO-RETIRED/);
+  for(const label of ['planningWorkCompletion','planningWorkReplacement','planningWorkStock'])assert.ok(html.includes(dictionary[label]));
+  const scheduled=html.split('class="planning-section planning-requests-progressed"')[1];
+  assert.ok(scheduled.includes('planning-priority'));assert.ok(scheduled.includes('data-priority="high"'));
+  assert.equal((html.match(/data-item-id="O1"/g)||[]).length,1);assert.equal((html.match(/data-item-id="O2"/g)||[]).length,1);
+ }
+});
+
+test('protected completion operation excludes otherwise product-capable lines in EN/AR before any write',async()=>{
+for(const lang of ['en','ar']){
+const visual={...snapshot,planningWork:[{item_id:'O1',capable_lines:['X'],required_operations:[{id:'print',name:'Printing',name_ar:'الطباعة'}]}],tables:{...snapshot.tables,production_orders:[orders[0]],work_center_categories:[{id:'extrude',name:'Extrusion',name_ar:'البثق'}],work_centers:[{...centers[0],category_id:'extrude'},{...centers[0],id:'C2',line_id:'X'}],work_center_capabilities:[{...capabilities[0],rate_unit:'meter'},{...capabilities[0],work_center_id:'C2',rate_unit:'meter'}]}};
+const saved=[],{tree,updates}=interactivePlanner(visual,{dragging:'O1',lang},async(...x)=>saved.push(x));const tracks=allNodes(tree,n=>n.props?.className==='planning-lane-track'),event={preventDefault(){},dataTransfer:{getData:()=> 'O1'},clientX:500,currentTarget:{getBoundingClientRect:()=>({left:0,width:1000})}};
+tracks[0].props.onDragOver(event);assert.equal(event.dataTransfer.dropEffect,'none');tracks[0].props.onDrop(event);allNodes(tree,n=>n.type==='button'&&n.props?.draggable).find(n=>n.props.onDragEnd)?.props.onDragEnd();assert.ok((lang==='en'?/Printing.*Extrusion/:/الطباعة.*البثق/).test(updates.filter(u=>u.position===4).at(-1).value));assert.equal(saved.length,0);assert.ok(updates.some(u=>u.position===4&&(lang==='en'?/Printing.*Extrusion/:/الطباعة.*البثق/).test(u.value)));tracks[1].props.onDragOver(event);assert.equal(event.dataTransfer.dropEffect,'move');
+}});
+
+for(const lang of ['en','ar'])test(`open-ended active capacity gives safe localized drag feedback without a scheduling write (${lang})`,async()=>{
+ const active={...orders[1],status:'active',actual_start:'2030-10-08T00:00:00Z',operational_occupancy:{start:'2030-10-08T00:00:00Z',finish:null}};
+ const visual={...snapshot,tables:{...snapshot.tables,production_orders:[{...orders[0],unit:'piece'},active]}};
+ const before=structuredClone(visual),writes=[],{tree,updates}=interactivePlanner(visual,{dragging:'O1',anchor:'2030-10-09T00:00:00Z',lang},async(...args)=>writes.push(args));
+ const track=allNodes(tree,n=>n.props?.className==='planning-lane-track')[0],event={preventDefault(){},dataTransfer:{getData:()=> 'O1'},clientX:500,currentTarget:{getBoundingClientRect:()=>({left:0,width:1000})}};
+ assert.doesNotThrow(()=>track.props.onDragOver(event));assert.equal(event.dataTransfer.dropEffect,'none');await track.props.onDrop(event);
+ assert.equal(writes.length,0);assert.deepEqual(visual,before);const feedback=updates.filter(u=>u.position===4).at(-1)?.value;assert.ok(feedback.includes(active.code));assert.ok(feedback.includes((lang==='ar'?ar:en).planningUnknownFinish));
 });

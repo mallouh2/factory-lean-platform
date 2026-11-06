@@ -1,4 +1,7 @@
+import "../features/manufactured-completion.css";
 import "./globals.css";
+import "../features/production-recording-v3.css";
+import "../features/quality-updates.css";
 import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Factory Lean",

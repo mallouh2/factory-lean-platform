@@ -1,0 +1,6 @@
+import test from'node:test';import assert from'node:assert/strict';
+import{historicalBody,historicalScope,exactHistoricalPayload}from'../../src/utils/historical-production.mjs';
+const f='11111111-1111-4111-8111-111111111111',r='22222222-2222-4222-8222-222222222222',a='33333333-3333-4333-8333-333333333333',o={business_date:'2026-11-01',occurrence_key:'a'.repeat(64)};
+test('historical wire retains exact numeric quantities and immutable request identity',()=>{const body=historicalBody(f,r,{good:'0.1234567890123456789',scrap_kg:'0',notes:'" quoted',output_groups:[]},o),parsed=JSON.parse(body);exactHistoricalPayload(body,parsed);assert.match(JSON.stringify(parsed),/"good":0.1234567890123456789/);assert.equal(parsed.request_id,r);assert.equal(parsed.payload.business_date,o.business_date);assert.equal(parsed.payload.occurrence_key,o.occurrence_key);});
+test('pending intents are scoped separately by actual actor and factory',()=>{assert.notEqual(historicalScope(f,a),historicalScope(r,a));assert.notEqual(historicalScope(f,a),historicalScope(f,r));});
+test('corrected resubmission keeps its rejected-request link without reusing the rejected UUID',()=>{const x=JSON.parse(historicalBody(f,r,{good:'1'},o,a));assert.equal(x.payload.supersedes,a);assert.notEqual(x.request_id,x.payload.supersedes);});

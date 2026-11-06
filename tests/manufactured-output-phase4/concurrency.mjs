@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {join} from 'node:path';
+import {writeFile} from 'node:fs/promises';
+const [bin,port,output]=process.argv.slice(2),q=x=>"'"+String(x).replaceAll("'","''")+"'";
+assert.equal(port,'55491');
+function sql(text){return new Promise((resolve,reject)=>{const p=spawn(join(bin,'psql.exe'),['-X','-qAt','-h','127.0.0.1','-p',port,'-U','quality_fixture','-d','factory_lean_quality_local','-v','ON_ERROR_STOP=1'],{windowsHide:true});let out='',error='';p.stdout.on('data',b=>out+=b);p.stderr.on('data',b=>error+=b);p.on('error',reject);p.on('close',code=>resolve({code,out:out.trim(),error}));p.stdin.end(text);});}
+async function required(s){const r=await sql(s);assert.equal(r.code,0,r.error);return r.out;}
+assert.equal(await required("select current_database()='factory_lean_quality_local' and inet_server_addr()='127.0.0.1'::inet"),'t');
+const reports=[],pass=s=>{reports.push(s);console.log('PASS '+s);};
+async function wait(name,event){for(let n=0;n<200;n++){if(await required(`select exists(select 1 from pg_stat_activity where application_name=${q(name)} and ${event==='Lock'?"wait_event_type='Lock'":"wait_event='PgSleep'"})`)==='t')return;await new Promise(r=>setTimeout(r,20));}throw Error('Expected observed '+event+': '+name);}
+const x=JSON.parse(await required("select output4_test.context('Concurrency')")),actor=(id=x.owner)=>`select set_config('request.jwt.claim.sub',${q(id)},false);set local role authenticated;`;
+const payload={group_id:x.group,quantity:'4',choice:'COMPLETE',operations:[x.step1],reason:'Actual concurrent decision'},key=randomUUID();
+const decide=(k=key,rev=4,p=payload)=>`select public.plan_manufactured_completion(${q(x.factory)},${q(x.output)},${q(JSON.stringify(p))},${rev},${q(k)})`;
+const a=sql(`begin;set application_name='p4-a';${actor()}${decide()};select pg_sleep(2);commit;`);await wait('p4-a','PgSleep');
+const b=sql(`begin;set application_name='p4-b';${actor()}${decide()};commit;`);await wait('p4-b','Lock');
+for(const r of await Promise.all([a,b]))assert.equal(r.code,0,r.error);
+const w=JSON.parse(await required(`select row_to_json(w) from private.manufactured_completion_work w where request_id=${q(key)}`));
+assert.equal(await required(`select count(*)=1 from private.manufactured_completion_work where factory_id=${q(x.factory)}`),'t');pass('concurrent same UUID creates one work and one linked request');
+const c=sql(`begin;set application_name='p4-c';${actor()}${decide(randomUUID(),5,{...payload,quantity:'6',choice:'REPLACE',operations:[]})};select pg_sleep(2);commit;`);await wait('p4-c','PgSleep');
+const d=sql(`begin;set application_name='p4-d';${actor()}${decide(randomUUID(),5,{...payload,quantity:'6'})};commit;`);await wait('p4-d','Lock');assert.equal((await c).code,0);const dr=await d;assert.notEqual(dr.code,0);assert.match(dr.error,/output_revision/);pass('competing completion and replacement cannot allocate the same six');
+const issueKey=randomUUID(),issue=`select public.supply_command(${q(x.factory)},'material_change',${q(JSON.stringify({id:w.material_request_id,revision:1,action:'issue',reason:'Controlled physical issue'}))},${q(issueKey)})`;
+const e=sql(`begin;set application_name='p4-e';${actor()}${issue};select pg_sleep(2);commit;`);await wait('p4-e','PgSleep');
+const g=sql(`begin;set application_name='p4-g';${actor()}${issue};commit;`);await wait('p4-g','Lock');for(const r of await Promise.all([e,g]))assert.equal(r.code,0,r.error);
+assert.equal(await required(`select warehouse_quantity=6 and quantity_available=10 from public.unfinished_lots where id=${q(x.lot)}`),'t');pass('concurrent repeated Warehouse issue removes stored quantity once and consumes none');
+await required(`begin;${actor()}select public.plan_product_item(${q(x.factory)},${q(w.item_id)},${q(x.line)},date_trunc('day',clock_timestamp())+interval '5 days');select public.start_product_item(${q(x.factory)},${q(w.item_id)});commit;`);
+const recording=JSON.parse((await required(`select set_config('request.jwt.claim.sub',${q(x.owner)},false);select output2_test.payload(${q(JSON.stringify({...x,item:w.item_id}))},4)||jsonb_build_object('input_lot',${q(x.lot)},'input_quantity',4)`)).split('\n').at(-1)),rk=randomUUID();
+const record=(key=rk)=>`select public.record_manufactured_output(${q(x.factory)},${q(JSON.stringify(recording))},${q(key)})`;
+const inputA=sql(`begin;set application_name='p4-input-a';${actor()}${record()};select pg_sleep(2);commit;`);await wait('p4-input-a','PgSleep');
+const inputB=sql(`begin;set application_name='p4-input-b';${actor()}${record()};commit;`);await wait('p4-input-b','Lock');for(const r of await Promise.all([inputA,inputB]))assert.equal(r.code,0,r.error);
+assert.equal(await required(`select quantity_available=6 and warehouse_quantity=6 from public.unfinished_lots where id=${q(x.lot)}`),'t');
+const duplicateInput=await sql(`begin;${actor()}${record(randomUUID())};commit;`);assert.notEqual(duplicateInput.code,0);assert.match(duplicateInput.error,/output_input_quantity/);pass('same recording UUID consumes issued input once; new UUID cannot reuse consumed input');
+await required(`insert into public.user_permissions(factory_id,user_id,module,action) values(${q(x.factory)},${q(x.worker)},'orders','view'),(${q(x.factory)},${q(x.worker)},'orders','edit'),(${q(x.factory)},${q(x.worker)},'orders','create') on conflict do nothing`);
+const hold=sql(`begin;set application_name='p4-hold';select pg_advisory_xact_lock(hashtextextended(${q(x.factory)},0));select pg_sleep(2);commit;`);await wait('p4-hold','PgSleep');
+const attempt=sql(`begin;set application_name='p4-denied';${actor(x.worker)}${decide(randomUUID(),6,{...payload,quantity:'1',choice:'STOCK'})};commit;`);await wait('p4-denied','Lock');
+await required(`delete from public.user_permissions where factory_id=${q(x.factory)} and user_id=${q(x.worker)} and module='orders' and action='create'`);await hold;const rr=await attempt;assert.notEqual(rr.code,0);assert.match(rr.error,/permission_denied/);pass('allocation permissions rechecked after an observed lock wait');
+const cross=await sql(`begin;${actor(x.viewer)}select public.manufactured_completion_read(${q(x.factory)});commit;`);assert.notEqual(cross.code,0);assert.match(cross.error,/permission_denied/);
+const direct=await sql(`begin;${actor()}select * from private.manufactured_completion_work;commit;`);assert.notEqual(direct.code,0);pass('read permission and private work-table denial enforced as authenticated');
+await required("create or replace function private.manufactured_output_enabled(f uuid) returns boolean language sql stable set search_path='' as $$select false$$");
+const off=await sql(`begin;${actor()}${decide(randomUUID(),6,{...payload,quantity:'1',choice:'STOCK'})};commit;`);assert.notEqual(off.code,0);assert.match(off.error,/recording_disabled/);pass('disabled gate rejects work creation; no persistent transaction contexts');
+assert.equal(await required('select count(*)=0 from private.manufactured_output_context'),'t');
+await writeFile(join(output,'concurrency-results.json'),JSON.stringify({passed:reports.length,checks:reports},null,2));

@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{recordingWorkMessage as message}from'../src/utils/recording-work-state.mjs';
+test('one precise global shift explanation overrides missing selection',()=>{assert.equal(message({can_edit:true,occurrence:null,reason:'SCHEDULE_GAP',rows:[]},null,'exact',false),'prv3ShiftGap');});
+test('missing exact work does not select another row',()=>{assert.equal(message({can_edit:true,occurrence:{},rows:[{item_id:'other'}]},null,'exact',false),'prv3ExactUnavailable');});
+test('eligible work, denied permissions and expiry stay distinct',()=>{const p={can_edit:true,occurrence:{},rows:[]};assert.equal(message(p,{can_record:true},'exact',false),null);assert.equal(message({...p,can_edit:false},null,'exact',false),'prv3NoPermission');assert.equal(message(p,null,'exact',true),'prv3Expired');assert.equal(message(p,{can_record:false,status:'completed'},'exact',false),'prv3LateDisabled');});

@@ -1,3 +1,4 @@
+import FactoryTimezone from '@/components/FactoryTimezone';
 import { useEffect, useRef, useState } from "react";
 import { Field } from "@/components/ui";
 import type { FeatureProps } from "./types";
@@ -5,7 +6,7 @@ import type { FeatureProps } from "./types";
 const JOIN_CODE_KEY = "factory-join-code";
 /** One automatic join attempt per code per browser session, surviving remounts. */
 const JOIN_ATTEMPT_KEY = "factory-join-attempt";
-export default function Onboarding({ snapshot, t, command }: FeatureProps) {
+export default function Onboarding({ snapshot, t, lang, command }: FeatureProps) {
   const [tab, setTab] = useState("createFactory");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -56,9 +57,7 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
     const logo = data.get("logo");
     data.delete("logo");
     const form = Object.fromEntries(data);
-    // Browser-detected zone first; the established project default only when detection fails.
-    const timezone =
-      Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Qatar";
+    const timezone=String(form.timezone||'');
     try {
       const factoryId = await command(
         tab === "createFactory" ? "create_factory" : "request_membership",
@@ -111,7 +110,7 @@ export default function Onboarding({ snapshot, t, command }: FeatureProps) {
             <Field label={t("factoryName")}>
               <input name="name" required minLength={2} maxLength={120} />
             </Field>
-            <Field label={t("industry")}>
+            <FactoryTimezone lang={lang} t={t}/><Field label={t("industry")}>
               <input name="industry" required maxLength={120} />
             </Field>
             <Field label={t("logo")}>

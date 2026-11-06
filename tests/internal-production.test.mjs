@@ -37,7 +37,7 @@ function apiHarness(allowed=true){
  const api={exports:{}};
  const auth={verifyOrigin:()=>{},authenticatedClient:async()=>context,authorize:async()=>{if(!allowed)throw new Error('permission_denied');return context;},safeError:e=>({error:e.message==='permission_denied'?'permissionError':'error'})};
  new Function('require','module','exports',apiBundle.outputFiles[0].text)(name=>name==='@/services/authorization'?auth:require(name),api,api.exports);
- return {calls,post:args=>api.exports.POST({headers:{get:()=>null},json:async()=>({command:'create_production_request',args})})};
+ return {calls,post:args=>api.exports.POST({headers:{get:()=>null},text:async()=>JSON.stringify({command:'create_production_request',args}),json:async()=>({command:'create_production_request',args})})};
 }
 const validArgs={factory:'factory',request_name:'Trial',request_priority:'normal',request_required_by:null,request_notes:'Engineering trial',request_items:[{product_id:'product',quantity:7,unit:'meter'}]};
 test('manual API rejects forged Sales/Stock origin and browser creator identity before any database call',async()=>{

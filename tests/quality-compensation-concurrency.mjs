@@ -1,0 +1,18 @@
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{spawn}from'node:child_process';import{randomUUID}from'node:crypto';import{verifyDatabase,databaseGuard}from'./production-recording-full-app/local-policy.mjs';
+const root=fs.readFileSync(path.join(process.env.TEMP,'FactoryLean-Compensation-Fix-location.txt'),'utf8').trim(),c=JSON.parse(fs.readFileSync(root+'/runtime.json')),q=v=>"'"+String(v).replaceAll("'","''")+"'";assert.equal(c.databasePort,55499);
+function sql(input){return new Promise(resolve=>{const p=spawn(c.bin+'/psql.exe',['-X','-qAt','-h','127.0.0.1','-p','55499','-U','quality_fixture','-d',c.database,'-v','ON_ERROR_STOP=1'],{windowsHide:true});let out='',error='';p.stdout.on('data',v=>out+=v);p.stderr.on('data',v=>error+=v);p.on('close',code=>resolve({code,out:out.trim(),error}));p.stdin.end(input);});}
+async function required(s){const r=await sql(s);assert.equal(r.code,0,r.error);return r.out;}
+verifyDatabase(c,JSON.parse(await required("select json_build_object('host',inet_server_addr(),'port',inet_server_port(),'database',current_database(),'data',current_setting('data_directory'))")));
+await required(databaseGuard(c)+fs.readFileSync('tests/quality-compensation-fixture.sql','utf8'));
+const results=[];
+for(const kind of['same UUID','competing allocations','receipt vs replacement']){
+ const x=JSON.parse(await required(`begin;${databaseGuard(c)}select compensation_test.unreceived_fixture(${q('fix-'+randomUUID().slice(0,8))});commit;`)),key=randomUUID(),payload={quantity:'6',mode:'ACTIVE'},auth=`select set_config('request.jwt.claim.sub',${q(x.owner)},true);set local role authenticated;`,call=k=>`select public.plan_production_compensation(${q(x.factory)},${q(x.output)},${q(JSON.stringify(payload))}::jsonb,2,${q(k)});`,name='fix-'+randomUUID();
+ const a=sql(`begin;${databaseGuard(c)}set application_name=${q(name)};${auth}${call(key)}select pg_sleep(2);commit;`);
+ for(let i=0;i<100;i++){if(await required(`select exists(select 1 from pg_stat_activity where application_name=${q(name)}and wait_event='PgSleep')`)==='t')break;if(i===99)throw Error('First writer did not hold transaction');await new Promise(r=>setTimeout(r,10));}
+ const second=kind==='receipt vs replacement'?`select public.receive_manufactured_output(${q(x.factory)},${q(x.output)},${q(JSON.stringify({group_id:x.unfinished,quantity:'4',location:'Actual fixture receipt',physical_confirmation:true}))}::jsonb,2,${q(randomUUID())});`:call(kind==='same UUID'?key:randomUUID());
+ const b=sql(`begin;${databaseGuard(c)}set application_name=${q(name+'-second')};${auth}${second}commit;`);let lock=false;
+ for(let i=0;i<100;i++){if(await required(`select exists(select 1 from pg_stat_activity where application_name=${q(name+'-second')}and wait_event_type='Lock')`)==='t'){lock=true;break;}await new Promise(r=>setTimeout(r,10));}
+ const [one,two]=await Promise.all([a,b]);assert.equal(one.code,0,one.error);assert.ok(lock);assert.equal(two.code,kind==='same UUID'?0:3,two.error);if(kind!=='same UUID')assert.match(two.error,/output_revision/);
+ assert.equal(await required(`select (select count(*)=1 and sum(quantity)=6 from private.production_compensation where output_id=${q(x.output)})and(select count(*)=1 and sum(quantity)=4 and bool_and(lot_id is null)from private.production_compensation_releases where compensation_id=${q(key)})and not exists(select 1 from private.manufactured_output_lots where output_id=${q(x.output)})`),'t');results.push({kind,observedLock:true,oneEntitlement:true,unfinishedReleased:4,noFabricatedStock:true,second:two.code===0?'same immutable receipt':'stale revision rejected'});
+}
+fs.writeFileSync(root+'/concurrency.json',JSON.stringify(results,null,2));console.log(results);

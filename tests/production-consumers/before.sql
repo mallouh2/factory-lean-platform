@@ -1,0 +1,12 @@
+do $$begin if current_database()<>'factory_lean_quality_local' or inet_server_addr()<>'127.0.0.1'::inet then raise exception 'Disposable localhost only';end if;end$$;
+create schema m3c_test;
+create table m3c_test.checks(label text);
+create function m3c_test.ok(v boolean,label text) returns void language plpgsql as $$begin if v is distinct from true then raise exception 'FAIL %',label;end if;insert into m3c_test.checks values(label);end$$;
+create function m3c_test.fails(q text,wanted text) returns void language plpgsql as $$begin begin execute q;exception when others then if sqlstate=wanted or sqlerrm=wanted then perform m3c_test.ok(true,'denied '||wanted);return;else raise;end if;end;raise exception 'Expected %',wanted;end$$;
+create table m3c_test.functions as select n.nspname,p.proname,pg_get_function_identity_arguments(p.oid) args,p.prosrc,p.proacl from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private') and p.prokind='f';
+create table m3c_test.security as select n.nspname,c.relname,c.relacl,c.relrowsecurity,c.relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind='r';
+create table m3c_test.policies as select * from pg_policies where schemaname in ('public','private');
+create table m3c_test.prior_rows(kind text,id uuid,data jsonb);
+insert into m3c_test.prior_rows select 'entry',id,to_jsonb(e) from public.production_entries e union all select 'observation',id,to_jsonb(e) from public.lean_scrap_events e union all select 'correction',id,to_jsonb(e) from public.production_entry_corrections e;
+create table m3c_test.saved as select 'lean' kind,id,to_jsonb(s) data from public.lean_saved_comparisons s union all select 'loss',id,to_jsonb(s) from public.production_loss_estimates s;
+create table m3c_test.gates as select 'maintenance' kind,to_jsonb(g) data from private.maintenance_planning_activation g union all select 'recording',to_jsonb(g) from private.production_recording_v3_activation g;

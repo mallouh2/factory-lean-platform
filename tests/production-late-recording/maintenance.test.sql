@@ -1,0 +1,22 @@
+begin;
+do $$declare x jsonb;f uuid;p jsonb;receipt jsonb;sid uuid;starts timestamptz;lot uuid;m uuid;state_before jsonb;begin
+ x:=late_test.new_context('m2-maintenance-hold');f:=(x->>'factory')::uuid;
+ select id into m from public.memberships where factory_id=f and user_id=(x->>'owner')::uuid;
+ update private.production_recording_v3_activation set enabled=true,schema_contract_version=3 where factory_id=f;
+ update private.maintenance_planning_activation set enabled=true;
+ starts:=clock_timestamp()+interval '.3 seconds';sid:=mp_test.plan(x,starts,starts+interval '2 minutes');
+ perform mp_test.command(f,(x->>'request')::uuid,'confirm','{}',1,gen_random_uuid());perform pg_sleep(.4);
+ perform public.change_maintenance_request(f,(x->>'request')::uuid,'start','{}',2,gen_random_uuid());
+ state_before:=(select to_jsonb(w) from public.work_centers w where id=(x->>'machine')::uuid);
+ p:=late_test.payload(x,1)||'{"unfinished":2,"remaining_work":"Finish cooling"}';
+ receipt:=public.record_lean_production(f,p,gen_random_uuid());
+ perform late_test.ok(receipt->>'recording_kind'='LATE_ORDINARY','historical declaration remains allowed during present Maintenance hold');
+ perform late_test.ok((select to_jsonb(w)=state_before from public.work_centers w where id=(x->>'machine')::uuid),'late posting never restarts physical machine');
+ select id into lot from public.unfinished_lots where source_entry_id=(receipt->>'id')::uuid;
+ p:=jsonb_build_object('unit_kind','line','production_unit',x->>'line','item',x->>'item','technician',m,'good',1,'discarded_quantity',0,'scrap_kg',0,'unfinished',0,'input_lot',lot,'input_quantity',1);
+ perform late_test.fails(format('select public.record_lean_production(%L,%L,%L)',f,p,gen_random_uuid()),'maintenance_capacity_reserved');
+ perform late_test.ok((select quantity_available=2 from public.unfinished_lots where id=lot),'Maintenance-blocked WIP keeps lot quantity');
+ perform late_test.ok((select on_hand=1 from public.finished_goods_balances where factory_id=f),'Maintenance-blocked WIP adds no Good');
+end$$;
+select count(*) as total_assertions from late_test.checks;
+rollback;

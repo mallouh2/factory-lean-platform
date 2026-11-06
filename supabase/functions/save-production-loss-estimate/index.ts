@@ -13,6 +13,9 @@ const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const uuid = (value: unknown) => typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+class BackendError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
 
 async function request(path: string, key: string, bearer: string,
   options: RequestInit = {}) {
@@ -25,23 +28,16 @@ async function request(path: string, key: string, bearer: string,
       ...options.headers,
     },
   });
-  if (!response.ok) throw new Error(`backend_${response.status}`);
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      const known = ["permission_denied", "loss_estimate_context_mismatch",
+        "loss_estimate_locked", "loss_estimate_incomplete", "downtime_not_reviewable"];
+      const code = known.includes(failure.message) ? failure.message : `backend_${response.status}`;
+      throw new BackendError(code, code === "permission_denied" ? 403
+        : ["loss_estimate_context_mismatch", "loss_estimate_locked"].includes(code) ? 409
+          : ["loss_estimate_incomplete", "downtime_not_reviewable"].includes(code) ? 422 : response.status);
+    }
   return response.json();
-}
-
-async function rows(table: string, filters: Record<string, string> = {},
-  extra = "") {
-  const result: Record<string, unknown>[] = [];
-  for (let offset = 0; ; offset += 1000) {
-    const query = new URLSearchParams({ select: "*", limit: "1000",
-      offset: String(offset) });
-    for (const [key, value] of Object.entries(filters))
-      query.set(key, `eq.${value}`);
-    const page = await request(`/rest/v1/${table}?${query}&${extra}`,
-      serviceKey!, `Bearer ${serviceKey}`) as Record<string, unknown>[];
-    result.push(...page);
-    if (page.length < 1000) return result;
-  }
 }
 
 Deno.serve(async (req) => {
@@ -65,35 +61,21 @@ Deno.serve(async (req) => {
       }) });
     if (allowed !== true) return json({ error: "permission_denied" }, 403);
 
-    const events = await rows("downtime_events", {
-      factory_id: body.factory, id: body.event,
-    });
-    const event = events[0];
-    if (!event || !event.ended_at || event.loss_model_version !== 1)
+    const input = await request("/rest/v1/rpc/production_loss_review_inputs", publicKey,
+      authorization, { method: "POST", body: JSON.stringify({ factory: body.factory, event: body.event }) });
+    const event = input.event;
+    if (!event || event.id !== body.event || event.factory_id !== body.factory ||
+      !event.ended_at || event.loss_model_version !== 1)
       return json({ error: "downtime_not_reviewable" }, 422);
-    const [samples, corrections, actuals, saved, allEvents] = await Promise.all([
-      rows("production_loss_context_snapshots", {
-        factory_id: body.factory, event_id: body.event,
-      }, "order=captured_at.asc,id.asc"),
-      rows("downtime_classification_corrections", {
-        factory_id: body.factory, event_id: body.event,
-      }, "order=corrected_at.desc,id.desc"),
-      rows("production_loss_actuals", { factory_id: body.factory }),
-      rows("production_loss_estimates", { factory_id: body.factory }),
-      rows("downtime_events", { factory_id: body.factory }),
-    ]);
-    if (saved.some((row) => row.event_id === body.event))
-      return json({ error: "loss_estimate_locked" }, 409);
-    const correction = corrections[0];
+    const correction = input.correction;
     const effectiveEvent = { ...event,
       stop_nature: correction?.stop_nature || event.stop_nature,
       planned_activity: correction?.planned_activity || event.planned_activity };
-    const actual = actuals.find((row) => row.event_id === body.event) || null;
-    const eventById = new Map(allEvents.map((row) => [row.id, row]));
-    const actualById = new Map(actuals.map((row) => [row.event_id, row]));
-    const observations = saved.flatMap((row) => {
-      const previous = eventById.get(row.event_id);
-      const measured = actualById.get(row.event_id);
+    const actual = input.actual;
+    const observations = input.observations.flatMap((record: Record<string, any>) => {
+      const row = record.saved;
+      const previous = record.event;
+      const measured = record.actual;
       const estimate = row.result as Record<string, unknown> | undefined;
       if (!previous || !measured || !estimate) return [];
       const assumptions = estimate.assumptions as Record<string, unknown>[] | undefined;
@@ -111,10 +93,11 @@ Deno.serve(async (req) => {
         estimated_total_scrap: estimate.estimated_total_scrap,
       }];
     });
-    const estimate = calculateProductionLoss(effectiveEvent, samples as unknown as
+    const estimate = calculateProductionLoss(effectiveEvent, input.samples as unknown as
       { id: number; event_id: string; captured_at: string;
         context: Record<string, unknown> }[], actual,
-      Date.now(), observations);
+      Date.now(), observations, input.maintenance);
+    Object.assign(estimate, { input_hash: input.input_hash });
     if (estimate.readiness !== "READY")
       return json({ error: "loss_estimate_incomplete", missing: estimate.missing }, 422);
     const id = await request("/rest/v1/rpc/persist_production_loss_estimate",
@@ -124,6 +107,7 @@ Deno.serve(async (req) => {
       }) });
     return json({ id });
   } catch (error) {
+    if (error instanceof BackendError) return json({ error: error.message }, error.status);
     const message = error instanceof Error ? error.message : "error";
     return json({ error: message.startsWith("backend_") ? message : "error" }, 400);
   }

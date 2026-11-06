@@ -1,0 +1,22 @@
+do $$begin if inet_server_addr()<>'127.0.0.1'::inet or inet_server_port()<>55498 or current_database()<>'factory_lean_quality_local' then raise exception 'Disposable local contracts only';end if;end$$;
+do $$declare x jsonb;f uuid;so uuid;ln uuid;pkg uuid;before_grants bigint;begin
+ x:=mp_test.fixture('ux-dispatch-revision');f:=(x->>'factory')::uuid;perform set_config('request.jwt.claim.sub',x->>'owner',false);
+ perform public.adjust_finished_stock(f,(x->>'product')::uuid,'meter',40,'Controlled revision stock',gen_random_uuid());
+ so:=public.create_sales_order(f,jsonb_build_object('lines',jsonb_build_array(jsonb_build_object('product_id',x->>'product','quantity',40,'unit','meter'))),gen_random_uuid());perform public.approve_sales_order(f,so,gen_random_uuid());select id into ln from public.sales_order_lines where order_id=so;
+ select count(*)into before_grants from public.user_permissions where factory_id=f and user_id=(x->>'viewer')::uuid;
+ select id into pkg from public.permission_packages where factory_id=f and template_key='warehouse';
+ perform public.set_member_permission_packages(f,(x->>'viewer')::uuid,array[pkg],array[]::uuid[]);
+ perform set_config('request.jwt.claim.sub',x->>'viewer',false);
+ perform public.dispatch_sales_quantity(f,so,ln,10,gen_random_uuid());
+ perform ux_test.ok((select dispatched_quantity=10 from public.sales_order_lines where id=ln)and(select count(*)=before_grants from public.user_permissions where factory_id=f and user_id=(x->>'viewer')::uuid),'package-only Warehouse authority dispatches without replacing direct grants');
+ perform set_config('request.jwt.claim.sub',x->>'owner',false);
+ perform public.set_member_permission_packages(f,(x->>'viewer')::uuid,array[]::uuid[],array[pkg]);
+ perform set_config('request.jwt.claim.sub',x->>'viewer',false);
+ perform late_test.fails(format('select public.dispatch_sales_quantity(%L,%L,%L,1,%L)',f,so,ln,gen_random_uuid()),'permission_denied');
+ perform set_config('request.jwt.claim.sub',x->>'owner',false);
+ perform late_test.fails(format('select public.change_sales_order(%L,%L,%L,%L,%L)',f,so,jsonb_build_object('lines',jsonb_build_array(jsonb_build_object('id',ln,'quantity',9))),'Cannot erase already dispatched quantity',gen_random_uuid()),'fulfillment_invalid');
+ perform public.change_sales_order(f,so,jsonb_build_object('lines',jsonb_build_array(jsonb_build_object('id',ln,'quantity',30))),'Customer reduced remaining requirement',gen_random_uuid());
+ perform ux_test.ok((select quantity=30 and dispatched_quantity=10 from public.sales_order_lines where id=ln)and(select on_hand=30 and reserved=20 from public.finished_goods_balances where factory_id=f),'revision preserves dispatched10 and reserves only remaining20');
+ perform public.change_sales_order(f,so,'{"cancel":true}','Customer cancelled remaining quantity',gen_random_uuid());
+ perform ux_test.ok((select status='cancelled' from public.sales_orders where id=so)and(select on_hand=30 and reserved=0 from public.finished_goods_balances where factory_id=f)and(select dispatched_quantity=10 from public.sales_order_lines where id=ln),'cancel releases only remaining commitment and preserves physical shipment');
+end$$;

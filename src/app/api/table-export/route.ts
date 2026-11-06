@@ -5,12 +5,14 @@ import { exportRequest, qualityReport } from '@/services/table-export';
 import { collectTableRows, tableExportLimits, tableWorkbook, tablePrintHtml } from '@/utils/table-export.mjs';
 import type { TableReport } from '@/types/table-export';
 import { operationalPage, operationalReport, operationalFilterText, movementIdentity, type OperationalDataset } from '@/services/table-export-operational';
+import {historyFetch} from '@/utils/production-history.mjs';
+import {warehouseRequestExportRows} from '@/services/table-export-warehouse';
 
 export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     verifyOrigin(request);
-    const context = await authenticatedClient();
+    const context = await authenticatedClient(historyFetch());
     const input = exportRequest(await request.json());
     const { factory, config, filters, language, dataset, format, sort, direction } = input;
     await authorize(factory, config.permission, 'view', context);
@@ -19,7 +21,9 @@ export async function POST(request: NextRequest) {
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(90000)]);
     const operational = !('mode' in config);
     const identity = dataset === 'warehouse-movements' ? await movementIdentity(context.db, factory, filters, signal) : undefined;
+    let requestRows:ReturnType<typeof warehouseRequestExportRows>|undefined;
     const rows = await collectTableRows(async (page: number) => {
+      if(dataset==='warehouse-requests'){if(page===1)requestRows=warehouseRequestExportRows(context.db,factory,filters,language);const rows=await requestRows!;return{rows:rows.slice((page-1)*50,page*50),total:rows.length};}
       if (operational) return operationalPage(context.db, factory, dataset as OperationalDataset, filters, sort, direction, page);
       if (!('mode' in config)) throw { code: '22023' };
       const result = await context.db.rpc('quality_read', { factory, query: { mode: config.mode, ...filters, page } });

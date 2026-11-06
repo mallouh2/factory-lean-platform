@@ -1,3 +1,4 @@
+import FactoryTimezone from '@/components/FactoryTimezone';
 import { localDateTimeToUtc } from "@/utils/manufacturing.mjs";
 import { useState } from "react";
 import type { FeatureProps } from "./types";
@@ -92,13 +93,7 @@ export default function Administration({
               maxLength={120}
             />
           </Field>
-          <Field label={t("timezone")}>
-            <select name="timezone" defaultValue={zone}>
-              {Intl.supportedValuesOf("timeZone").map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </Field>
+          <FactoryTimezone lang={lang} t={t} initialZone={zone}/>
           <Field label={t("logo")}>
             <input
               name="logo"

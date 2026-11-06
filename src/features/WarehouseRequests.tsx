@@ -1,0 +1,56 @@
+import {ProductionMaterials} from './MaterialPreparation';
+import {warehouseRequestLabels,warehouseRequestTone} from '@/utils/warehouse-request-rows.mjs';
+import TableExport from '@/components/TableExport';
+import {useEffect,useState} from 'react';
+import type {FeatureProps} from './types';
+import {useSupplyCommand,type SupplyRow} from './useSupply';
+import {type SalesOrder,type SalesLine} from './useFulfillment';
+import ManufacturedReceiving from './ManufacturedReceiving';
+import {WarehouseDialog} from './WarehouseUi';
+import {SourceAllocationFields,useSourceStockCommand,type SourcePick} from './SourceStock';
+
+type Request={id:string;reference:string;kind:string;department:string;name:string;quantity:string;unit:string;available:string;status:string;material?:SupplyRow;receipt?:string;legacy?:SupplyRow;order?:SalesOrder;line?:SalesLine};
+export default function WarehouseRequests(props:FeatureProps&{active?:boolean;orders:SalesOrder[];onDispatch:(order:SalesOrder,line:SalesLine)=>void;onChanged:()=>void}){
+ const {snapshot:s,lang,t,can}=props,factory=String(s.factory?.id||''),say=(en:string,ar:string)=>lang==='ar'?ar:en;
+ const [page,setPage]=useState(1),[kind,setKind]=useState(''),[search,setSearch]=useState(''),[selected,setSelected]=useState<Request|null>(null),[exception,setException]=useState(''),[reason,setReason]=useState(''),[error,setError]=useState(''),[reload,setReload]=useState(0),[loading,setBusy]=useState(false),[validated,setValidated]=useState('');
+ const [data,setData]=useState<{scope:string;rows:Request[];total:number;page:number;pages:number;has_more:boolean}|null>(null),[picks,setPicks]=useState<SourcePick[]>([]),[picksValid,setPicksValid]=useState(false);
+ const scope=JSON.stringify([factory,kind,search,lang]),active=data?.scope===scope?data:null,rows=active?.rows||[],currentPage=active?.page||page;
+ const readKey=JSON.stringify([scope,page,s.fetchedAt,reload,props.active!==false]),busy=loading||validated!==readKey;
+ const action=useSupplyCommand(props.command,s.factory?.id),source=useSourceStockCommand(props.command,s.factory?.id);
+ useEffect(()=>{setData(null);setPage(1);setSelected(null);setHighlight(null);},[factory]);
+ useEffect(()=>{if(props.active===false)return;const abort=new AbortController();setBusy(true);setError('');fetch('/api/warehouse-requests?'+new URLSearchParams({factory,page:String(page),kind,search,language:lang}),{signal:abort.signal,cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(r.status===403?'permissionError':d.error||'dataWarning');if(!Array.isArray(d.rows)||!Number.isSafeInteger(d.total)||!Number.isSafeInteger(d.page)||typeof d.has_more!=='boolean')throw Error('dataWarning');if(!abort.signal.aborted){setData({...d,scope});setPage(d.page);setValidated(readKey);}}).catch(e=>{if(e.name!=='AbortError'){setError(e.message);if(e.message==='permissionError')setData(null);}}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});return()=>abort.abort();},[factory,page,kind,search,lang,scope,s.fetchedAt,reload,props.active,readKey]);
+ const labels:Record<string,string>=warehouseRequestLabels(lang);
+ const [columns,setColumns]=useState(['reference','kind','department','product','quantity','available','status']);
+ const [highlight,setHighlight]=useState<Request|null>(null);
+ const preferenceKey=`factory-lean:warehouse-request-columns:${s.user.id}:${factory}`;
+ const headings:Record<string,string>={reference:say('Request reference','مرجع الطلب'),kind:say('Request type','نوع الطلب'),department:say('Department','القسم'),product:t('product'),quantity:t('quantity'),available:t('available'),status:t('status')};
+ useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem(preferenceKey)||'null');if(Array.isArray(saved)&&saved.every(key=>Object.hasOwn(headings,key)))setColumns([...new Set(['reference','product','quantity','status',...saved])]);}catch{}},[preferenceKey]);
+ const [productionBusy,setProductionBusy]=useState(false);
+ const working=action.busy||source.busy||productionBusy;
+ function open(r:Request){if(busy||error||props.active===false)return;if(r.order&&r.line){props.onDispatch(r.order,r.line);return;}setSelected(r);setReason('');setPicks([]);setPicksValid(false);action.clearError();source.clearError();}
+ async function change(next:string){if(!selected?.material)return;const payload={id:selected.material.id,revision:selected.material.revision,reason};const ok=next==='issue'&&selected.material.product_id&&selected.material.item_type!=='lot'?await source.run('issue',payload,picks):await action.run('material_change',{...payload,action:next});if(ok){setSelected(null);setReload(n=>n+1);props.onChanged();}}
+
+ return <section className="warehouse-requests"><div className="table-toolbar"><label>{say('Search requests','بحث الطلبات')}<input type="search" value={search} maxLength={200} onChange={e=>{setSearch(e.target.value);setPage(1);}}/></label><label>{say('Request type','نوع الطلب')}<select value={kind} onChange={e=>{setKind(e.target.value);setPage(1);}}><option value="">{t('all')}</option>{Object.entries(labels).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><details><summary>{t('historyColumns')}</summary>{Object.entries(headings).map(([key,label])=><label key={key}><input type="checkbox" checked={columns.includes(key)} disabled={['reference','product','quantity','status'].includes(key)} onChange={e=>{const next=e.target.checked?[...columns,key]:columns.filter(v=>v!==key);setColumns(next);try{localStorage.setItem(preferenceKey,JSON.stringify(next));}catch{}}}/>{label}</label>)}</details><TableExport factory={factory} dataset="warehouse-requests" filters={{department_page:currentPage,kind,search}} total={active?.total||0} language={lang} t={t} showScope={false} disabled={!active||busy||!!error}/><small>{say('Export covers this request page and its filters.','يشمل التصدير صفحة الطلبات الحالية وتصفيتها.')}</small><button onClick={()=>setReload(n=>n+1)}>{t('refresh')}</button></div>
+ <p className="warehouse-request-freshness" role="status">{active&&busy?say('Updating…','جارٍ التحديث…'):'\u00a0'}</p>
+ {error&&<p role="alert">{t(error)}</p>}
+ {!active&&busy&&<p role="status">{t('loading')}</p>}
+ <button disabled={busy||!!error||!highlight||!rows.some(r=>r.kind===highlight.kind&&r.id===highlight.id)} onClick={()=>{const row=rows.find(r=>r.kind===highlight?.kind&&r.id===highlight?.id);if(row)open(row);}}>{t('historyViewDetails')}</button>
+ <div className="table-wrap"><table><thead><tr>{columns.map(key=><th key={key}>{headings[key]}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r.kind+r.id} data-request-kind={r.kind} onClick={()=>setHighlight(r)} onDoubleClick={()=>open(r)} aria-selected={highlight?.id===r.id&&highlight?.kind===r.kind}>{columns.map(key=><td key={key} data-label={headings[key]}>{key==='reference'?<button disabled={busy||!!error} onClick={()=>open(r)}><bdi>{r.reference}</bdi></button>:key==='kind'?<span className={'warehouse-type-badge warehouse-tone-'+warehouseRequestTone(r.kind)}>{labels[r.kind]}</span>:key==='product'?r.name:key==='quantity'?r.quantity+' '+t(r.unit):key==='status'?<span className={'warehouse-status '+(r.kind==='receipt'&&r.available==='0'?'is-held':'')}>{r.status}</span>:r[key as 'department'|'available'|'status']}</td>)}</tr>)}</tbody></table></div>
+ {active&&!busy&&!rows.length&&<p role="status">{t('noResults')}</p>}
+ <nav aria-label={say('Request pages','صفحات الطلبات')}><button disabled={!active||!active.total||currentPage===1||working||busy||!!error} onClick={()=>setPage(currentPage-1)}>{t('previous')}</button><span>{active?<>{say('Page','صفحة')} {currentPage} {say('of','من')} {active.pages}</>:say('Checking requests…','جارٍ التحقق من الطلبات…')}</span><button disabled={!active?.has_more||working||busy||!!error} onClick={()=>setPage(currentPage+1)}>{t('next')}</button></nav>
+ {selected&&<WarehouseDialog {...props} drawer busy={working} title={selected.receipt?say('Receive inspected production','استلام إنتاج مفحوص'):labels[selected.kind]} onClose={()=>{if(!working)setSelected(null);}}>{!selected.receipt&&<span className={'warehouse-type-badge warehouse-tone-'+warehouseRequestTone(selected.kind)}>{labels[selected.kind]}</span>}{!selected.receipt&&<strong><bdi>{selected.reference}</bdi> · {selected.name}</strong>}
+ {selected.receipt?<ManufacturedReceiving {...props} focusOutput={selected.receipt} compact onCancel={()=>setSelected(null)} onBusyChange={setProductionBusy} onException={()=>{setException(selected.receipt!);setSelected(null);}} onChanged={()=>{setReload(n=>n+1);props.onChanged();}}/>:<>
+ {!(selected.material?.production_item_id&&selected.material.item_type!=='lot')&&<dl className="wv-values">{[[say('Requesting department','القسم الطالب'),selected.department],[say('Requested quantity','الكمية المطلوبة'),selected.quantity+' '+t(selected.unit)],[say('Already fulfilled','المنفذ سابقاً'),'0 '+t(selected.unit)],[say('Outstanding','المتبقي'),selected.quantity+' '+t(selected.unit)],[t('available'),selected.available]].map(([name,value])=><div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>}
+ {selected.material&&selected.material.item_type!=='lot'&&selected.material.production_item_id?<ProductionMaterials props={props} item={String(selected.material.production_item_id)} audience="WAREHOUSE" request={selected.id} onChanged={()=>{setReload(n=>n+1);props.onChanged();}}/>:selected.legacy?<><p>{say('This stock was credited when Good was recorded. Physical acknowledgement adds no stock.','أضيف هذا الرصيد عند تسجيل الإنتاج الجيد. لا يضيف تأكيد الاستلام رصيداً جديداً.')}</p><button disabled={!can('warehouse','edit')||working} onClick={async()=>{if(await action.run('acknowledge_good',{entry:selected.legacy!.id})){setSelected(null);setReload(n=>n+1);props.onChanged();}}}>{say('Confirm Receipt','تأكيد الاستلام')}</button></>:selected.material&&<>
+ <p>{say('Quantity to issue','الكمية المراد صرفها')}: {selected.quantity} {t(selected.unit)}</p>
+ <label>{t('reason')}<textarea value={reason} minLength={3} maxLength={2000} onChange={e=>setReason(e.target.value)}/></label>
+ {!!selected.material.product_id&&selected.material.item_type!=='lot'&&<SourceAllocationFields warehouse disabled={working} snapshot={s} t={t} lang={lang} product={String(selected.material.product_id)} unit={selected.unit} quantity={selected.quantity} materialRequest={selected.id} onChange={(p,v)=>{setPicks(p);setPicksValid(v);}}/>}
+ <button disabled={working||!can('warehouse','issue')||!!selected.material.product_id&&selected.material.item_type!=='lot'&&!picksValid} onClick={()=>void change('issue')}>{say('Confirm Issue','تأكيد الصرف')}</button>
+ {selected.kind!=='unfinished'&&<button disabled={working||!can('warehouse','issue')||reason.trim().length<3} onClick={()=>void change('reject')}>{say('Reject Request','رفض الطلب')}</button>}
+ {(action.error||source.error)&&<p role="alert">{t(action.error||source.error)}</p>}
+ </>}
+ </>}
+ </WarehouseDialog>}
+ {exception&&<WarehouseDialog {...props} title={say('Resolve Quality hold','معالجة إيقاف الجودة')} onClose={()=>setException('')}><ManufacturedReceiving {...props} focusOutput={exception} onChanged={()=>{setReload(n=>n+1);props.onChanged();}}/></WarehouseDialog>}
+ </section>;
+}

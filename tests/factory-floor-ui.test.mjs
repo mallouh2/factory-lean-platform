@@ -11,7 +11,7 @@ import {planningProductTones} from '../src/utils/planning.mjs';
 
 const require = createRequire(import.meta.url);
 const bundle = await build({ entryPoints: ["src/features/FactoryFloorV2.tsx"],
-  bundle: true, platform: "node", format: "cjs", packages: "external", write: false, logLevel: "silent" });
+  bundle: true, platform: "node", format: "cjs", packages: "external", outdir:"test-output",write: false, logLevel: "silent" });
 function render(scenario, lang = "en", selected = null, permissions = null, configure = () => {}) {
   const snapshot = floorSnapshot(scenario);
   if (permissions) snapshot.permissions = permissions;
@@ -353,3 +353,6 @@ test("independent physical running and stopping do not determine the normal rout
     assert.ok(!lineHeader(html).includes(en.ffStateBlocked));
   }
 });
+
+test('compact status toolbar keeps real machine counts and explicit animation semantics in EN/AR',()=>{for(const [lang,words]of[['en',en],['ar',ar]]){const html=render('blocked',lang);const toolbar=html.match(/<section class="ff2-overview ff2-status-toolbar"[\s\S]*?<\/section>/)?.[0];assert.ok(toolbar);for(const key of ['ffProductionLineStatus','ffMachineStatusFilters','ffPauseMotion','ffAnimationOnly'])assert.ok(toolbar.includes(words[key]),key);assert.match(toolbar,/aria-pressed="true"/);assert.match(toolbar,/data-filter-state="all"/);assert.match(toolbar,/data-filter-state="delayed"/);assert.match(toolbar,/data-filter-state="affected"/);assert.ok(toolbar.includes((6).toLocaleString(lang)));}});
+test('delayed work stays separate from blocked flow and uses persisted overdue execution',()=>{const future=render('running'),late=render('running','en',null,null,s=>{s.tables.production_orders[0].expected_finish=new Date(Date.now()-60000).toISOString();});const count=h=>h.match(/data-filter-state="delayed"[^>]*>[\s\S]*?<span>(.*?)<\/span>/)?.[1];assert.notEqual(count(future),count(late));});

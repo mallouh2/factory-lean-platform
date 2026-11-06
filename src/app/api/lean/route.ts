@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedClient, authorize, verifyOrigin } from '@/services/authorization';
 import { historyError, historyUuid } from '@/services/history-response';
 import { operatingRuntime, runtimeByShift, comparableExposure, metricChange } from '@/utils/lean-analysis.mjs';
-import { measuredHours, typedTotals } from '@/utils/lean-comparison.mjs';
+import { measuredHours, windowMetrics } from '@/utils/lean-comparison.mjs';
+import {productionScope} from '@/utils/production-periods.mjs';
+import {consumerFetch} from '@/utils/production-consumer-transport.mjs';
 import { annotateLeanAttention, leanDisplayStatus } from '@/utils/lean-presentation.mjs';
 export async function GET(req:NextRequest) {
   try {
-    const context=await authenticatedClient(),factory=historyUuid(req.nextUrl.searchParams.get('factory'));
+    const context=await authenticatedClient(consumerFetch()),factory=historyUuid(req.nextUrl.searchParams.get('factory'));
     const status=req.nextUrl.searchParams.get('initiative_status');
     if(status&&!['OCCURRENCE','IN_PROGRESS','AWAITING_VERIFICATION','VERIFIED'].includes(status))throw {code:'22023'};
     const query=Object.fromEntries([...req.nextUrl.searchParams].filter(([k,v])=>!['factory','initiative_status'].includes(k)&&v!==''));
@@ -18,18 +20,11 @@ export async function GET(req:NextRequest) {
       const collect=async(q:Record<string,unknown>)=>{const rows:any[]=[];for(let page=1;page<=100;page++){const data=await read({...q,page});if(data.source_revision!==body.source_revision)throw {code:'40001'};rows.push(...data.rows);if(rows.length>=data.total)return rows;}throw {code:'22023'};};
       const [events,entries]=await Promise.all([collect({...query,mode:'occurrences'}),collect({mode:'entries',from:query.from,to:query.to})]);
       const problem=body.problem,products=[...new Set(events.map(e=>e.product_id).filter(Boolean))];
-      const output=entries.filter(e=>products.includes(e.product_id)&&(problem.machine_id?e.work_center_id===problem.machine_id||e.machine_ids?.includes(problem.machine_id):e.line_id===problem.line_id));
-      const sum=(rows:any[],key:string)=>rows.every(x=>x[key]!=null)?rows.reduce((n,x)=>n+Number(x[key]),0):null;
-      const scrap=sum(events,'scrap_kg'),weight=output.length?sum(output,'produced_weight_kg'):null;
-      body.metrics={frequency:new Set(events.map(e=>e.event_id)).size,loss_minutes:sum(events,'loss_minutes'),scrap_kg:scrap,
-        scrap_rate:weight&&scrap!=null?100*scrap/weight:null,lost_output_by_unit:typedTotals(events,'lost_output'),
-        wip_by_unit:typedTotals(events,'wip_quantity'),shifts:[...new Set(events.map(e=>e.shift_id||null))]};
-      body.shift_summary=[...new Set(events.map(e=>e.shift_id||null))].map(shift_id=>{
-        const rows=events.filter(e=>(e.shift_id||null)===shift_id),produced=output.filter(e=>(e.shift_id||null)===shift_id);
-        const scrap=sum(rows,'scrap_kg'),weight=produced.length?sum(produced,'produced_weight_kg'):null;
-        const durations=rows.map(e=>Math.max(0,Date.parse(e.ended_at)-Date.parse(e.occurred_at))/60000).filter(Number.isFinite);
-        return {shift_id,frequency:new Set(rows.map(e=>e.event_id)).size,loss_minutes:sum(rows,'loss_minutes'),scrap_kg:scrap,scrap_rate:weight&&scrap!=null?100*scrap/weight:null,lost_output:typedTotals(rows,'lost_output'),response_minutes:durations.length?durations.reduce((n,x)=>n+x,0)/durations.length:null};
-      });
+      const metrics=windowMetrics(events,entries,query.from||new Date(Date.now()-30*86400000).toISOString(),query.to||new Date().toISOString(),null,
+        {product_id:problem.product_id||products[0],...(problem.mechanism==='downtime'?{product_ids:products}:{}),subject_id:problem.machine_id||problem.line_id,mechanism:problem.mechanism,evidence_version:body.evidence_version});
+      body.metrics={...metrics,lost_output_by_unit:metrics.lost_output,wip_by_unit:metrics.wip,shifts:metrics.shifts.map(x=>x.shift_id)};
+      body.shift_summary=metrics.shifts.map(x=>{const durations=x.response_minutes.map((r:{minutes:number|null})=>r.minutes).filter((v:number|null):v is number=>v!==null&&Number.isFinite(v));
+        return {...x,lost_output:x.lost_output,response_minutes:durations.length?durations.reduce((a:number,b:number)=>a+b,0)/durations.length:null};});
     }
     if (main && body.rows?.length) {
       const to=query.to || new Date().toISOString(),from=query.from || new Date(Date.now()-30*86400000).toISOString();
@@ -52,18 +47,20 @@ export async function GET(req:NextRequest) {
         const hours=complete?measuredHours(intervals,row.machine_id||row.line_id,row.products,from,to):null;
         const matching=events.filter(e=>e.mechanism===row.mechanism&&e.machine_id===row.machine_id&&e.cause_id===row.cause_id&&(row.mechanism==='downtime'||e.line_id===row.line_id&&e.product_id===row.product_id));
         const affected=[...new Set([...(row.products||[]),...matching.flatMap(e=>e.loss_details?.assumptions?.map((x:any)=>x.product_id)||[])])].filter(Boolean);
-        const output=entries.filter(e=>(row.products||[]).includes(e.product_id)&&(!query.shift_id||e.shift_id===query.shift_id)&&(row.machine_id?e.work_center_id===row.machine_id||e.machine_ids?.includes(row.machine_id):e.line_id===row.line_id));
-        const weight=output.length&&output.every(e=>e.produced_weight_kg!=null)?output.reduce((n,e)=>n+Number(e.produced_weight_kg),0):null;
+        const output=entries.filter(e=>!query.shift_id||e.shift_id===query.shift_id);
+        const currentMetrics=windowMetrics(matching,output,from,to,hours,{product_id:row.product_id||affected[0],...(row.mechanism==='downtime'?{product_ids:affected}:{}),subject_id:row.machine_id||row.line_id,mechanism:row.mechanism,evidence_version:body.evidence_version});
         const trends=affected.map((product_id:string)=>{
           const exposure=complete?measuredHours(intervals,row.machine_id||row.line_id,[product_id],from,to):0;
           if(!exposure)return {product_id,complete:false};
           const before=comparableExposure(intervals,{subject_id:row.machine_id||row.line_id,product_id,cutoff:from,direction:'before',desired_hours:exposure});
           const start=before.intervals[0]?.started_at;
-          const totals=(a:string,b:string)=>{const window=matching.filter(e=>Date.parse(e.occurred_at)>=Date.parse(a)&&Date.parse(e.occurred_at)<Date.parse(b)),group=window.filter(e=>e.product_id===product_id);if(window.some(e=>!e.product_id&&e.loss_details?.assumptions?.some((x:any)=>x.product_id===product_id)))return {frequency:null,loss_minutes:null,scrap_kg:null};return {frequency:new Set(group.map(e=>e.event_id)).size,loss_minutes:group.every(e=>e.loss_minutes!=null)?group.reduce((n,e)=>n+Number(e.loss_minutes),0):null,scrap_kg:group.every(e=>e.scrap_kg!=null)?group.reduce((n,e)=>n+Number(e.scrap_kg),0):null};};
+          const totals=(a:string,b:string)=>windowMetrics(matching,output,a,b,null,{product_id,subject_id:row.machine_id||row.line_id,mechanism:row.mechanism,evidence_version:body.evidence_version});
           const prior=start?totals(start,from):null,current=totals(from,to);
           return {product_id,complete:before.complete,exposure_hours:exposure,frequency:metricChange(before.complete?prior?.frequency:null,current.frequency,row.threshold_percent),loss:metricChange(before.complete?prior?.loss_minutes:null,current.loss_minutes,row.threshold_percent),scrap:metricChange(before.complete?prior?.scrap_kg:null,current.scrap_kg,row.threshold_percent)};
         });
-        return {...row,event_ids:matching.filter(e=>Date.parse(e.occurred_at)>=Date.parse(from)&&Date.parse(e.occurred_at)<Date.parse(to)).map(e=>e.event_id),products:affected,scrap_rate:weight>0&&row.missing_scrap===0?100*Number(row.scrap_kg)/weight:null,runtime_hours:hours,loss_rate:hours&&row.loss_minutes!=null&&row.missing_loss===0?Number(row.loss_minutes)/hours:null,frequency_rate:hours?Number(row.frequency)/hours:null,
+        return {...row,event_ids:matching.filter(e=>productionScope(e,from,to)!=='OUTSIDE').map(e=>e.event_id),products:affected,
+          ...(row.mechanism==='scrap'?{scrap_kg:currentMetrics.scrap_kg,frequency:currentMetrics.frequency}:{}),
+          evidence_status:complete?currentMetrics.status:'INCOMPLETE',quantity_evidence_status:currentMetrics.status,scrap_rate:currentMetrics.scrap_rate,runtime_hours:hours,loss_rate:hours&&row.loss_minutes!=null&&row.missing_loss===0?Number(row.loss_minutes)/hours:null,frequency_rate:hours&&currentMetrics.frequency!==null?Number(currentMetrics.frequency)/hours:null,
           runtime_missing:!complete,trends};
       });
       const sort=['loss_minutes','scrap_kg','frequency','loss_rate'].includes(query.sort)?query.sort:'loss_minutes';

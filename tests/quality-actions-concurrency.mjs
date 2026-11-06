@@ -1,0 +1,19 @@
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{spawn}from'node:child_process';import{randomUUID}from'node:crypto';import{verifyDatabase}from'./production-recording-full-app/local-policy.mjs';
+const root=fs.readFileSync(path.join(process.env.TEMP,'FactoryLean-OperationalUX-SQL-location.txt'),'utf8').trim(),c=JSON.parse(fs.readFileSync(path.join(root,'runtime.json'))),quote=v=>"'"+String(v).replaceAll("'","''")+"'";assert.equal(c.databasePort,55498);
+function sql(q){return new Promise(resolve=>{const p=spawn(path.join(c.bin,'psql.exe'),['-X','-qAt','-h','127.0.0.1','-p','55498','-U','quality_fixture','-d',c.database,'-v','ON_ERROR_STOP=1'],{windowsHide:true});let out='',error='';p.stdout.on('data',v=>out+=v);p.stderr.on('data',v=>error+=v);p.on('close',code=>resolve({code,out:out.trim(),error}));p.stdin.end(q);});}
+async function required(q){const r=await sql(q);assert.equal(r.code,0,r.error);return r.out;}
+verifyDatabase(c,JSON.parse(await required("select json_build_object('host',inet_server_addr(),'port',inet_server_port(),'database',current_database(),'data',current_setting('data_directory'))")));
+const rows=[];
+for(const same of[true,false]){
+ const x=JSON.parse(await required('select x||jsonb_build_object(\'output\',output)from qa_actions.context limit 1')),f=x.factory,o=x.output,auth=`do $$begin perform set_config('request.jwt.claim.sub',${quote(x.owner)},true);end$$;set local role authenticated;`;
+ await required(`begin;${auth}select public.manufactured_output_command(${quote(f)},'QUALITY',${quote(o)},jsonb_build_object('groups',private.output_finding(${quote(f)},${quote(o)})->'groups','rejected','0','total','90','actual_rejected_kg','0','reason','Same accepted output; new process review','requires_followup',true,'observation','Check printer again','requested_action','Check setup and subsequent output'),(select max(revision)from private.manufactured_output_events where output_id=${quote(o)}),${quote(randomUUID())});commit;`.replace('set local role authenticated;',''));
+ const state=JSON.parse(await required(`select private.production_quality_followup(${quote(f)},${quote(o)})`)),key=randomUUID(),payload=JSON.stringify({quality_revision:Number(state.quality_revision),note:'Accept responsibility'}),name='followup-race-'+randomUUID();
+ const call=k=>`select public.production_quality_followup_command(${quote(f)},${quote(o)},'START',${quote(payload)}::jsonb,${state.status_revision},${quote(k)});`;
+ const a=sql(`begin;set application_name=${quote(name)};${auth}${call(key)}select pg_sleep(3);commit;`);
+ for(let i=0;i<100;i++){if(await required(`select exists(select 1 from pg_stat_activity where application_name=${quote(name)} and wait_event='PgSleep')`)==='t')break;if(i===99)throw Error('First writer did not reach lock hold');await new Promise(r=>setTimeout(r,15));}
+ const b=sql(`begin;set application_name=${quote(name+'-second')};${auth}${call(same?key:randomUUID())}commit;`);let observed=false;
+ for(let i=0;i<100;i++){if(await required(`select exists(select 1 from pg_stat_activity where application_name=${quote(name+'-second')}and wait_event_type='Lock')`)==='t'){observed=true;break;}await new Promise(r=>setTimeout(r,10));}
+ const[one,two]=await Promise.all([a,b]);assert.equal(one.code,0,one.error);assert.equal(two.code,same?0:3,two.error);if(!same)assert.match(two.error,/output_revision/);assert.ok(observed);
+ assert.equal(await required(`select count(*)=1 from private.production_quality_followup_events where factory_id=${quote(f)}and output_id=${quote(o)}and quality_revision=${state.quality_revision} and operation='START'`),'t');rows.push({sameUuid:same,observedLock:observed,oneStart:true});
+}
+fs.writeFileSync(path.join(root,'quality-actions-concurrency.json'),JSON.stringify(rows,null,2));console.log(rows);

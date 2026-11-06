@@ -39,12 +39,17 @@ function lossGapText(item: string, t: FeatureProps["t"]) {
     "Product changes during stop; scrap estimate needs review": "lossGapScrapProduct",
     "Shutdown/restart scrap expectation for stopped machine": "lossGapScrapExpected",
     "Shutdown/restart scrap quantities and unit": "lossGapScrapValues",
+    "Frozen maintenance approval evidence": "lossGapMaintenanceApproval",
+    "Historical production demand and routing evidence": "lossGapMaintenanceDemand",
+    "Approved maintenance conflicts with intended production": "lossGapMaintenanceConflict",
+    "Active alternative ownership evidence": "lossGapMaintenanceOwner",
   };
   return simple[item] ? t(simple[item]) : item;
 }
 
 type ReviewData = { event: Row; actual: Row | null; saved: Row | null;
   correction: Row | null; calculation: ReturnType<typeof calculateProductionLoss>;
+  maintenance?: { evidence: Row; review_state: string };
   suggestions: Array<NonNullable<ReturnType<typeof suggestScrapCalibration>>> };
 function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
   const { snapshot: s, t, lang, command, can, data } = props;
@@ -104,8 +109,21 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
   return <div className={styles.reviewDetail}>
     <h4>{stopDescription}</h4>
     {correction && <p>{t("lossCorrectionRecorded")}: {String(correction.note)}</p>}
+    {saved && data.maintenance?.review_state !== "CURRENT" && <p role="status">
+      <strong>{t(data.maintenance?.review_state === "EVIDENCE_CHANGED_AFTER_REVIEW"
+        ? "lossMaintenanceEvidenceChanged" : "lossMaintenanceEvidenceUnknown")}</strong>
+      {" "}{t("lossMaintenanceHistoryRetained")}
+    </p>}
     <dl>
       <div><dt>{t("lossRawStop")}</dt><dd>{lossDuration(estimate.raw_stop_minutes, lang, t)}</dd></div>
+      {estimate.maintenance_policy_version === 1 && estimate.maintenance_context?.operation === "LINK" && <>
+        <div><dt>{t("lossMaintenanceApproved")}</dt><dd>{estimate.approved_maintenance_minutes == null
+          ? "—" : lossDuration(estimate.approved_maintenance_minutes, lang, t)}</dd></div>
+        <div><dt>{t("lossMaintenanceOutside")}</dt><dd>{estimate.outside_window_minutes == null
+          ? "—" : lossDuration(estimate.outside_window_minutes, lang, t)}</dd></div>
+        <div><dt>{t("lossMaintenanceNonProduction")}</dt><dd>{estimate.scheduled_non_production_minutes == null
+          ? "—" : lossDuration(estimate.scheduled_non_production_minutes, lang, t)}</dd></div>
+      </>}
       <div><dt>{t("lossNonProduction")}</dt><dd>{lossDuration(estimate.non_production_minutes, lang, t)}</dd></div>
       <div><dt>{t("lossEffective")}</dt><dd>{estimate.effective_loss_minutes === null
         ? "—" : lossDuration(estimate.effective_loss_minutes, lang, t)}</dd></div>

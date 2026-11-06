@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-export async function supabaseServer() {
+export async function supabaseServer(fetcher?: typeof fetch) {
   const store = await cookies();
   const url = process.env.SUPABASE_URL,
     key = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -11,6 +11,7 @@ export async function supabaseServer() {
   )
     throw new Error("environment_mismatch");
   return createServerClient(url, key, {
+    ...(fetcher ? { global: { fetch: fetcher } } : {}),
     cookieOptions: {
       httpOnly: true,
       sameSite: "lax",

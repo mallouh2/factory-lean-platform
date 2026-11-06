@@ -9,5 +9,10 @@ export type FeatureProps = {
   lang: Language;
   command: Command;
   can: (module: string, action?: string) => boolean;
+  onLanguageChange?: () => void;
+  refreshSnapshot?: () => Promise<void>;
+  onProductionHistoryOpen?: (mode?:'production'|'quality') => void;
+  onOutputRelated?: (destination:OutputDestination) => void;
 };
+export type OutputDestination={factory:string;view:'production'|'quality'|'warehouse'|'planning'|'order';entry?:string;output?:string;work?:string;item?:string};
 export const stringId = (row: Row | null | undefined) => String(row?.id || "");

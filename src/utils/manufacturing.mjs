@@ -165,7 +165,7 @@ export function reportPeriod(
   };
 }
 
-export function formatLocalInput(iso, zone) {
+export function formatLocalInput(iso, zone, precise=false) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: zone,
     year: "numeric",
@@ -176,10 +176,14 @@ export function formatLocalInput(iso, zone) {
     hourCycle: "h23",
   }).formatToParts(new Date(iso));
   const p = Object.fromEntries(parts.map((x) => [x.type, x.value]));
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`+(precise?new Date(iso).toISOString().slice(16,23):'');
 }
 /** Reject nonexistent local times during DST changes instead of silently moving a production event. */
 export function localDateTimeToUtc(value, zone) {
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?$/.test(value)) {
+    const seconds=Number(value.slice(17));if(!(seconds>=0&&seconds<60))throw new Error('invalidDate');
+    return new Date(Date.parse(localDateTimeToUtc(value.slice(0,16),zone))+seconds*1000).toISOString();
+  }
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))
     throw new Error("invalidDate");
   const wanted = Date.parse(value + ":00Z");

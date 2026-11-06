@@ -1,0 +1,10 @@
+import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';import assert from 'node:assert/strict';
+import {sql,root,owner,c,quote} from './local.mjs';
+if(!owner)throw Error('Owner preservation is read-only');
+const dir=root+'/warehouse-v2',baseline=Object.fromEntries(fs.readFileSync(dir+'/tables-before.txt','utf8').trim().split(/\r?\n/).map(x=>x.split('|'))),tables=Object.keys(baseline);
+const after=Object.fromEntries(tables.map(t=>{assert.match(t,/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/);return[t,sql(`select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text)::text,'[]')) from ${t} t`)];}));assert.deepEqual(after,baseline);
+const files=JSON.parse(fs.readFileSync(dir+'/files-before.json')),changed=[],deleted=[],hash=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');for(const[p,h]of Object.entries(files)){if(!fs.existsSync(p))deleted.push(p);else if(hash(p)!==h)changed.push(p);}
+const migrations=Object.keys(files).filter(p=>p.startsWith('supabase/migrations/'));assert.equal(migrations.length,136);assert.ok(!changed.some(p=>migrations.includes(p)));assert.deepEqual(deleted,[]);assert.equal(hash('docs/design/FACTORY_LEAN_DESIGN_SYSTEM.md'),files['docs/design/FACTORY_LEAN_DESIGN_SYSTEM.md']);
+const gates=JSON.parse(sql(`begin;set local request.jwt.claim.sub=${quote(c.context.owner)};select json_build_object('manufactured',public.manufactured_output_capability(${quote(c.context.factory)})->'available','late',(select coalesce(bool_or(enabled),false) from private.production_recording_v3_activation));rollback;`));assert.equal(gates.manufactured,false);assert.equal(gates.late,false);
+const warehouses=JSON.parse(sql(`select coalesce(json_agg(json_build_object('class',storage_class,'name',name,'active',active)),'[]') from public.factory_warehouses where factory_id=${quote(c.context.factory)}`));assert.equal(warehouses.length,3);
+const result={status:'PASS',unchangedTables:tables.length,unchangedHistoricalMigrations:migrations.length,changed,deleted,gates,warehouses};fs.writeFileSync(dir+'/preservation.json',JSON.stringify(result,null,2));console.log(result);

@@ -1,0 +1,7 @@
+// Optional, one-time fixture for owner-led visual acceptance. Never resets data.
+import fs from 'node:fs';import assert from 'node:assert/strict';import{spawnSync}from'node:child_process';import{verifyDatabase,databaseGuard}from'../production-recording-full-app/local-policy.mjs';
+const root=fs.readFileSync(process.env.TEMP+'/FactoryLean-Production-End-location.txt','utf8').trim(),c=JSON.parse(fs.readFileSync(root+'/runtime.json'));
+const sql=q=>{const r=spawnSync(c.bin+'/psql.exe',['-X','-qAt','-h','127.0.0.1','-p',String(c.databasePort),'-U','quality_fixture','-d',c.database,'-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+verifyDatabase(c,JSON.parse(sql("select json_build_object('host',inet_server_addr(),'port',inet_server_port(),'database',current_database(),'data',current_setting('data_directory'))")));assert.equal(c.databasePort,55500);
+if(sql("select count(*)from production_end_test.contexts where label='manual'")==='0')sql('begin;'+databaseGuard(c)+"do $$begin perform production_end_test.fixture('manual',6,2,true);end$$;commit;");
+const fixtures=JSON.parse(sql('select json_object_agg(label,x)from production_end_test.contexts'));fs.writeFileSync(root+'/fixtures.json',JSON.stringify(fixtures,null,2));console.log({status:'PASS',manualItem:fixtures.manual.item,fixtures:Object.keys(fixtures).length});

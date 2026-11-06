@@ -98,8 +98,10 @@ test('server delivery equals existing estimate/confidence/calibration calculatio
 test('legacy incomplete event, immutable saved result and corrected classification keep their semantics',async()=>{
   const selected={event:{id:eventId,work_center_id:'M',started_at:'2026-09-29T00:00:00Z',ended_at:'2026-09-29T01:00:00Z',stop_nature:'legacy_unknown'},
     correction:{stop_nature:'planned',planned_activity:'cleaning'},actual:{scrap_quantity:4},saved:{result:{assumptions:[],scrap_unit:'kg'}}};
-  const result=await deliverLossReview(selected,[],async()=>[],0);
-  assert.equal(result.calculation.stop_nature,'planned');assert.equal(result.calculation.readiness,'INCOMPLETE');
+  const result=await deliverLossReview(selected,[],async()=>{throw Error('Do not recalculate reviewed history');},0);
+  assert.strictEqual(result.calculation,selected.saved.result);
+  const preview=await deliverLossReview({...selected,saved:null},[],async()=>[],0);
+  assert.equal(preview.calculation.stop_nature,'planned');assert.equal(preview.calculation.readiness,'INCOMPLETE');
   assert.deepEqual(result.saved,selected.saved);assert.deepEqual(result.actual,selected.actual);
 });
 

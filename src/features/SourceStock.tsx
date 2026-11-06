@@ -1,3 +1,4 @@
+import {WarehousePicker,WarehouseDialog} from './WarehouseUi';
 import { useEffect,useRef,useState } from 'react';
 import { Dialog,Field } from '@/components/ui';
 import type { FeatureProps,Command } from './types';
@@ -19,14 +20,14 @@ export function useSourceStockCommand(command:Command,factory:unknown){
  }
  return {run,busy,error,clearError:()=>setError('')};
 }
-export function SourceAllocationFields({snapshot,t,lang,product,unit,quantity,salesLine,entry,materialRequest,disabled=false,onChange}:Pick<FeatureProps,'snapshot'|'t'|'lang'>&
- {product:string;unit:string;quantity:string;salesLine?:string;entry?:string;materialRequest?:string;disabled?:boolean;onChange:(picks:SourcePick[],valid:boolean)=>void}){
+export function SourceAllocationFields({snapshot,t,lang,product,unit,quantity,salesLine,entry,materialRequest,disabled=false,onChange,warehouse=false,requiredQuantity,identifiedOnly=false}:Pick<FeatureProps,'snapshot'|'t'|'lang'>&
+ {product:string;unit:string;quantity:string;salesLine?:string;entry?:string;materialRequest?:string;disabled?:boolean;warehouse?:boolean;requiredQuantity?:string;identifiedOnly?:boolean;onChange:(picks:SourcePick[],valid:boolean)=>void}){
  const [page,setPage]=useState(1),[draft,setDraft]=useState<{selection:string;quantity:string;source?:SourceRow}[]>([{selection:'',quantity}]);
  const read=useSupply<SourcePage>(snapshot,'sources',{product,unit,page:String(page),...(salesLine?{sales_line:salesLine}:{}),...(entry?{entry}:{}),...(materialRequest?{material_request:materialRequest}:{})},!!product,'/api/quality');
  const callback=useRef(onChange);useEffect(()=>{callback.current=onChange;},[onChange]);
  useEffect(()=>{setDraft([{selection:'',quantity}]);setPage(1);},[product,unit,quantity,salesLine,entry,materialRequest]);
- const required=read.data?.required_quantity??quantity;
- useEffect(()=>{if(read.data?.required_quantity)setDraft(old=>old.length===1&&!old[0].selection&&old[0].quantity===quantity?[{...old[0],quantity:read.data!.required_quantity!}]:old);},[read.data?.required_quantity,quantity]);
+ const required=requiredQuantity??read.data?.required_quantity??quantity;
+ useEffect(()=>{if(requiredQuantity===undefined&&read.data?.required_quantity)setDraft(old=>old.length===1&&!old[0].selection&&old[0].quantity===quantity?[{...old[0],quantity:read.data!.required_quantity!}]:old);},[read.data?.required_quantity,quantity,requiredQuantity]);
  useEffect(()=>{
   let remaining=required;const totals=new Map<string,string>();
   const picks=draft.filter(p=>p.selection).map(p=>({source_id:p.selection==='unattributed'?null:p.selection,quantity:p.quantity,...(salesLine?{sales_line_id:salesLine}:{})}));
@@ -34,25 +35,25 @@ export function SourceAllocationFields({snapshot,t,lang,product,unit,quantity,sa
   for(const row of draft){
    const source=read.data?.rows.find(s=>s.id===row.selection)||row.source;
    const available=row.selection==='unattributed'?read.data?.unattributed:source?.selectable;
-   valid=valid&&!!row.selection&&available!==undefined&&quantityValid(row.quantity,unit,available);
+   valid=valid&&!!row.selection&&(!identifiedOnly||row.selection!=='unattributed')&&available!==undefined&&quantityValid(row.quantity,unit,available);
    remaining=decimalSubtract(remaining,row.quantity)??'invalid';
    const previous=totals.get(row.selection)||'0';
    const combined=decimalSubtract(previous,'-'+row.quantity)??'invalid';totals.set(row.selection,combined);
    valid=valid&&available!==undefined&&decimalCompare(combined,available)!==null&&decimalCompare(combined,available)!==1;
   }
   callback.current(picks,valid&&decimalCompare(remaining,'0')===0);
- },[draft,read.data,read.busy,read.error,required,unit,salesLine]);
+ },[draft,read.data,read.busy,read.error,required,unit,salesLine,identifiedOnly]);
  return <fieldset disabled={disabled} className="source-allocation" dir={lang==='ar'?'rtl':'ltr'}>
   <h4>{t('sourceSelection')}</h4><p className="muted">{t('sourcePhysicalHelp')}</p><p>{t('quantity')}: <strong>{required} {t(unit)}</strong></p>
   {read.error&&<p role="alert">{t(read.error)} <button type="button" onClick={read.refresh}>{t('refresh')}</button></p>}
-  {read.busy&&<p role="status">{t('loading')}</p>}
+  {read.loading&&<p role="status">{t('loading')}</p>}
   {draft.map((row,index)=>{
    const choices=[...(read.data?.rows||[]),...(row.source&&!read.data?.rows.some(s=>s.id===row.source?.id)?[row.source]:[])];
    return <div className="source-pick-row" key={index}>
-    <Field label={`${t('sourceLabel')} ${index+1}`}><select required value={row.selection} onChange={e=>setDraft(old=>old.map((p,i)=>i===index?{...p,selection:e.target.value,source:choices.find(s=>s.id===e.target.value)}:p))}>
-     <option value="">{t('select')}</option><option value="unattributed">{t('sourceUnattributed')} · {read.data?.unattributed||'0'} {t(unit)}</option>
+    {warehouse?<WarehousePicker label={t('sourceLabel')+' '+(index+1)} required disabled={disabled||read.busy} placeholder={t('select')} value={row.selection} options={[...(!identifiedOnly?[{id:'unattributed',name:t('sourceUnattributed')+' · '+(read.data?.unattributed||'0')+' '+t(unit)}]:[]),...choices.filter(s=>s.physical_label).map(s=>({id:s.id,name:s.physical_label+' · '+s.selectable+' '+t(unit)}))]} onChange={selection=>setDraft(old=>old.map((p,i)=>i===index?{...p,selection,source:choices.find(s=>s.id===selection)}:p))}/>:<><Field label={`${t('sourceLabel')} ${index+1}`}><select required value={row.selection} onChange={e=>setDraft(old=>old.map((p,i)=>i===index?{...p,selection:e.target.value,source:choices.find(s=>s.id===e.target.value)}:p))}>
+     <option value="">{t('select')}</option>{!identifiedOnly&&<option value="unattributed">{t('sourceUnattributed')} · {read.data?.unattributed||'0'} {t(unit)}</option>}
      {choices.filter(s=>s.physical_label).map(s=><option key={s.id} value={s.id}>{s.physical_label} · {s.selectable} {t(unit)}</option>)}
-    </select></Field>
+    </select></Field></>}
     <Field label={t('quantity')}><input required type="number" inputMode="decimal" min="0" step={unit==='piece'?'1':'any'} value={row.quantity} onChange={e=>setDraft(old=>old.map((p,i)=>i===index?{...p,quantity:e.target.value}:p))}/></Field>
     {draft.length>1&&<button type="button" aria-label={t('sourceRemovePick')} onClick={()=>setDraft(old=>old.filter((_,i)=>i!==index))}>×</button>}
    </div>;
@@ -61,16 +62,17 @@ export function SourceAllocationFields({snapshot,t,lang,product,unit,quantity,sa
    <button type="button" disabled={page===1||read.busy} onClick={()=>setPage(p=>p-1)}>{t('previous')}</button><span>{page}</span><button type="button" disabled={read.busy||page*50>=(read.data?.total||0)} onClick={()=>setPage(p=>p+1)}>{t('next')}</button></div>
  </fieldset>;
 }
-export function SourceIdentityDialog(props:FeatureProps&{product:string;unit:string;entry:string;onClose:()=>void;onChanged:()=>void}){
+export function SourceIdentityDialog(props:FeatureProps&{product:string;unit:string;entry:string;warehouse?:boolean;onClose:()=>void;onChanged:()=>void}){
  const {snapshot,t,product,unit,entry}=props;
  const read=useSupply<SourcePage>(snapshot,'sources',{product,unit,entry},true,'/api/quality'),action=useSourceStockCommand(props.command,snapshot.factory?.id);
  const [quantity,setQuantity]=useState(''),[label,setLabel]=useState(''),[identified,setIdentified]=useState(false);
  const [operation,setOperation]=useState('identify'),[note,setNote]=useState('');
  const source=read.data?.rows[0];
  const maximum=operation==='mix'?source?.selectable:source?.identifiable;
- return <Dialog busy={action.busy} title={t('sourceIdentify')} t={t} onClose={()=>{if(!action.busy)props.onClose();}}>
+ const IdentityDialog=props.warehouse?WarehouseDialog:Dialog;
+ return <IdentityDialog {...props} busy={action.busy} title={t('sourceIdentify')} t={t} onClose={()=>{if(!action.busy)props.onClose();}}>
   <p>{t('sourceIdentifyHelp')}</p>{read.error&&<p role="alert">{t(read.error)}</p>}
-  {read.busy?<p role="status">{t('loading')}</p>:!source?<p>{t('sourceHistoricalHelp')}</p>:<form onSubmit={async e=>{e.preventDefault();if(!quantityValid(quantity,unit,maximum)||!identified)return;
+  {read.loading?<p role="status">{t('loading')}</p>:!source?<p>{t('sourceHistoricalHelp')}</p>:<form onSubmit={async e=>{e.preventDefault();if(!quantityValid(quantity,unit,maximum)||!identified)return;
    if(await action.run(operation,{source:source.id,quantity,...(operation==='identify'?{label:source.physical_label||label}:{}),note,physically_identified:identified})){props.onChanged();props.onClose();}
   }}><fieldset disabled={action.busy}>
    <Field label={t('actions')}><select value={operation} onChange={e=>{setOperation(e.target.value);setQuantity('');setIdentified(false);action.clearError();}}><option value="identify">{t('sourceIdentify')}</option><option value="mix" disabled={!source.physical_label}>{t('sourceMarkMixed')}</option></select></Field>
@@ -81,5 +83,5 @@ export function SourceIdentityDialog(props:FeatureProps&{product:string;unit:str
    <label className="recording-confirm"><input type="checkbox" checked={identified} onChange={e=>setIdentified(e.target.checked)}/>{t(operation==='mix'?'sourceMixedConfirm':'sourcePhysicalConfirm')}</label>
    {action.error&&<p role="alert">{t(action.error)}</p>}<button className="primary" disabled={!identified||!quantityValid(quantity,unit,maximum)}>{t(operation==='mix'?'sourceMarkMixed':'sourceIdentify')}</button>
   </fieldset></form>}
- </Dialog>;
+ </IdentityDialog>;
 }

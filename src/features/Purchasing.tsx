@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import {useTableDetails,TableDetailsAction} from '@/components/useTableDetails';
+import { useRef, useState, type ReactNode } from 'react';
 import type { FeatureProps } from './types';
 import { Dialog, Field, formatTime } from '@/components/ui';
 import { useSupply, useSupplyCommand, type SupplyRow } from './useSupply';
@@ -6,8 +7,9 @@ import Suppliers from './Suppliers';
 import PurchaseSupplier, { type SupplierChoice } from './PurchaseSupplier';
 const statuses = ['REQUESTED', 'UNDER_REVIEW', 'NEEDS_CLARIFICATION', 'ORDERED', 'READY_FOR_RECEIPT', 'RECEIVED', 'REJECTED', 'CANCELLED'];
 const columns = [['code','purchaseReference'],['item_name','purchaseItem'],['quantity','quantity'],['unit','unit'],['requested_by_name','requestedBy'],['source_context','purchaseContext'],['created_at','requestDate'],['status','status'],['supplier_name','supplier']];
-export default function Purchasing(props: FeatureProps & { mine?: boolean; stock?: boolean }) {
+export default function Purchasing(props: FeatureProps & { mine?: boolean; stock?: boolean; headerAction?: ReactNode }) {
   const { snapshot:s, t, lang, can, mine = false, stock = false } = props;
+  const detailsRow=useTableDetails(),[selection,setSelection]=useState('');
   const [page,setPage] = useState(1), [filters,setFilters] = useState<Record<string,string|string[]>>({});
   const [filterColumn,setFilterColumn] = useState(''), [draft,setDraft] = useState<string|string[]>('');
   const [selected,setSelected] = useState(''), [create,setCreate] = useState(false), [directory,setDirectory] = useState(false);
@@ -16,6 +18,7 @@ export default function Purchasing(props: FeatureProps & { mine?: boolean; stock
   const explanation=useRef<HTMLTextAreaElement>(null);
   const read = useSupply(s,stock?'stock_purchases':mine?'mine':'purchases',{page:String(page),filters:JSON.stringify(filters),...(selected?{selected}:{})});
   const action = useSupplyCommand(props.command,s.factory?.id);
+  function openDetails(row:SupplyRow){setSelected(String(row.id));setReason('');setSupplier({id:String(row.supplier_id||''),name:String(row.supplier_name||'')});setReasonAction('');setReasonInvalid(false);action.clearError();}
   const detail = read.data?.selected;
   const manage = !mine && !stock && can('purchasing','edit');
   const own = detail?.requested_by === s.user.id;
@@ -31,22 +34,23 @@ export default function Purchasing(props: FeatureProps & { mine?: boolean; stock
   const value = (row:SupplyRow,key:string) =>key==='unit'?unitLabel(row[key]):key==='source_context'?contextLabel(row[key]):key==='status'?t('purchaseStatus_'+String(row.status)):key==='created_at'?stamp(row[key]):key==='supplier_name'?String(row[key] || '—'):String(row[key]??'—');
   if (directory) return <><button onClick={()=>setDirectory(false)}>{t('back')}</button><Suppliers {...props}/></>;
   return <section className="panel supply-page" dir={lang==='ar'?'rtl':'ltr'}>
-    <header className="section-head"><h2>{t(stock?'warehousePurchaseRequests':mine?'myPurchaseRequests':'purchasing')}</h2><div className="row-actions">
+    <header className="section-head"><h2>{t(stock?'warehousePurchaseRequests':mine?'myPurchaseRequests':'purchasing')}</h2><div className="row-actions">{props.headerAction}
       {!stock&&can('purchasing','create')&&<button className="primary" onClick={()=>{setCreate(true);action.clearError();}}>{t('purchaseCreate')}</button>}
       {!stock&&!mine&&(can('suppliers','edit')||can('purchasing'))&&<button onClick={()=>setDirectory(true)}>{t('supplierDirectory')}</button>}
       <button onClick={read.refresh}>{t('refresh')}</button></div></header>
     {Object.keys(filters).length>0&&<button className="supply-clear" onClick={()=>{setFilters({});setPage(1);}}>{t('inventoryClearAll')}</button>}
     {(read.error||action.error)&&<p role="alert">{t(read.error||action.error)}</p>}
-    {read.busy&&<p role="status">{t('loading')}</p>}
-    {!read.busy&&!read.data?.rows.length&&<p className="empty">{t('purchaseEmpty')}</p>}
+    {read.loading&&<p role="status">{t('loading')}</p>}
+    {read.data&&!read.data.rows.length&&<p className="empty">{t('purchaseEmpty')}</p>}
+    <TableDetailsAction t={t} disabled={!read.data?.rows.some(row=>String(row.id)===selection)||read.busy||!!read.error||action.busy} onOpen={()=>{const row=read.data?.rows.find(row=>String(row.id)===selection);if(row)openDetails(row);}}/>
     <div className="table-wrap supply-table"><table><thead><tr>{columns.map(([key,title])=><th scope="col" key={key}>{t(title)}
       {['item_name','requested_by_name','source_context','status','code'].includes(key)&&<button className="inventory-filter-button" data-active={!!filters[key]} aria-label={t('inventoryFilterColumn')+': '+t(title)} onClick={()=>{setFilterColumn(key);setDraft(filters[key]??(key==='status'?[]:''));}}>⌄</button>}</th>)}<th>{t('inventoryActions')}</th></tr></thead>
-      <tbody>{read.data?.rows.map(row=><tr key={String(row.id)}>{columns.map(([key])=><td key={key}>{value(row,key)}</td>)}<td><button onClick={()=>{setSelected(String(row.id));setReason('');setSupplier({id:String(row.supplier_id||''),name:String(row.supplier_name||'')});setReasonAction('');setReasonInvalid(false);action.clearError();}}>{t('open')}</button></td></tr>)}</tbody></table></div>
+      <tbody>{read.data?.rows.map(row=><tr key={String(row.id)} tabIndex={0} aria-selected={selection===String(row.id)} {...detailsRow(()=>setSelection(String(row.id)),()=>openDetails(row),read.busy||!!read.error||action.busy)}>{columns.map(([key])=><td key={key}>{value(row,key)}</td>)}<td><button onClick={()=>openDetails(row)}>{t('open')}</button></td></tr>)}</tbody></table></div>
     <div className="supply-mobile-filter"><select aria-label={t('inventoryColumn')} value={filterColumn} onChange={e=>{setFilterColumn(e.target.value);setDraft(filters[e.target.value]??(e.target.value==='status'?[]:''));}}><option value="">{t('inventoryFilterColumn')}</option>{columns.filter(([key])=>['item_name','requested_by_name','source_context','status','code'].includes(key)).map(([key,title])=><option key={key} value={key}>{t(title)}</option>)}</select></div>
     <div className="supply-cards">{read.data?.rows.map(row=><article key={String(row.id)}>
       <strong>{String(row.item_name)}</strong><p><bdi>{String(row.code)}</bdi> · {t('purchaseStatus_'+String(row.status))}</p>
       <p>{String(row.quantity)} {unitLabel(row.unit)} · {String(row.requested_by_name)}</p><p>{contextLabel(row.source_context)} · {stamp(row.created_at)}</p>
-      <button onClick={()=>{setSelected(String(row.id));setReason('');setSupplier({id:String(row.supplier_id||''),name:String(row.supplier_name||'')});setReasonAction('');setReasonInvalid(false);action.clearError();}}>{t('open')}</button></article>)}</div>
+      <button onClick={()=>openDetails(row)}>{t('open')}</button></article>)}</div>
     <nav className="fulfillment-pagination"><button disabled={page===1||read.busy} onClick={()=>setPage(x=>x-1)}>{t('previous')}</button><span>{page}</span><button disabled={read.busy||page*50>=(read.data?.total||0)} onClick={()=>setPage(x=>x+1)}>{t('next')}</button></nav>
     {filterColumn&&<Dialog title={t('inventoryFilterColumn')+': '+t(columns.find(([key])=>key===filterColumn)?.[1]||'')} t={t} onClose={()=>setFilterColumn('')}>
       {filterColumn==='status'?<fieldset className="inventory-options"><legend>{t('status')}</legend>{statuses.map(status=><label key={status}><input type="checkbox" checked={Array.isArray(draft)&&draft.includes(status)} onChange={e=>setDraft(old=>e.target.checked?[...(Array.isArray(old)?old:[]),status]:(Array.isArray(old)?old:[]).filter(x=>x!==status))}/>{t('purchaseStatus_'+status)}</label>)}</fieldset>:<Field label={t('inventoryContains')}><input value={typeof draft==='string'?draft:''} onChange={e=>setDraft(e.target.value)} maxLength={200}/></Field>}

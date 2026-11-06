@@ -1,0 +1,53 @@
+begin;
+create temporary table assertions(label text);
+create function pg_temp.ok(v boolean,label text) returns void language plpgsql as $$begin
+ if v is distinct from true then raise exception 'Activation assertion: %',label;end if;insert into assertions values(label);end$$;
+create function pg_temp.fails(statement text,message text) returns void language plpgsql as $$begin
+ begin execute statement;exception when others then if sqlerrm=message then insert into assertions values(message);return;end if;raise exception 'Expected %, got %',message,sqlerrm;end;
+ raise exception 'Expected rejection %',message;end$$;
+do $$declare x jsonb;f uuid;r uuid;sid uuid;a timestamptz;b timestamptz;v jsonb;p jsonb;retry uuid;before_rows text;begin
+ x:=mp_test.fixture('activation');f:=(x->>'factory')::uuid;r:=(x->>'request')::uuid;
+ a:=clock_timestamp()+interval '2 days';b:=a+interval '1 hour';sid:=mp_test.plan(x,a,b);
+ v:=public.maintenance_planning_preview(f,r,a,b,2,1);p:=jsonb_build_object('context_hash',v->>'context_hash','request_revision',2);
+ perform pg_temp.ok(v->>'activation_enabled'='false' and v->>'confirmation_available'='false','inactive preview fails closed');
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''confirm'',%L,1,gen_random_uuid())',f,r,p),'maintenance_planning_inactive');
+ update private.maintenance_planning_activation set enabled=true;
+ perform pg_temp.ok(public.maintenance_planning_preview(f,r,a,b,2,1)->>'confirmation_available'='true','active authorized preview enables confirmation');
+ perform pg_temp.ok(v->>'context_hash'=public.maintenance_planning_preview(f,r,a,b,2,1)->>'context_hash','activation does not rewrite configuration fingerprint');
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''confirm'',%L,1,gen_random_uuid())',f,r,p||jsonb_build_object('context_hash',repeat('0',64))),'maintenance_preview_stale');
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''confirm'',%L,1,gen_random_uuid())',f,r,p||jsonb_build_object('request_revision',3)),'maintenance_preview_stale');
+ insert into public.user_permissions(factory_id,user_id,module,action) values(f,(x->>'viewer')::uuid,'orders','view');
+ perform set_config('request.jwt.claim.sub',x->>'viewer',true);
+ perform pg_temp.ok(public.maintenance_planning_preview(f,r,a,b,2,1)->>'confirmation_available'='false','view grant does not enable confirmation');
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''confirm'',%L,1,gen_random_uuid())',f,r,p),'permission_denied');
+ perform set_config('request.jwt.claim.sub',x->>'owner',true);
+ retry:=gen_random_uuid();perform public.maintenance_planning_command(f,r,'confirm',p,1,retry);
+ before_rows:=(select count(*)::text from public.maintenance_schedule_revisions where schedule_id=sid);
+ update private.maintenance_planning_activation set enabled=false;
+ perform pg_temp.ok(public.maintenance_planning_command(f,r,'confirm',p,1,retry)=r,'successful retry remains idempotent after disable');
+ perform pg_temp.ok(before_rows=(select count(*)::text from public.maintenance_schedule_revisions where schedule_id=sid),'retry writes no extra revision');
+ a:=a+interval '1 day';b:=b+interval '1 day';v:=public.maintenance_planning_preview(f,r,a,b,2,2);p:=jsonb_build_object('context_hash',v->>'context_hash','request_revision',2,'start',a,'end',b,'reason','Reviewed new window');
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''reschedule'',%L,2,gen_random_uuid())',f,r,p),'maintenance_planning_inactive');
+ update private.maintenance_planning_activation set enabled=true;
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''reschedule'',%L,2,gen_random_uuid())',f,r,p-'reason'),'maintenance_note');
+ perform public.maintenance_planning_command(f,r,'reschedule',p,2,gen_random_uuid());
+ perform pg_temp.ok((select state='CONFIRMED' and revision=3 from public.maintenance_schedules where id=sid),'valid activated reschedule');
+ delete from private.maintenance_planning_activation;
+ a:=a+interval '1 day';b:=b+interval '1 day';v:=public.maintenance_planning_preview(f,r,a,b,2,3);
+ perform pg_temp.ok(v->>'confirmation_available'='false','missing activation row is unavailable');
+ p:=jsonb_build_object('context_hash',v->>'context_hash','request_revision',2,'start',a,'end',b,'reason','No gate');
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''reschedule'',%L,3,gen_random_uuid())',f,r,p),'maintenance_planning_inactive');
+ perform pg_temp.ok(not has_function_privilege('authenticated','private.maintenance_reader_context_before_activation(uuid,uuid,integer,integer,timestamptz,timestamptz,timestamptz)','execute'),'predecessor reader is private');
+end$$;
+do $$declare x jsonb;f uuid;r uuid;a timestamptz;b timestamptz;v jsonb;p jsonb;begin
+ insert into private.maintenance_planning_activation default values;
+ x:=mp_test.fixture('activation-capacity');f:=(x->>'factory')::uuid;r:=(x->>'request')::uuid;
+ a:=clock_timestamp()+interval '2 days';b:=a+interval '1 hour';perform mp_test.plan(x,a,b);
+ update private.maintenance_planning_activation set enabled=true;
+ perform public.plan_product_item(f,(x->>'item')::uuid,(x->>'line')::uuid,a);
+ v:=public.maintenance_planning_preview(f,r,a,b,2,1);p:=jsonb_build_object('context_hash',v->>'context_hash','request_revision',2);
+ perform pg_temp.ok(v->>'capacity'='BLOCKED','active gate does not hide production conflict');
+ perform pg_temp.fails(format('select public.maintenance_planning_command(%L,%L,''confirm'',%L,1,gen_random_uuid())',f,r,p),'maintenance_production_conflict');
+end$$;
+select count(*) passed_assertions from assertions;
+rollback;

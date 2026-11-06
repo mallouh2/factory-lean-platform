@@ -11,12 +11,17 @@ const effective = record => ({ ...record.event,
  * @param {(event: string) => Promise<Array<any>>} contexts
  */
 export async function deliverLossReview(selected, candidates, contexts, now = Date.now()) {
+  if (selected.saved?.result && typeof selected.saved.result === "object") {
+    // The accepted result is history, never a fresh comparison/recalculation.
+    return { ...selected, calculation: selected.saved.result, suggestions: [] };
+  }
   const observations = [];
   for (const item of candidates) {
     if (item.event.id === selected.event.id || !item.actual) continue;
     const event = effective(item);
     const estimate = item.saved?.result && typeof item.saved.result === "object"
-      ? item.saved.result : calculateProductionLoss(event, await contexts(event.id), item.actual, now);
+      ? item.saved.result : calculateProductionLoss(event, await contexts(event.id), item.actual, now,
+        [], item.maintenance?.evidence || null);
     observations.push({ work_center_id: event.work_center_id, recorded_at: item.actual.recorded_at,
       stop_nature: event.stop_nature, planned_activity: event.planned_activity,
       product_id: estimate.assumptions[0]?.product_id, readiness: estimate.readiness,
@@ -26,7 +31,8 @@ export async function deliverLossReview(selected, candidates, contexts, now = Da
       actual_restart_scrap: number(item.actual.restart_scrap_quantity) });
   }
   const event = effective(selected);
-  const calculation = calculateProductionLoss(event, await contexts(event.id), selected.actual, now, observations);
+  const calculation = calculateProductionLoss(event, await contexts(event.id), selected.actual, now,
+    observations, selected.maintenance?.evidence || null);
   const estimate = selected.saved?.result && typeof selected.saved.result === "object"
     ? selected.saved.result : calculation;
   return { ...selected, calculation, suggestions: ["shutdown", "restart"].map(parameter =>

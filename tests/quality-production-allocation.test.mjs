@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{productionDistribution}from'../src/utils/quality-production-distribution.mjs';import{quantityValid}from'../src/utils/quality-quantities.mjs';
+const e={rejected_available:'2',unfinished_available:'4'};
+for(const [q,rejected,unfinished,stock,uncovered]of[['2','2','0','0','4'],['5','2','3','0','1'],['6','2','4','0','0'],['8','2','4','2','0'],['2.5','2','0.5','0','3.5']])test('exact preview '+q,()=>assert.deepEqual(productionDistribution(q,e),{rejected,unfinished,stock,uncovered}));
+test('prior allocations cap preview and preserve decimals',()=>assert.deepEqual(productionDistribution('0.3',{rejected_available:'0.1',unfinished_available:'0.15'}),{rejected:'0.1',unfinished:'0.15',stock:'0.05',uncovered:'0'}));
+test('unit and unavailable rules',()=>{assert.equal(productionDistribution('NaN',e),null);assert.equal(productionDistribution('8',null),null);assert.equal(quantityValid('2.5','piece'),false);assert.equal(quantityValid('2.5','meter'),true);});
