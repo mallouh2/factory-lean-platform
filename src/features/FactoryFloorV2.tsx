@@ -30,6 +30,7 @@ import {
   borrowingLineOf,
   categoryIconKey,
   liveTransferPicker,
+  transferReturnReady,
   lineOperationalStatus,
   lineFlowActive,
 } from "@/utils/floor-visual.mjs";
@@ -656,6 +657,7 @@ export default function FactoryFloorV2(
         orders,
         lines,
         s.tables.work_center_capabilities || [],
+        s.tables.downtime_events || [],
       )
     : { blockedReason: null as string | null, candidates: [] as Row[] };
   const transferCandidates = livePicker.blockedReason
@@ -678,6 +680,7 @@ export default function FactoryFloorV2(
   const canStopHere = !selectedFromHomePlaceholder && canChangeStatus &&
     (selectedDisplayState === "running" || selectedDisplayState === "alternative");
   const canReturnHere = selected?.status === "stopped" && transferActive && canReturn;
+  const returnReady = !selected || transferReturnReady(selected.id, centers, transfers);
   const canRestartHere = selected?.status === "stopped" && !transferActive && canChangeStatus &&
     !selectedFromHomePlaceholder && !(actingFor ? borrowedBy?.paused_at : selectedLine?.paused_at);
   const canStartHere = selected?.status === "idle" &&
@@ -708,7 +711,7 @@ export default function FactoryFloorV2(
     }
   }
   async function returnProduction() {
-    if (!selected) return;
+    if (!selected || flowBusy || !returnReady) return;
     setFlowBusy(true);
     setFlowNotice("");
     try {
@@ -963,10 +966,11 @@ export default function FactoryFloorV2(
                       </button>
                     )}
                     {canReturnHere && (
-                      <button className="primary" disabled={flowBusy} onClick={() => void returnProduction()}>
+                      <button className="primary" disabled={flowBusy || !returnReady} onClick={() => void returnProduction()}>
                         {t("returnProduction")}
                       </button>
                     )}
+                    {canReturnHere && !returnReady && <p role="status" className="notice">{t("transferReturnRequiresStop")}</p>}
                     {canRestartHere && (
                       <button className="primary" disabled={flowBusy} onClick={() => void startMachine()}>
                         {t("downtimeEnd")}

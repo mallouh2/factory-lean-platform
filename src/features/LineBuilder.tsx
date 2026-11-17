@@ -181,11 +181,13 @@ export default function LineBuilder(props: FeatureProps & {
         </section>}
       </>}
       {(screen.kind === "machine" || screen.kind === "createMachine") && <>
+        {savedMachine && <p className="notice">{t(String(savedMachine.status))} · {t("line")}: {localName(lines.find(l => l.id === savedMachine.line_id), lang)}</p>}
         <Configuration key={screen.kind === "machine" ? screen.id : "new-machine"} {...props} view="centers"
           standalone={{ record: savedMachine || null, blocked: !!draft,
             onSaved: () => props.initialMachineId && props.onBackToFloor
               ? props.onBackToFloor() : setScreen({ kind: "overview" }), onCancel: () => go({ kind: "overview" }) }} />
-        {selectedMachine && <section className="management-flow-settings panel">
+        {selectedMachine && <details className="management-flow-settings panel machine-secondary" open={draft ? true : undefined}>
+          <summary>{t("flowSettings")}</summary>
           <div className="section-head"><div><h3>{t("flowSettings")}</h3><p>{t("flowSettingsHelp")}</p></div>
             <button className="primary" disabled={!draft || busy} onClick={() => void saveLayout()}>{t("saveFlowSettings")}</button></div>
           <div className="form-grid">
@@ -219,7 +221,7 @@ export default function LineBuilder(props: FeatureProps & {
               onChange={(e) => change(centers.map((x) => x.id === selectedMachine.id ? { ...x, buffer_minutes: Number(e.target.value) } : x))} /></Field>}
           </div>
           {draft && <p role="status" className="muted">{t("saveLayoutFirst")}</p>}
-        </section>}
+        </details>}
       </>}
       {screen.kind === "areas" && <Configuration {...props} view="factory" />}
       {screen.kind === "categories" && <Configuration {...props} view="work_center_categories" />}

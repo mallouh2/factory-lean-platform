@@ -11,12 +11,21 @@ import {
   previewStopImpact,
   alternativeAvailability,
   liveTransferPicker,
+  transferReturnReady,
   transferBranches,
   borrowingLineOf,
   lineOperationalStatus,
   lineFlowActive,
   routeRows,
 } from "../src/utils/floor-visual.mjs";
+
+test("equipment handback requires replacement stopped producing; unknown state fails closed", () => {
+  const transfers=[{original_id:'O',alternative_id:'A',ended_at:null}];
+  assert.equal(transferReturnReady('O',[],transfers),false);
+  assert.equal(transferReturnReady('O',[{id:'A',status:'running'}],transfers),false);
+  for(const status of ['stopped','idle','offline','setup'])assert.equal(transferReturnReady('O',[{id:'A',status}],transfers),true);
+  assert.equal(transferReturnReady('O',[],[{...transfers[0],ended_at:'done'}]),true);
+});
 
 test("no-demand idle is only a display hint without an event or assignment", () => {
   const now = Date.parse("2026-09-30T09:00:00Z");

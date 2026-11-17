@@ -1,8 +1,9 @@
 import ProductionTransfers from "./ProductionTransfers";
-import { formatDuration } from "@/utils/production-flow.mjs";
+import { evaluateFlow, formatDuration } from "@/utils/production-flow.mjs";
+import { impactChoice, transferReturnReady } from "@/utils/floor-visual.mjs";
 import DowntimePlan from "./DowntimePlan";
 import { downtimeMinutes } from "@/utils/manufacturing.mjs";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge, Dialog, Field, formatTime, localName } from "@/components/ui";
 import type { Row } from "@/types";
 import type { FeatureProps } from "./types";
@@ -15,6 +16,7 @@ export default function CenterDetails({
   const { snapshot: s, t, lang, command, can } = props;
   const [status, setStatus] = useState(String(center.status)),
     [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const zone = String(s.factory?.timezone);
   const current =
     s.tables.work_centers.find((x) => x.id === center.id) || center;
@@ -25,11 +27,19 @@ export default function CenterDetails({
     (x) => x.work_center_id === current.id && !x.ended_at,
   );
   const reasons = s.tables.downtime_reasons || [];
+  const returnReady = transferReturnReady(current.id, s.tables.work_centers, s.tables.production_transfers || []);
+  const borrowed = s.tables.production_transfers?.find(x => x.alternative_id === current.id && !x.ended_at);
+  const original = s.tables.work_centers.find(x => x.id === borrowed?.original_id);
+  const flow = evaluateFlow(s.tables.work_centers, s.tables.downtime_events || [], s.tables.production_transfers || []);
+  const availability = borrowed ? "machineBorrowed" : ["stopped", "offline", "setup"].includes(String(current.status)) ? "machineUnavailable" : current.order_id ? "machineAssigned" : current.status === "idle" ? "machineAvailable" : "machineUnavailable";
   const history = (s.tables.status_events || [])
     .filter((x) => x.work_center_id === current.id)
     .slice(0, 10);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting.current) return;
+    if (status === "running" && !returnReady) return;
+    submitting.current = true;
     setBusy(true);
     const f = new FormData(e.currentTarget);
     try {
@@ -49,6 +59,7 @@ export default function CenterDetails({
     } catch {
       // The shared command handler keeps a readable error visible.
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -88,8 +99,11 @@ export default function CenterDetails({
   return (
     <Dialog title={localName(current, lang)} onClose={onClose} t={t}>
       <Badge status={String(current.status)} t={t} />
+      <p className="machine-availability">{t(availability)}{borrowed && <> · {t("line")}: {localName(s.tables.production_lines?.find(l => l.id === original?.line_id), lang)}</>}</p>
+      <p>{t("machineStopImpact")}: {t(impactChoice(current.dependency_mode, current.impact_scope))}</p>
+      {flow[String(current.id)]?.state === "blocked" && <p role="status" className="notice">{t("machineFlowBlocked")}</p>}
       <dl className="detail-grid">
-        {info.map(([label, value]) => (
+        {info.slice(0, 4).map(([label, value]) => (
           <div key={String(label)}>
             <dt>{t(String(label))}</dt>
             <dd>{String(value ?? "—")}</dd>
@@ -159,7 +173,8 @@ export default function CenterDetails({
       {(can("centers", "edit") || can("machine_status", "edit")) && (
         <form onSubmit={submit}>
           <h3>{t("operatorView")}</h3>
-          <div className="operator-actions">
+          {!returnReady && <p role="status" className="notice">{t("transferReturnRequiresStop")}</p>}
+          <fieldset disabled={busy}><div className="operator-actions">
             {["running", "idle", "offline"].map((x) => (
               <button
                 type="button"
@@ -179,15 +194,19 @@ export default function CenterDetails({
           </Field>
           <button
             className="primary"
-            disabled={busy || status === current.status}
+            disabled={busy || status === current.status || status === "running" && !returnReady}
           >
             {t("changeStatus")}
           </button>
+          </fieldset>
         </form>
       )}
       <ProductionTransfers {...props} center={current} />
+      <details className="machine-secondary"><summary>{t("machineProductionDetails")}</summary><dl className="detail-grid">{info.slice(4).map(([label,value])=><div key={String(label)}><dt>{t(String(label))}</dt><dd>{String(value ?? "—")}</dd></div>)}</dl></details>
+      <details className="machine-secondary"><summary>{t("maintenance")}</summary>
       <MaintenanceContext {...props} key={String(current.id)} machine={current} />
-      <h3>{t("history")}</h3>
+      </details>
+      <details className="machine-secondary"><summary>{t("history")}</summary>
       <ol className="timeline">
         {history.map((e) => (
           <li key={String(e.id)}>
@@ -205,6 +224,7 @@ export default function CenterDetails({
           </li>
         ))}
       </ol>
+      </details>
     </Dialog>
   );
 }

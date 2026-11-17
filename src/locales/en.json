@@ -2544,5 +2544,19 @@
   "psNoCurrentBooking": "No current shift booking. Start checks the remaining work and available materials.",
   "floorPlannedReservations": "Planned shift reservations",
   "psReservedForecast": "Reserved / planned-shift forecast",
-  "executionStartShortages": "Materials missing to start"
+  "executionStartShortages": "Materials missing to start",
+  "transferStopRequired": "An open downtime record is required. Refresh and review this machine's stop.",
+  "transferNoCompatibleAvailable": "No compatible configured alternative is available. Check its product capability, current assignment and open transfers.",
+  "transferHistory": "Equipment transfer history",
+  "transferOpen": "Active replacement",
+  "transferEnded": "Transfer ended",
+  "machineAvailable": "Available for assignment",
+  "machineUnavailable": "Unavailable — review physical status and downtime",
+  "machineAssigned": "Assigned to production work",
+  "machineBorrowed": "Borrowed by another production route",
+  "machineStopImpact": "Configured stop impact",
+  "machineFlowBlocked": "Production flow is blocked. Review the stopped equipment or compatible alternatives.",
+  "machineProductionDetails": "Production details and timing",
+  "machineLossSettings": "Loss and cost settings",
+  "transferReturnRequiresStop": "Stop the active replacement using Stop Machine before returning production. Record its physical handover reason, then return to the original machine. Refresh if its status has changed."
 }

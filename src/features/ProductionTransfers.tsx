@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { liveTransferPicker } from "@/utils/floor-visual.mjs";
 import type { FeatureProps } from "./types";
 import type { Row } from "@/types";
 import { Field, localName, formatTime } from "@/components/ui";
@@ -8,13 +9,18 @@ export default function ProductionTransfers({
 }: FeatureProps & { center: Row }) {
   const { snapshot: s, t, lang, command, can } = props;
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const history = (s.tables.production_transfers || []).filter(
     (x) => x.original_id === center.id || x.alternative_id === center.id,
   );
-  const alternatives = (s.tables.work_center_alternatives || [])
+  const configured = (s.tables.work_center_alternatives || [])
     .filter((x) => x.work_center_id === center.id)
-    .map((x) => s.tables.work_centers.find((c) => c.id === x.alternative_id))
-    .filter((x): x is Row => !!x && !x.archived);
+    .map((x) => String(x.alternative_id));
+  const picker = liveTransferPicker(center, s.tables.work_centers, configured,
+    s.tables.production_transfers || [], s.tables.production_orders || [],
+    s.tables.production_lines || [], s.tables.work_center_capabilities || [], s.tables.downtime_events || []);
+  const alternatives: Row[] = picker.candidates;
+  const homeLine = (c: Row | undefined) => localName(s.tables.production_lines?.find(l => l.id === c?.line_id), lang);
   return (
     <section>
       <h3>{t("productionTransfers")}</h3>
@@ -25,7 +31,10 @@ export default function ProductionTransfers({
           <form
             onSubmit={async (e) => {
               e.preventDefault();
+              if (submitting.current) return;
               const f = new FormData(e.currentTarget);
+              if (picker.blockedReason || !alternatives.some(a => a.id === f.get("alternative"))) return;
+              submitting.current = true;
               setBusy(true);
               try {
                 await command("transfer_production", {
@@ -36,11 +45,15 @@ export default function ProductionTransfers({
                 });
               } catch {
               } finally {
+                submitting.current = false;
                 setBusy(false);
               }
             }}
           >
             <p>{t("transferHelp")}</p>
+            {picker.blockedReason && <p role="status" className="notice">{t(picker.blockedReason)}</p>}
+            {!picker.blockedReason && !alternatives.length && <p role="status" className="notice">{t("transferNoCompatibleAvailable")}</p>}
+            <fieldset disabled={busy || !!picker.blockedReason || !alternatives.length}>
             <Field label={t("alternative")}>
               <select name="alternative" required>
                 <option value="">{t("chooseAlternative")}</option>
@@ -48,12 +61,8 @@ export default function ProductionTransfers({
                   <option
                     key={String(a.id)}
                     value={String(a.id)}
-                    disabled={
-                      a.status !== "idle" ||
-                      !!(a.order_id && a.order_id !== center.order_id)
-                    }
                   >
-                    {localName(a, lang)} · {t(String(a.status))}
+                    {localName(a, lang)} · {homeLine(a)} · {t(String(a.status))}
                   </option>
                 ))}
               </select>
@@ -62,11 +71,13 @@ export default function ProductionTransfers({
               <textarea name="reason" required minLength={3} maxLength={2000} />
             </Field>
             <button className="primary" disabled={busy || !center.order_id}>
-              {t("transferProduction")}
+              {t(busy ? "updating" : "transferProduction")}
             </button>
+            </fieldset>
           </form>
         )}
       {!history.length && <p className="muted">{t("noTransfers")}</p>}
+      {!!history.length && <details className="machine-secondary" open={history.some(x => !x.ended_at)}><summary>{t("transferHistory")}</summary>
       <ol className="timeline">
         {history.map((x) => (
           <li key={String(x.id)}>
@@ -81,6 +92,7 @@ export default function ProductionTransfers({
                 lang,
               )}
             </strong>
+            <p>{t(x.ended_at ? "transferEnded" : "transferOpen")}</p>
             <p>
               {formatTime(x.created_at, lang, String(s.factory?.timezone))} ·{" "}
               {String(
@@ -104,9 +116,11 @@ export default function ProductionTransfers({
                 String(s.factory?.timezone),
               )}
             </p>
+            {x.ended_at && <p>{t("transferEnded")}: {formatTime(x.ended_at, lang, String(s.factory?.timezone))}</p>}
           </li>
         ))}
       </ol>
+      </details>}
     </section>
   );
 }

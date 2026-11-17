@@ -344,6 +344,7 @@ export function sameCategory(a, b) {
  * the picker only ever lists candidates the RPC would accept right now.
  * Checks BOTH sides: the original machine's prerequisites and each
  * candidate's validity. Returns { blockedReason, candidates }.
+ * @param {Array<Record<string, unknown>> | null} downtimes
  */
 export function liveTransferPicker(
   original,
@@ -353,6 +354,7 @@ export function liveTransferPicker(
   orders,
   lines = [],
   capabilities = [],
+  downtimes = null,
 ) {
   const oid = String(original.id);
   // Original-side prerequisites (server: invalid_order / stale transfers).
@@ -370,9 +372,10 @@ export function liveTransferPicker(
   );
   if (!order)
     return { blockedReason: "activeOrderRequired", candidates: [] };
-  const openDowntime = true; // open-stop presence is implied by stopped state in the UI; RPC remains authority
-  if (!openDowntime)
-    return { blockedReason: "activeOrderRequired", candidates: [] };
+  if (lines.some(l => !l.archived && String(l.id) === String(original.line_id) && l.paused_at))
+    return { blockedReason: "line_paused", candidates: [] };
+  if (downtimes && !downtimes.some(d => String(d.work_center_id) === oid && !d.ended_at))
+    return { blockedReason: "transferStopRequired", candidates: [] };
   const openAlternativeIds =
     (transfers || [])
       .filter((x) => !x.ended_at)
@@ -390,4 +393,15 @@ export function liveTransferPicker(
         alternativeAvailability(c, [], original.order_id, lines, openAlternativeIds) === "available",
     );
   return { blockedReason: null, candidates };
+}
+
+/** Finish an equipment handback only after its replacement stops producing.
+ * Existing status/transfer triggers reject reassigning a still-running spare.
+ * Keep the physical stop and its reason in the existing Stop Machine workflow.
+ */
+export function transferReturnReady(originalId, centers, transfers) {
+  const open = transfers.find(x => String(x.original_id) === String(originalId) && !x.ended_at);
+  if (!open) return true;
+  const alternative = centers.find(c => String(c.id) === String(open.alternative_id));
+  return Boolean(alternative && ['stopped','idle','setup','offline'].includes(String(alternative.status)));
 }

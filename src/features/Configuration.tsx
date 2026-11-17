@@ -169,16 +169,15 @@ export default function Configuration({
       ? "work_centers"
       : relations[field];
   if (!c) return null;
-  const groupedFields: Array<string | { group: string }> = [];
+  const groupedFields: Array<{ group: string; fields: string[] }> = [];
   if (view === "centers") {
     for (const [groupKey, groupFieldNames] of centerGroups) {
       const active = groupFieldNames.filter((f) => editorFields.includes(f));
       if (!active.length) continue;
-      groupedFields.push({ group: groupKey });
-      groupedFields.push(...active);
+      groupedFields.push({ group: groupKey, fields: active });
     }
   } else {
-    groupedFields.push(...editorFields);
+    groupedFields.push({ group: "", fields: editorFields });
   }
   const rows = (s.tables[c.table] || []).filter(
     (x) =>
@@ -401,15 +400,16 @@ export default function Configuration({
           onClose={() => standalone ? standalone.onCancel() : setEditing(null)}
         >
           <form onSubmit={save}>
-            <div className="form-grid">
-              {groupedFields.map(
-                (field) => typeof field === "object" ? (
-                <div className="management-field-group-head" key={field.group}>
-                  <h4>{t(field.group)}</h4>
-                  {field.group === "groupAssignment" && activeEditing.id &&
+            {groupedFields.map(({group,fields}) => {
+              const secondary = ["groupRates", "groupNotes"].includes(group);
+              const Group = secondary ? "details" : "section";
+              return <Group key={group} className={secondary ? "machine-secondary" : undefined}>
+                {secondary ? <summary>{t(group)}</summary> : group && <div className="management-field-group-head">
+                  <h4>{t(group)}</h4>
+                  {group === "groupAssignment" && activeEditing.id &&
                     <p className="muted">{t("groupAssignmentHint")}</p>}
-                </div>
-                ) : (
+                </div>}
+                <div className="form-grid">{fields.map(field => (
                 <Field
                   key={field}
                   label={
@@ -556,17 +556,18 @@ export default function Configuration({
                     />
                   )}
                 </Field>
-              ))}
-            </div>
+              ))}</div>
+              </Group>;
+            })}
             <button className="primary" disabled={busy || standalone?.blocked || !can(permissionModule, activeEditing.id ? "edit" : "create")}>
               {t("save")}
             </button>
           </form>
           {view === "centers" && activeEditing.id && (
             <>
-              <CenterAlternatives {...props} centerId={String(activeEditing.id)} />
-              <CenterCapabilities {...props} centerId={String(activeEditing.id)} />
-              <CenterLossProfile {...props} centerId={String(activeEditing.id)} />
+              <details className="machine-secondary"><summary>{t("alternatives")}</summary><CenterAlternatives {...props} centerId={String(activeEditing.id)} /></details>
+              <details className="machine-secondary"><summary>{t("capabilities")}</summary><CenterCapabilities {...props} centerId={String(activeEditing.id)} /></details>
+              <details className="machine-secondary"><summary>{t("machineLossSettings")}</summary><CenterLossProfile {...props} centerId={String(activeEditing.id)} /></details>
             </>
           )}
           {standalone && activeEditing.id && can(permissionModule, "delete") && (

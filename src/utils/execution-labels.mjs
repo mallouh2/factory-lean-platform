@@ -1,14 +1,14 @@
-// Annotation lanes are independent of production lanes and true bar geometry.
-// A readable label never moves sequential work onto another execution track.
-export function executionLabels(timeline,measured={},labelWidth=200){
- const ends=[],slots=timeline.slots.map(slot=>{
+// Pack annotations horizontally on ONE baseline, independently of real time.
+// Extend the scroll surface rather than shifting bars or stacking labels.
+export function executionLabels(timeline,measured={},labelWidth=200,labelHeight=48){
+ let end=-12;
+ const labelTop=98+Math.max(0,...timeline.slots.map(s=>s.row))*56;
+ const slots=timeline.slots.map(slot=>{
   const fits=Number.isFinite(measured[slot.order.id])&&slot.width>=measured[slot.order.id]+12;
-  if(fits)return {...slot,fits,labelLane:0,labelLeft:slot.left};
-  const labelLeft=Math.max(0,Math.min(slot.left,timeline.width-labelWidth));
-  const lanes=ends[slot.row]||[];let lane=lanes.findIndex(end=>end+12<=labelLeft);if(lane<0)lane=lanes.length;
-  lanes[lane]=labelLeft+labelWidth;ends[slot.row]=lanes;
-  return {...slot,fits,labelLane:lane,labelLeft};
+  const labelLeft=Math.max(slot.left,end+12);end=labelLeft+labelWidth;
+  return {...slot,fits,labelLeft,labelTop,barTop:52+slot.row*56};
  });
- const rowHeight=Math.max(56,52+Math.max(0,...ends.map(r=>r.length))*48);
- return{slots:slots.map(s=>({...s,barTop:52+s.row*rowHeight,labelTop:98+s.row*rowHeight+s.labelLane*48})),height:Math.max(timeline.height,68+(Math.max(0,...slots.map(s=>s.row))+1)*rowHeight)};
+ const width=Math.max(timeline.width,end),ticks=[...(timeline.ticks||[])];
+ if(ticks.length>1){const step=ticks[1].left-ticks[0].left,period=ticks[1].at-ticks[0].at;while(ticks.at(-1).left+step<width){const last=ticks.at(-1);ticks.push({left:last.left+step,at:last.at+period});}}
+ return{slots,width,ticks,height:Math.max(timeline.height,labelTop+Math.max(48,labelHeight)+16)};
 }

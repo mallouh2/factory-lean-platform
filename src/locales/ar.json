@@ -2544,5 +2544,19 @@
   "psNoCurrentBooking": "لا يوجد حجز للوردية الحالية. يتحقق البدء من العمل المتبقي والمواد المتاحة.",
   "floorPlannedReservations": "حجوزات الوردية المخططة",
   "psReservedForecast": "المحجوز / تقدير الوردية المخطط",
-  "executionStartShortages": "المواد الناقصة لبدء الإنتاج"
+  "executionStartShortages": "المواد الناقصة لبدء الإنتاج",
+  "transferStopRequired": "يلزم وجود سجل توقف مفتوح. حدّث البيانات وراجع توقف هذه الآلة.",
+  "transferNoCompatibleAvailable": "لا يوجد بديل متوافق ومُعدّ متاح حالياً. تحقق من قدرة المنتج والتكليف الحالي والتحويلات المفتوحة.",
+  "transferHistory": "سجل تحويلات المعدات",
+  "transferOpen": "بديل نشط",
+  "transferEnded": "انتهى التحويل",
+  "machineAvailable": "متاحة للتكليف",
+  "machineUnavailable": "غير متاحة — راجع الحالة الفعلية والتوقف",
+  "machineAssigned": "مكلّفة بعمل إنتاجي",
+  "machineBorrowed": "مستعارة لمسار إنتاج آخر",
+  "machineStopImpact": "تأثير التوقف المُعدّ",
+  "machineFlowBlocked": "تدفق الإنتاج متوقف. راجع المعدات المتوقفة أو البدائل المتوافقة.",
+  "machineProductionDetails": "تفاصيل الإنتاج والتوقيت",
+  "machineLossSettings": "إعدادات الفاقد والتكلفة",
+  "transferReturnRequiresStop": "أوقف البديل النشط باستخدام إيقاف الآلة قبل إرجاع الإنتاج. سجّل سبب التسليم الفعلي، ثم أعد الإنتاج إلى الآلة الأصلية. حدّث البيانات إذا تغيرت حالته."
 }
