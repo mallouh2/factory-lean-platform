@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import {hydrateInterruptedOrders} from '@/services/production-execution';
 import {
   authenticatedClient,
   authorize,
@@ -29,20 +30,33 @@ export async function GET(req: NextRequest) {
       factory: req.nextUrl.searchParams.get("factory") || null,
     });
     if (error) throw error;
-    if (data?.factory?.id && data.permissions?.includes("orders:view")) {
+    // Independent authorized snapshot sections do not need to wait for each
+    // other's network/database round trip. Keep the same all-or-error response.
+    const factoryId=data?.factory?.id;
+    const recordingAllowed=Boolean(factoryId&&data.permissions?.includes('orders:view'));
+    const shiftsAllowed=Boolean(factoryId&&(recordingAllowed||data.permissions?.includes('settings:view')));
+    stage='snapshot_hydration';
+    const [recordingResult,shiftsResult,contextResult,executionOrders]=await Promise.all([
+      recordingAllowed?db.rpc('production_recording_units',{factory:factoryId}):null,
+      shiftsAllowed?db.from('production_shifts').select('*').eq('factory_id',factoryId).order('created_at'):null,
+      shiftsAllowed?db.rpc('production_shift_context',{factory:factoryId}):null,
+      recordingAllowed?hydrateInterruptedOrders(db,factoryId,data.tables.production_orders||[]):Promise.resolve(data.tables.production_orders),
+    ]);
+    if(executionOrders)data.tables.production_orders=executionOrders;
+    if (recordingResult) {
       stage = "production_recording_units";
-      const { data: recording, error: recordingError } = await db.rpc("production_recording_units", { factory: data.factory.id });
+      const { data: recording, error: recordingError } = recordingResult;
       if (recordingError) throw recordingError;
       data.tables.production_recording_units = recording.units;
       data.tables.production_technicians = recording.technicians;
     }
-    if (data?.factory?.id && (data.permissions?.includes('orders:view') || data.permissions?.includes('settings:view'))) {
+    if (shiftsResult&&contextResult) {
       stage = "production_shifts";
-      const {data: shifts,error: shiftError}=await db.from('production_shifts').select('*').eq('factory_id',data.factory.id).order('created_at');
+      const {data: shifts,error: shiftError}=shiftsResult;
       if(shiftError) throw shiftError;
       data.tables.production_shifts=shifts;
       stage = 'production_shift_context';
-      const {data: context,error: contextError}=await db.rpc('production_shift_context',{factory:data.factory.id});
+      const {data: context,error: contextError}=contextResult;
       if(contextError)throw contextError;
       data.tables.production_shift_context=[context];
     }
@@ -72,6 +86,8 @@ export async function GET(req: NextRequest) {
   }
 }
 const commandErrors: Record<string, string> = {
+  machine_impact_conflict:'machine_impact_conflict',execution_no_active_work:'execution_no_active_work',execution_line_idle:'execution_line_idle',execution_machine_stopped:'execution_machine_stopped',
+  material_use_preparation_workflow:'material_use_preparation_workflow',
   maintenance_active_stop:'maintenanceActiveStop',maintenance_stop_scope:'maintenanceStopScope',
   maintenance_stop_window:'maintenanceStopWindow',maintenance_stop_conflict:'maintenanceStopStale',
   quality_quantity:'qualityInvalidQuantity',quality_weight:'qualityWeightRequired',quality_unavailable:'qualityUnavailable',quality_reserved:'qualityReserved',quality_reason:'qualityReasonRequired',quality_duplicate_reason:'qualityReasonDuplicate',quality_shortfall:'qualityShortfall',quality_reversal_unavailable:'qualityReversalUnavailable',
@@ -336,7 +352,7 @@ export async function POST(req: NextRequest) {
         const {data:allowed}=await db.rpc('can_access',{factory:args.factory,module:'machine_status',action:'edit'});
         if(!allowed) await authorize(args.factory,'centers','edit',context);
       }
-    } else if (["change_status", "stop_machine", "update_downtime",
+    } else if (["change_status", "stop_machine", "stop_machine_with_impact", "update_downtime",
       "set_downtime_initial"].includes(command)) {
       const { data: allowed } = await db.rpc("can_access", {
         factory: args.factory,
@@ -417,6 +433,10 @@ export async function POST(req: NextRequest) {
     if (error && command === 'maintenance_planning_command' && error.code === '40001') {
       return NextResponse.json({error:'mpPreviewStale',conflict:'STALE_CONTEXT'}, {status:409,headers:{'Cache-Control':'private, no-store'}});
     }
+    if(error && command==='start_product_item' && error.message==='production_material_not_ready') {
+      return NextResponse.json({error:'productionMaterialNotReady'},
+        {status:409,headers:{'Cache-Control':'private, no-store'}});
+    }
     if(error && command==='start_product_item' && error.message==='execution_physical_not_ready') {
       let condition:Record<string,unknown>={};
       try{condition=JSON.parse(error.details || '{}');}catch{ /* Keep internal diagnostics out of the response. */ }
@@ -429,6 +449,7 @@ export async function POST(req: NextRequest) {
     if (error && maintenanceStopCommands.includes(command) && error.code==='40001') {
       return NextResponse.json({error:'maintenanceStopStale'}, {status:409,headers:{'Cache-Control':'private, no-store'}});
     }
+    if(error&&['output_paused','output_enrollment_required','output_carryover_unsupported'].includes(error.message)){const {status,...body}=recordingFailure(error);return NextResponse.json(body,{status,headers:{'Cache-Control':'private, no-store'}});}
     if (error) {
       console.warn("factory_command_failed", { command, code: error.code });
       return NextResponse.json(

@@ -10,13 +10,13 @@ export default function CenterCapabilities({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const capabilities = (s.tables.work_center_capabilities || []).filter(
-    (x) => x.work_center_id === centerId,
+    (x) => x.work_center_id === centerId && !s.tables.products.find(p=>p.id===x.product_id)?.length_parent_id,
   );
   return (
       <form className="center-capabilities" onSubmit={async (e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
-          const selected = (s.tables.products || []).filter((p) => Number(f.get(String(p.id))) > 0);
+          const selected = (s.tables.products || []).filter(p=>!p.length_parent_id).filter((p) => Number(f.get(String(p.id))) > 0);
           if (selected.some((p) => !["meter", "piece", "kg"].includes(String(f.get(`${p.id}:unit`))))) {
             setError("planningRateUnitRequired");
             return;
@@ -54,7 +54,7 @@ export default function CenterCapabilities({
         <p className="muted">{t("capabilitiesHelp")}</p>
         {(s.tables.products || []).length ? (
           <div className="form-grid">
-            {(s.tables.products || []).map((p) => (
+            {(s.tables.products || []).filter(p=>!p.length_parent_id).map((p) => (
               <div className="capability-rate-row" key={String(p.id)}>
                 <Field label={localName(p, lang)}>
                   <input type="number" name={String(p.id)} min="0" step="any"

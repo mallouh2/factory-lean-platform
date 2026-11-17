@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     if (!Number.isSafeInteger(page) || page < 1 || page > 1000000) throw Error('invalid_input');
     const definitions = {
       sales: ['sales_orders', 'sales_orders_page'],
+      identities: ['factory','order_identity_context'],
       warehouse: ['warehouse', 'warehouse_page'],
       inventory: ['warehouse', 'warehouse_inventory'],
       stored_wip: ['warehouse','warehouse_stored_unfinished'],
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     const filters = mode === 'inventory' ? JSON.parse(req.nextUrl.searchParams.get('filters') || '{}') : {};
     const sort = req.nextUrl.searchParams.get('sort') || 'name', direction = req.nextUrl.searchParams.get('direction') || 'asc';
     if (mode === 'inventory' && (!validInventoryFilters(filters) || !inventoryColumns.some(c => c[0] === sort) || !['asc','desc'].includes(direction))) throw Error('invalid_input');
-    const args = mode === 'pool'||mode==='confirmation' ? {factory,sales_order:req.nextUrl.searchParams.get('order')} : mode === 'inventory' ? { factory, page, filters, sort, direction } : mode === 'movements'
+    const args = mode === 'identities' ? {factory} : mode === 'pool'||mode==='confirmation' ? {factory,sales_order:req.nextUrl.searchParams.get('order')} : mode === 'inventory' ? { factory, page, filters, sort, direction } : mode === 'movements'
       ? { factory, item: req.nextUrl.searchParams.get('item'), item_type: req.nextUrl.searchParams.get('item_type'), page }
       : mode === 'production' || mode === 'slot' || mode === 'guidance'
       ? { factory, item: req.nextUrl.searchParams.get('item') || null }

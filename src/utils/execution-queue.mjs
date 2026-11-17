@@ -2,7 +2,7 @@
 export function lineExecutionQueue(items, lineId) {
   const lineItems = items.filter((item) => String(item.line_id || "") === String(lineId));
   const active = lineItems.find((item) => item.status === "active");
-  const planned = lineItems.filter((item) => item.status === "planned" && !item.actual_start
+  const planned = lineItems.filter((item) => item.status === "planned" && (!item.actual_start || item.execution_interrupted_at)
     && item.start_time && item.expected_finish
     && Date.parse(String(item.expected_finish)) > Date.parse(String(item.start_time)))
     .sort((a, b) => Date.parse(String(a.start_time)) - Date.parse(String(b.start_time))
@@ -17,7 +17,7 @@ export function lineExecutionQueue(items, lineId) {
 export function executionTiming(item, now = Date.now()) {
   const plannedStart = Date.parse(String(item.start_time || ""));
   const plannedFinish = Date.parse(String(item.expected_finish || ""));
-  const actualStart = Date.parse(String(item.actual_start || ""));
+  const actualStart = Date.parse(String(item.execution_started_at || item.actual_start || ""));
   const actualFinish = Date.parse(String(item.actual_finish || ""));
   return {
     startVarianceMinutes: Number.isFinite(actualStart) && Number.isFinite(plannedStart)

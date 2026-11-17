@@ -1,3 +1,4 @@
+import OrderReference from '@/components/OrderReference';
 import {useTableDetails} from '@/components/useTableDetails';
 import { useEffect, useState } from 'react';
 import { Dialog, Field, formatTime, localName } from '@/components/ui';
@@ -128,7 +129,7 @@ export default function ProductionHistory({snapshot:s,t,lang,can,command,onCorre
     }
     if(key==='shift')return name(row,'shift');
     if(key==='line')return row.line_id===null||(!row.line_id&&row.work_center_id)?t('notAvailable'):name(row,'unit');
-    if(key==='order')return <bdi>{String(row.request_code||row.item_code||t('notAvailable'))}</bdi>;
+    if(key==='order')return <OrderReference reference={row.item_code||row.request_code} item={row.item_id||row.order_id}/>;
     if(key==='product')return <ProductIdentity productId={row.product_id} productItemId={row.order_id}>{name(row,'product')}</ProductIdentity>;
     if(key==='good')return <bdi title={String(row.effective_good??'')}>{quantity(row.effective_good,row.unit)}</bdi>;
     if(key==='scrap'){

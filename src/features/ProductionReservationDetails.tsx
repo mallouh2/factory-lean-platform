@@ -1,0 +1,21 @@
+import {useEffect,useState}from'react';
+import {formatTime,localName}from'@/components/ui';
+import type{FeatureProps}from'./types';
+type Booking={item_id:string;code:string;product:string;product_ar:string;line:string;line_ar:string;shift:string;shift_ar:string;shift_start:string;shift_end:string;required:string;reserved:string;updated_at:string;status:'active'|'stale'|'historical'};
+type Details={factory:string;material:string;stock:{name:string;name_ar:string;physical:string;order_reserved:string;return_pending:string;reserved:string;available:string;unit:string};active:Booking[];history:Booking[];history_total:number;page:number;evaluated_at:string};
+export default function ProductionReservationDetails({props,material,onBack}:{props:FeatureProps;material:string;onBack:()=>void}){
+ const{snapshot:s,t,lang}=props,factory=String(s.factory?.id||''),[page,setPage]=useState(1),[version,setVersion]=useState(0),[data,setData]=useState<Details|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{const a=new AbortController();setLoading(true);setData(null);setError('');fetch('/api/production-stock?'+new URLSearchParams({factory,material,mode:'reservations',page:String(page)}),{signal:a.signal,cache:'no-store'}).then(async r=>{const b=await r.json();if(!r.ok)throw Error(b.error||'dataWarning');if(b.data?.factory!==factory||b.data?.material!==material)throw Error('dataWarning');if(!a.signal.aborted)setData(b.data);}).catch(e=>{if(!a.signal.aborted)setError(e.message)}).finally(()=>{if(!a.signal.aborted)setLoading(false)});return()=>a.abort();},[factory,material,page,version]);
+ const when=(v:string)=>v?formatTime(v,lang,String(s.factory?.timezone||'UTC')):t('notAvailable'),name=(r:Booking,k:'product'|'line'|'shift')=>lang==='ar'?r[`${k}_ar`]||r[k]:r[k];
+ const rows=(bookings:Booking[])=>bookings.length?<div className="table-wrap"><table><thead><tr>{['orders','product','productionLines','psShiftLabel','psBookedRequired','status','psReservationUpdated'].map(k=><th key={k}>{t(k)}</th>)}</tr></thead><tbody>{bookings.map(r=><tr key={r.item_id+r.shift_start}><td><bdi>{r.code}</bdi></td><td dir="auto">{name(r,'product')}</td><td dir="auto">{name(r,'line')||t('notAvailable')}</td><td>{name(r,'shift')}<small className="reservation-shift-time"><bdi>{when(r.shift_start)} — {when(r.shift_end)}</bdi></small></td><td><bdi>{r.reserved} / {r.required} {t('kg')}</bdi>{Number(r.required)>Number(r.reserved)&&r.status==='active'&&<p className="notice">{t('material_shortage')}</p>}</td><td>{t('psReservation_'+r.status)}</td><td><bdi>{when(r.updated_at)}</bdi></td></tr>)}</tbody></table></div>:<p>{t('noResults')}</p>;
+ return <section className="production-reservation-details" aria-label={t('psReservationBreakdown')}>
+  <div className="row-actions"><button type="button" onClick={onBack}>{t('back')}</button><h3>{t('psReservationBreakdown')}</h3><button type="button" disabled={loading} onClick={()=>setVersion(v=>v+1)}>{t('refresh')}</button></div>
+  {loading&&<p role="status">{t('loading')}</p>}{error&&<p role="alert">{t(error)}</p>}
+  {data?.factory===factory&&data.material===material&&<><h4 dir="auto">{localName(data.stock,lang)}</h4><p>{t('psPhysical')}: <bdi>{data.stock.physical} {t(data.stock.unit)}</bdi> · {t('psReserved')}: <bdi>{data.stock.reserved} {t(data.stock.unit)}</bdi> · {t('available')}: <bdi>{data.stock.available} {t(data.stock.unit)}</bdi></p>
+   <p>{t('psOrderReservations')}: <bdi>{data.stock.order_reserved} {t('kg')}</bdi> · {t('psReturnPending')}: <bdi>{data.stock.return_pending} {t('kg')}</bdi></p>
+   <p className="muted">{t('psReservationExplanation')}</p><p>{t('psReservationUpdated')}: <bdi>{when(data.evaluated_at)}</bdi></p>
+   <h4>{t('psOrderReservations')}</h4>{rows(data.active)}
+   <details><summary>{t('psReservationHistory')}</summary><p className="muted">{t('psReservationHistoryHelp')}</p>{rows(data.history)}<div className="row-actions"><button type="button" disabled={page===1||loading} onClick={()=>setPage(p=>p-1)}>{t('previous')}</button><span>{page}</span><button type="button" disabled={page*30>=data.history_total||loading} onClick={()=>setPage(p=>p+1)}>{t('next')}</button></div></details>
+  </>}
+ </section>;
+}

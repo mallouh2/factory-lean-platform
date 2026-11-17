@@ -23,3 +23,11 @@ test('new export requests deny permission before factory or stock data is read',
  let reads=0;const route=await load('src/app/api/table-export/route.ts',{'fixture:auth':{verifyOrigin(){},authenticatedClient:async()=>({db:{from(){reads++;throw Error('must not read');}},user:{id:'U'}}),authorize:async()=>{throw Error('permission_denied');}}});
  for(const dataset of['warehouse-stored-wip','warehouse-requests']){const r=await route.POST(new NextRequest('http://localhost/api/table-export',{method:'POST',body:JSON.stringify({factory,dataset,format:'print',language:'en',filters:dataset==='warehouse-requests'?{department_page:1,kind:'',search:''}:{}})}));assert.equal(r.status,403);assert.equal(reads,0);assert.ok(!(await r.text()).includes('Pipe'));}
 });
+
+test('Completed request export retains status scope and rejects invalid scope',async()=>{
+ const request={factory,dataset:'warehouse-requests',format:'excel',language:'en',filters:{department_page:1,kind:'production-stock',search:'',status:'completed'}};
+ assert.equal(exportRequest(request).filters.status,'completed');
+ for(const status of['hidden',null,{}])assert.throws(()=>exportRequest({...request,filters:{...request.filters,status}}));
+ const calls=[],db={rpc:async(name,args)=>{calls.push({name,args});assert.equal(name,'production_stock_request_history');return{data:{total:2,rows:[{id:'done',code:'PSR-DONE',rows:[{name:'Resin',quantity:'1',delivered:'1'}]},{id:'open',code:'PSR-OPEN',rows:[{name:'Resin',quantity:'1',delivered:'0'}]}]}};}};
+ const rows=await warehouseRequestExportRows(db,factory,request.filters,'en');assert.equal(rows.length,1);assert.equal(rows[0].id,'done');assert.equal(calls.length,1);
+});

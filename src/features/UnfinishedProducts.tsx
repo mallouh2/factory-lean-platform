@@ -1,3 +1,4 @@
+import OrderReference from '@/components/OrderReference';
 import { useState } from 'react';
 import { formatTime } from '@/components/ui';
 import type { FeatureProps } from './types';
@@ -23,7 +24,7 @@ export default function UnfinishedProducts(props: FeatureProps) {
       <small>{t(Number(lot.quantity_available) === 0 ? 'unfinishedConsumed' : Number(lot.quantity_available) < Number(lot.quantity_created) ? 'unfinishedPartial' : 'unfinishedAvailable')}</small>
       {Number(lot.warehouse_quantity)>0&&<p>{t('inventorySemiFinished')}: {q(lot.warehouse_quantity)} {t(String(lot.unit))} · {t('warehouseFloorWip')}: {q(lot.production_available??lot.quantity_available)} {t(String(lot.unit))}</p>}
       <p dir="auto">{t('unfinishedRemainingWork')}: {String(lot.remaining_work)}</p>
-      <p><bdi>{String(lot.request_code || lot.item_code)}</bdi> · {name(lot, 'origin')}</p>
+      <p><OrderReference reference={lot.item_code||lot.request_code} item={lot.item_id}/> · {name(lot, 'origin')}</p>
       <time>{formatTime(lot.created_at, lang, String(s.factory?.timezone || 'UTC'))}</time>
       <details><summary>{t('view')}</summary>
         <p title={String(lot.id)}>{t('unfinishedLotReference')}: <bdi>{String(lot.id).slice(0,8)}</bdi></p>

@@ -1,3 +1,6 @@
+import ProductionStock from './ProductionStock';
+import RawMaterialReturns from './RawMaterialReturns';
+import OrderReference from '@/components/OrderReference';
 import { useEffect, useRef, useState } from "react";
 import { Dialog, Field, formatTime, localName } from "@/components/ui";
 import { formatLocalInput } from "@/utils/manufacturing.mjs";
@@ -167,7 +170,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
         <span aria-hidden="true" className="orders-v2-back-arrow">←</span> {t("backToOrders")}
       </button>
       <header className="orders-v2-detail-head">
-        <div><p><bdi dir="ltr">{String(selected.code)}</bdi></p>
+        <div><p><OrderReference reference={selected.code} item={selected.id}/></p>
           <h2 ref={headingRef} tabIndex={-1} dir="auto">{String(selected.name)}</h2>
           <strong>{props.initialItemId?(lang==='ar'?'بند الإنتاج المرتبط فقط':'Linked Production Item only'):t("itemsCompleted").replace("{completed}", String(completed)).replace("{total}", String(selectedItems.length))}</strong>
         </div>
@@ -251,7 +254,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
   }
 
   return <section className="orders-v2 ops-workbench" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-    <header className="orders-v2-page-head">
+    <header className="orders-v2-page-head"><ProductionStock props={props}/><RawMaterialReturns props={props}/>
       <p className="ops-page-subtitle">{t('requestsOperationalSubtitle')}</p>
       {can("orders", "view") && <button onClick={event=>{openerRef.current=event.currentTarget;setScreen("materials");}}>{t("productionRequestMaterials")}</button>}
       {can("orders", "create") && <button className="primary" onClick={(event) => {
@@ -288,7 +291,7 @@ export default function ProductionOrdersV2(props: FeatureProps & { onPlanItem?: 
           onClick={(event) => { openerRef.current = event.currentTarget; setCreatedId(null); setSelectedId(String(request.id)); setScreen("details"); }}>
           <span className="orders-v2-identity">
             <strong dir="auto">{String(request.name)}</strong>
-            <small><bdi dir="ltr">{String(request.code)}</bdi></small>
+            <small><OrderReference reference={request.code} item={request.id}/></small>
             <small>{t(requestOriginLabel(request.request_type))}</small>
             <small className="requests-requester">{t(request.request_type === 'INTERNAL_PRODUCTION' ? 'internalCreatedBy' : 'requestedBy')}: {String(request.requested_by_name || t('requestCreatorNotRecorded'))}</small>
             <span className="orders-v2-row-progress">{t('itemsCompleted').replace('{completed}', String(completed)).replace('{total}', String(requestItems.length))}</span>

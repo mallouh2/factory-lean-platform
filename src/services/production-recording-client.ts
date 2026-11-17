@@ -3,7 +3,7 @@ export type CompletionTarget={item:string;actual_start:string};
 export type RecordingIntent={version:number;actor:string;factory:string;request:string;body:string;created_at:string;last_checked_at:string|null;phase:string;completion?:CompletionTarget};
 export type RecordingReceipt={contract_version:number;outcome:string;request_id:string;entry_id:string;recorded_at:string;original_payload:Record<string,unknown>;needs_review?:boolean;weight_missing?:boolean;standard_missing?:boolean};
 export type RecordingResult={kind:'COMMITTED';receipt:RecordingReceipt;current?:Record<string,unknown>}|{kind:'REJECTED';error:string;reason?:string}|{kind:'UNKNOWN';error:string};
-const knownErrors=new Set(['recordingContextChanged','recordingRequestConflict','recordingValidation','recordingUnavailable','permissionError','unauthorized','prv3Expired','prv3LateDisabled']);
+const knownErrors=new Set(['recordingContextChanged','recordingRequestConflict','recordingValidation','recordingUnavailable','permissionError','unauthorized','prv3Expired','prv3LateDisabled','outputPaused','outputEnrollmentRequired','outputCarryoverUnsupported','compActiveRequired']);
 const errorKey=(body:Record<string,unknown>)=>typeof body.error==='string'&&knownErrors.has(body.error)?body.error:'dataWarning';
 export async function postRecording(intent:RecordingIntent,fetcher:typeof fetch=fetch):Promise<RecordingResult>{
  try{

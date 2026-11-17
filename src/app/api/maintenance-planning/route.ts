@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {hydrateInterruptedOrders} from '@/services/production-execution';
 import { authenticatedClient, authorize } from '@/services/authorization';
 import { historyError, historyPage, historyUuid } from '@/services/history-response';
 import { collectMaintenancePages } from '@/utils/maintenance-planning-view.mjs';
@@ -12,6 +13,7 @@ export async function GET(req: NextRequest) {
       await authorize(args.factory,'factory','view',context);await authorize(args.factory,'maintenance','view',context);
       if(args.domain==='all')await authorize(args.factory,'orders','view',context);
       const {data,error}=await context.db.rpc('planning_operational_board',args);if(error)throw error;
+      if(data?.rows){const rows=data.rows.filter((r:{kind:string})=>r.kind==='PRODUCTION'),orders=await hydrateInterruptedOrders(context.db,args.factory,rows.map((r:{payload:{order:any}})=>r.payload.order));rows.forEach((r:{payload:{order:any}},n:number)=>{r.payload.order=orders[n];});}
       return NextResponse.json(data,{headers:{'Cache-Control':'private, no-store'}});
     }
     if (req.nextUrl.searchParams.has('mode')) {

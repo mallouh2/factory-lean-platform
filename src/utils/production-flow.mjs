@@ -20,7 +20,16 @@ export function formatDuration(minutes, locale = "en", signed = false) {
 export function evaluateFlow(centers, stops, transfers, now = Date.now()) {
   /** @type {Record<string,{state:string,source:string|null,homeState?:string}>} */
   const result = {};
-  const active = centers.filter((c) => !c.archived);
+  const active = centers.filter((c) => !c.archived).map(c => {
+    const stop = stops.find(d => d.work_center_id === c.id && !d.ended_at);
+    // Existing immutable downtime context owns an open stop's impact. Do not
+    // silently reprice it after later role/configuration edits.
+    if (typeof stop?.blocking_at_start !== "boolean") return c;
+    return {...c, dependency_mode:stop.blocking_at_start
+      ? Number(stop.buffer_minutes_at_start)>0 ? "buffer" : "blocking" : "non_blocking",
+      impact_scope:stop.impact_scope_at_start || c.impact_scope,
+      buffer_minutes:stop.buffer_minutes_at_start || 0};
+  });
   for (const c of active) result[c.id] = { state: "clear", source: null };
   const byId = new Map(active.map((c) => [String(c.id), c]));
   // An open cross-line transfer assigns its alternative away from its home

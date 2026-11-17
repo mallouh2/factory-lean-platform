@@ -1,3 +1,4 @@
+import OrderReference from '@/components/OrderReference';
 import {useTableDetails} from '@/components/useTableDetails';
 import {useEffect,useId,useState,type ReactNode} from 'react';
 import TableExport from '@/components/TableExport';
@@ -38,7 +39,7 @@ export function QualityHistoryLookup(props:FeatureProps){
  function closeMenu(){document.getElementById(actionsId)?.hidePopover();}
  function cell(row:SupplyRow,key:string):ReactNode{
   if(key==='shift')return <>{text(row.shift_date||t('qualityShiftDateUnknown'))}<small>{row.shift_name?named(row,lang,'shift_name'):t('shiftNotRecorded')}</small></>;
-  if(key==='order')return <><bdi>{text(row.request_code||row.item_code)}</bdi><small><bdi>{text(row.item_code)}</bdi></small><small>{text(row.physical_label||t('sourceNotIdentified'))}</small></>;
+  if(key==='order')return <><OrderReference reference={row.item_code||row.request_code} item={row.item_id}/><small><bdi>{text(row.item_code)}</bdi></small><small>{text(row.physical_label||t('sourceNotIdentified'))}</small></>;
   if(key==='product')return named(row,lang,'product_name');if(key==='line')return named(row,lang,'line_name');
   if(key==='production')return <>{shiftProduction(row)??t('notAvailable')}{shiftProduction(row)!==null&&<> {t(text(row.unit))}</>}</>;
   if(key==='rejected')return <>{text(row.rejected)} {t(text(row.unit))}</>;
@@ -108,7 +109,7 @@ export function RejectionDrawer(props:FeatureProps&{row:SupplyRow;onClose:()=>vo
  return <QualityDialog {...props} busy={action.busy} title={t('qualityRecordRejection')} t={t} onClose={()=>{if(!action.busy)props.onClose();}}>
   <section className="quality-drawer" dir={lang==='ar'?'rtl':'ltr'}>
    <button disabled={action.busy||eligibility.busy} onClick={eligibility.refresh}>{t('refresh')}</button>{eligibility.error&&<p role="alert">{t(eligibility.error)}</p>}
-   <dl className="quality-context"><div><dt>{t('productionOrder')}</dt><dd><bdi>{text(row.request_code)} · {text(row.item_code)}</bdi></dd></div><div><dt>{t('product')}</dt><dd>{named(row,lang,'product_name')} · <bdi>{text(row.product_code)}</bdi></dd></div><div><dt>{t('line')}</dt><dd>{named(row,lang,'line_name')}</dd></div><div><dt>{t('productionShift')}</dt><dd>{row.shift_name?named(row,lang,'shift_name'):t('shiftNotRecorded')} · {row.shift_date?text(row.shift_date):t('qualityShiftDateUnknown')}</dd></div><div><dt>{t('sourceLabel')}</dt><dd>{text(row.physical_label)}</dd></div><div><dt>{t('qualityEligible')}</dt><dd>{text(row.eligible)} {t(text(row.unit))}</dd></div></dl>
+   <dl className="quality-context"><div><dt>{t('productionOrder')}</dt><dd><OrderReference reference={row.item_code||row.request_code} item={row.item_id}/></dd></div><div><dt>{t('product')}</dt><dd>{named(row,lang,'product_name')} · <bdi>{text(row.product_code)}</bdi></dd></div><div><dt>{t('line')}</dt><dd>{named(row,lang,'line_name')}</dd></div><div><dt>{t('productionShift')}</dt><dd>{row.shift_name?named(row,lang,'shift_name'):t('shiftNotRecorded')} · {row.shift_date?text(row.shift_date):t('qualityShiftDateUnknown')}</dd></div><div><dt>{t('sourceLabel')}</dt><dd>{text(row.physical_label)}</dd></div><div><dt>{t('qualityEligible')}</dt><dd>{text(row.eligible)} {t(text(row.unit))}</dd></div></dl>
    <p>{t('qvProduction')}: <strong>{shiftProduction(row)??t('notAvailable')} {shiftProduction(row)!==null?t(text(row.unit)):''}</strong></p><p className="qv-warning">{t('qvAvailable')}: <strong>{text(row.eligible)} {t(text(row.unit))}</strong></p>
    <form onSubmit={async e=>{e.preventDefault();if(!valid)return;if(await action.run('reject',{source:row.source_id,quantity,reason,disposition,actual_scrap_kg:disposition==='SCRAP'?kg:null,
     ...(selectedReason?.is_other?{description,approve_reason:approved}:{}),note,physically_identified:physical}))props.onChanged();else eligibility.refresh();}}><fieldset disabled={action.busy}>
@@ -177,7 +178,7 @@ export function QualityDetail(props:FeatureProps&{rejection:string;onClose:()=>v
  async function run(operation:string,payload:Record<string,unknown>,onSuccess?:(id:unknown)=>void){if(await action.run(operation,{rejection:props.rejection,...payload},onSuccess)){read.refresh();props.onChanged?.();}}
  return <QualityDialog {...props} busy={action.busy} title={t('qualityHistory')} t={t} onClose={()=>{if(!action.busy)props.onClose();}}>
   {read.error&&<p role="alert">{t(read.error)}</p>}{read.busy&&<p role="status">{t('loading')}</p>}
-  {row&&<section className="quality-detail" dir={lang==='ar'?'rtl':'ltr'}><strong><bdi>{text(row.request_code)} · {text(row.item_code)}</bdi></strong><p>{named(row,lang,'product_name')} · {named(row,lang,'line_name')} · {row.shift_name?named(row,lang,'shift_name'):t('shiftNotRecorded')} · {row.shift_date?text(row.shift_date):t('qualityShiftDateUnknown')}</p>
+  {row&&<section className="quality-detail" dir={lang==='ar'?'rtl':'ltr'}><strong><OrderReference reference={row.item_code||row.request_code} item={row.item_id}/></strong><p>{named(row,lang,'product_name')} · {named(row,lang,'line_name')} · {row.shift_name?named(row,lang,'shift_name'):t('shiftNotRecorded')} · {row.shift_date?text(row.shift_date):t('qualityShiftDateUnknown')}</p>
    <p>{t('qualityRejected')}: <strong>{text(row.quantity)} {t(text(row.unit))}</strong> · {t(row.disposition==='SCRAP'?'qualityScrap':'qualityRework')}</p><p>{named(row,lang,'reason')}{row.description?': '+text(row.description):''}</p>
    {row.disposition==='SCRAP'&&<p>{t('qualityDefaultKg')}: {text(row.default_scrap_kg)} kg · {t('qualityActualKg')}: <strong>{text(row.actual_scrap_kg)} kg</strong></p>}
    <p>{t('sourceLabel')}: {text(row.physical_label)}</p><p>{text(row.note)}</p><p>{t('qualityActor')}: {text(row.actor_name)} · {formatTime(row.created_at,lang,String(s.factory?.timezone||'UTC'))}</p><p>{t('qualityShortfallLabel')}: <strong>{text(row.shortfall)} {t(text(row.unit))}</strong></p>

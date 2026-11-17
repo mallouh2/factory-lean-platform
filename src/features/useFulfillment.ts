@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Snapshot } from '@/types';
 export type SalesLine = { id: string; product_id: string; product_name: string; product_name_ar: string;
-  quantity: number; unit: string; release_when_ready: boolean; reserved_quantity: number; incoming_quantity: number;
+  quantity: number; unit: string; piece_length_m?:string; total_length_m?:string; release_when_ready: boolean; reserved_quantity: number; incoming_quantity: number;
   production_required: number; external_shortage: number; source_decision_quantity: number; supply_source: string; dispatched_quantity: number; ready: boolean; dispatch_allowed: boolean };
 export type SalesOrder = { id: string; code: string; customer_reference: string; requested_delivery: string | null;
   promised_delivery: string | null; safety_buffer_days: number; notes: string; status: string;
@@ -12,7 +12,7 @@ export type StockRow = { product_id: string; name: string; name_ar: string; unit
   reserved: number; available: number; incoming: number; projected: number; supply_mode: string; supply_source: string;
   minimum_stock: number | null; maximum_stock: number | null };
 export type ProductionDemand = { item_id: string; request_type: string | null; sales_order_id: string | null;
-  sales_order_code: string | null; requested_delivery: string | null; promised_delivery: string | null;
+  sales_order_code: string | null; sales_customer_reference?:string|null; sales_description?:string|null; requested_delivery: string | null; promised_delivery: string | null;
   estimated_ready: string | null; target_ready: string | null; risk: string | null; incoming_allocated: number | null };
 export function useFulfillment<T>(snapshot: Snapshot, mode: string, page = 1, enabled = true, extra: Record<string,string> = {}) {
   const query = new URLSearchParams({ factory: String(snapshot.factory?.id || ''), mode, page: String(page), ...extra }).toString();

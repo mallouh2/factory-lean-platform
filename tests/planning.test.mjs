@@ -152,7 +152,7 @@ test("planner sees both request sections and focused fields in English and Arabi
 });
 
 test("eligible scheduling sends the same line and planned start through the planning command", async () => {
-  const fakeReact = {
+  const fakeReact = { ...require("react"),
     useState: (() => {
       const values = ["O2", "L", "2026-10-08T08:00", false, ""];
       let index = 0;
@@ -386,7 +386,7 @@ function interactivePlanner(testSnapshot, initial = {}, command = async () => {}
     initial.pendingReason ?? null, initial.reasonCode ?? "", initial.reasonNote ?? "",
     initial.history ?? [], false, initial.slotSearch ?? null, initial.slotChoice ?? null];
   const updates = [];
-  const fakeReact = { useState: (() => { let index = 0;
+  const fakeReact = { ...require("react"), useState: (() => { let index = 0;
     return (fallback) => { const position = index++; return [state[position] ?? fallback,
       (value) => updates.push({ position, value })]; }; })(),
     useEffect: () => {}, useMemo: fn=>fn(), useRef: value => ({ current: value }) };

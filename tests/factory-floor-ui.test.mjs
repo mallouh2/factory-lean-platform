@@ -266,6 +266,8 @@ test("independent production keeps its own product, parent request and remaining
     const card = machine(html, "I1");
     assert.match(card, /ff2-node-production/);
     assert.ok(card.includes("PO-2026-041"));
+    assert.ok(card.includes("ITEM-INDEPENDENT"));
+    assert.ok(card.indexOf("ITEM-INDEPENDENT")<card.indexOf("PO-2026-041"),"executable item precedes separately labelled parent request");
     assert.ok(card.includes((lang === "ar" ? ar : en).recordingRemaining));
     assert.ok(card.includes((200).toLocaleString(lang)));
   }

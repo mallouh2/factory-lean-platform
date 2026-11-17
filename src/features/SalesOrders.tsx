@@ -1,3 +1,5 @@
+import {WarehousePicker} from './WarehouseUi';
+import {salesUnits,sellableProduct,salesLineValid,totalPipeLength} from '@/utils/sales-units.mjs';
 import { useRef, useState } from 'react';
 import type { FeatureProps } from './types';
 import { Dialog, Field, formatTime, localName } from '@/components/ui';
@@ -5,8 +7,8 @@ import ProductIdentity from '@/components/ProductIdentity';
 import { formatLocalInput, localDateTimeToUtc } from '@/utils/manufacturing.mjs';
 import { useFulfillment, type SalesLine, type SalesOrder } from './useFulfillment';
 
-type DraftLine = { product_id: string; quantity: string; unit: string; release_when_ready: boolean };
-const emptyLine = (): DraftLine => ({ product_id: '', quantity: '', unit: '', release_when_ready: false });
+type DraftLine = { product_id: string; quantity: string; unit: string; piece_length_m: string; release_when_ready: boolean };
+const emptyLine = (): DraftLine => ({ product_id: '', quantity: '', unit: '', piece_length_m: '', release_when_ready: false });
 export default function SalesOrders({ snapshot: s, t, lang, command, can }: FeatureProps) {
   const [page, setPage] = useState(1), [creating, setCreating] = useState(false), [editing, setEditing] = useState<SalesOrder | null>(null);
   const read = useFulfillment<{ rows: SalesOrder[]; total: number }>(s, 'sales', page, can('sales_orders'));
@@ -19,7 +21,7 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
   const preview=useFulfillment<{rows:{id:string;unit:string;ordered:string;available:string;to_reserve:string;incoming:string;additional:string}[]}>(s,'confirmation',1,!!confirming,{order:confirming?.id||''});
   const retry = useRef<{ key: string; id: string } | null>(null);
   const zone = String(s.factory?.timezone || 'UTC');
-  const products = (s.tables.products || []).filter(product => product.stage === 'finished');
+  const products = (s.tables.products || []).filter(sellableProduct);
   async function run(name: string, args: Record<string, unknown>) {
     const key = JSON.stringify([name, args]);
     if (retry.current?.key !== key) retry.current = { key, id: crypto.randomUUID() };
@@ -60,8 +62,8 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
       </p>}
       <div className="fulfillment-lines">{order.lines.map(line => <div key={line.id} className="fulfillment-line">
         <ProductIdentity productId={line.product_id}>{lang === 'ar' ? line.product_name_ar || line.product_name : line.product_name}</ProductIdentity>
-        <span>{t('quantity')}: {line.quantity} {t(line.unit)}</span>
-        <span>{t('stockReserved')}: {line.reserved_quantity}</span><span>{t('stockIncoming')}: {line.incoming_quantity}</span>
+        <span>{t('quantity')}: {line.quantity} {t(line.unit)}</span>{line.piece_length_m&&<span>{t('salesPieceLength')}: {line.piece_length_m} {t('meter')} · {t('salesTotalLength')}: {line.total_length_m} {t('meter')}</span>}
+        <span>{t('stockReserved')}: {line.reserved_quantity}</span><span>{t('salesExpectedIncoming')}: {line.incoming_quantity}</span>
         <span>{t('productionRequired')}: {line.production_required}</span><span>{t('stockDispatched')}: {line.dispatched_quantity}</span>
         {Number(line.external_shortage) > 0 && <span>{t('externalReplenishment')}: {line.external_shortage} {t(line.unit)}</span>}
         {Number(line.source_decision_quantity) > 0 && <span>{t('sourcingDecision')}: {line.source_decision_quantity} {t(line.unit)}</span>}
@@ -77,13 +79,13 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
       <span>{page}</span><button disabled={read.busy || page * 25 >= (read.data?.total || 0)} onClick={() => setPage(value => value + 1)}>{t('next')}</button></nav>
     {confirming&&<Dialog title={t('salesApprove')} t={t} busy={busy} onClose={()=>{if(!busy)setConfirming(null);}}><p><bdi>{confirming.code}</bdi> · {confirming.customer_reference}</p>
      {preview.loading&&<p role="status">{t('loading')}</p>}{(preview.error||notice)&&<p role="alert">{t(preview.error||notice)}</p>}
-     {preview.data?.rows.map(line=><section key={line.id}><strong>{(()=>{const p=confirming.lines.find(l=>l.id===line.id);return lang==='ar'?p?.product_name_ar||p?.product_name:p?.product_name;})()}</strong><dl className="quality-context">{[[t('quantity'),line.ordered],[t('available'),line.available],[lang==='ar'?'سيتم حجزه':'Will be reserved',line.to_reserve],[t('stockIncoming'),line.incoming],[t('productionRequired'),line.additional]].map(([name,value])=><div key={name}><dt>{name}</dt><dd><bdi>{value} {t(line.unit)}</bdi></dd></div>)}</dl></section>)}
+     {preview.data?.rows.map(line=><section key={line.id}><strong>{(()=>{const p=confirming.lines.find(l=>l.id===line.id);return lang==='ar'?p?.product_name_ar||p?.product_name:p?.product_name;})()}</strong><dl className="quality-context">{[[t('quantity'),line.ordered],[t('available'),line.available],[lang==='ar'?'سيتم حجزه':'Will be reserved',line.to_reserve],[t('salesExpectedIncoming'),line.incoming],[t('productionRequired'),line.additional]].map(([name,value])=><div key={name}><dt>{name}</dt><dd><bdi>{value} {t(line.unit)}</bdi></dd></div>)}</dl></section>)}
      <p>{lang==='ar'?'يُعاد التحقق من الكميات عند تأكيد الطلب.':'Availability is checked again when you confirm the order.'}</p><button className="primary" disabled={busy||preview.busy||!!preview.error||!preview.data} onClick={()=>void run('approve_sales_order',{sales_order:confirming.id})}>{t('salesApprove')}</button>
     </Dialog>}
     {(creating || editing) && <Dialog title={t(creating ? 'salesCreate' : 'edit')} t={t} onClose={() => { if (!busy) { setCreating(false); setEditing(null); } }}>
       <form onSubmit={event => { event.preventDefault(); const payload = dates();
         if (requested && !payload.requested_delivery) { setNotice('planningInvalidStart'); return; }
-        if (creating) run('create_sales_order', { payload: { ...payload, lines: lines.map(line => ({ ...line, quantity: Number(line.quantity) })) } });
+        if (creating) {if(lines.some(line=>!salesLineValid(line,products.find(p=>p.id===line.product_id)))){setNotice('salesUnitInvalid');return;}run('create_sales_order', { payload: { ...payload, lines: lines.map(line => ({ product_id:line.product_id,quantity:line.quantity,unit:line.unit,release_when_ready:line.release_when_ready,...(line.unit==='piece'&&products.find(p=>p.id===line.product_id)?.stock_unit==='meter'?{piece_length_m:line.piece_length_m}:{}) })) } });}
         else if (editing) run('change_sales_order', { sales_order: editing.id, payload: { ...payload,
           lines: editLines.map(line => ({ id: line.id, quantity: Number(line.quantity), release_when_ready: line.release_when_ready })) }, reason });
       }}><fieldset disabled={busy || (editing !== null && !editable)} className="fulfillment-form">
@@ -93,16 +95,17 @@ export default function SalesOrders({ snapshot: s, t, lang, command, can }: Feat
         <Field label={t('deliveryBuffer')}><input required type="number" min="0" max="90" disabled={!can('sales_orders', 'approve')} value={buffer} onChange={event => setBuffer(event.target.value)} /></Field>
         <Field label={t('notes')}><textarea maxLength={2000} value={notes} onChange={event => setNotes(event.target.value)} /></Field>
         {creating ? lines.map((line, index) => <div className="fulfillment-line-editor" key={index}>
-          <Field label={t('product')}><select required value={line.product_id} onChange={event => setLines(value => value.map((row, i) => i === index ? { ...row, product_id: event.target.value, unit: String(products.find(product => product.id === event.target.value)?.stock_unit || '') } : row))}>
-            <option value="">{t('select')}</option>{products.map(product => <option key={String(product.id)} value={String(product.id)}>{localName(product, lang)}</option>)}</select></Field>
-          <Field label={t('quantity')}><input required type="number" min="0.000001" step="any" value={line.quantity} onChange={event => setLines(value => value.map((row, i) => i === index ? { ...row, quantity: event.target.value } : row))} /></Field>
+          <WarehousePicker label={t('product')} value={line.product_id} required placeholder={t('select')} options={products.map(p=>({id:String(p.id),name:localName(p,lang)}))} onChange={id=>setLines(value=>value.map((row,i)=>i===index?{...row,product_id:id,unit:String(products.find(p=>p.id===id)?.stock_unit||''),piece_length_m:''}:row))}/>
+          <Field label={t(line.unit==='piece'?'salesPieceCount':'quantity')}><input required type="number" min={line.unit==='piece'?'1':'0.000001'} step={line.unit==='piece'?'1':'any'} value={line.quantity} onChange={event => setLines(value => value.map((row, i) => i === index ? { ...row, quantity: event.target.value } : row))} /></Field>
           <Field label={t('unit')}><select required value={line.unit} onChange={event => setLines(value => value.map((row, i) => i === index ? { ...row, unit: event.target.value } : row))}>
-            <option value="">{t('select')}</option>{['meter','piece'].filter(unit => !products.find(product => product.id === line.product_id)?.stock_unit || products.find(product => product.id === line.product_id)?.stock_unit === unit).map(unit => <option key={unit} value={unit}>{t(unit)}</option>)}</select></Field>
+            <option value="">{t('select')}</option>{salesUnits(products.find(p=>p.id===line.product_id)).map((unit:string)=><option key={unit} value={unit}>{t(unit)}</option>)}</select></Field>
+          {line.product_id&&!salesUnits(products.find(p=>p.id===line.product_id)).length&&<p role="alert">{t('salesUnitMissing')}</p>}
+          {line.unit==='piece'&&products.find(p=>p.id===line.product_id)?.stock_unit==='meter'&&<><Field label={t('salesPieceLength')}><input required type="number" min="0.000001" max="1000" step="0.000001" value={line.piece_length_m} onChange={e=>setLines(value=>value.map((row,i)=>i===index?{...row,piece_length_m:e.target.value}:row))}/></Field><p role="status">{t('salesTotalLength')}: <bdi>{totalPipeLength(line.quantity,line.piece_length_m)||'—'} {t('meter')}</bdi></p></>}
           <label className="check"><input type="checkbox" checked={line.release_when_ready} onChange={event => setLines(value => value.map((row, i) => i === index ? { ...row, release_when_ready: event.target.checked } : row))} />{t('releaseWhenReady')}</label>
           {lines.length > 1 && <button type="button" onClick={() => setLines(value => value.filter((_, i) => i !== index))}>{t('remove')}</button>}
         </div>) : editLines.map((line, index) => <div className="fulfillment-line-editor" key={line.id}>
           <strong>{lang === 'ar' ? line.product_name_ar || line.product_name : line.product_name}</strong>
-          <Field label={`${t('quantity')} · ${t(line.unit)}`}><input required type="number" min={Math.max(Number(line.dispatched_quantity), 0.000001)} step="any" value={line.quantity}
+          <Field label={`${t('quantity')} · ${t(line.unit)}`}><input required type="number" min={Math.max(Number(line.dispatched_quantity), 0.000001)} step={line.piece_length_m?"1":"any"} value={line.quantity}
             onChange={event => setEditLines(value => value.map((row, i) => i === index ? { ...row, quantity: Number(event.target.value) } : row))} /></Field>
           <label className="check"><input type="checkbox" checked={line.release_when_ready} onChange={event => setEditLines(value => value.map((row, i) => i === index ? { ...row, release_when_ready: event.target.checked } : row))} />{t('releaseWhenReady')}</label>
         </div>)}

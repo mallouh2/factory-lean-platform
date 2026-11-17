@@ -1,3 +1,5 @@
+import MeasuredGanttCode from '@/components/MeasuredGanttCode';
+import ProductionExecutionActions from './ProductionExecutionActions';
 import {createPortal} from 'react-dom';
 import {MaterialWarnings} from './MaterialPreparation';
 import {PlanningWarningSetting,PlanningExceptionReview,planningPolicyCommand,type PlanningProtection} from './PlanningWarningPolicy';
@@ -99,7 +101,13 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   const rangeStart = viewStart;
   const rangeEnd = rangeStart + scale.span;
   const maintenanceRead = useOperationalPlanningBoard({snapshot:s,t,lang,can,command:sendCommand},rangeStart,rangeEnd,lineFilter);
-  const command:FeatureProps['command']=async(name,args)=>{try{return await sendCommand(name,args);}finally{maintenanceRead.reload();completionRead.reload();}};
+  const command:FeatureProps['command']=async(name,args)=>{
+    const result=await sendCommand(name,args);
+    // The shared command already refreshes s.fetchedAt. Do not cancel and
+    // restart the dependent board reads a second time on the same success.
+    if(!refreshSnapshot){maintenanceRead.reload();completionRead.reload();}
+    return result;
+  };
   const headingRef = useRef<HTMLHeadingElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
@@ -122,6 +130,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   }
   const policyReview=useRef<PlanningProtection>({fingerprint:"",required:false,confirmed:false,ready:false});
   const policyAttempt=useRef<{intent:string;id:string}|null>(null);
+  const policySubmitting=useRef(false);
   const lastHoverRef = useRef<{ itemId: string; error?: string } | null>(null);
   const zone = String(s.factory?.timezone || "UTC");
   const captionClock=useMemo(()=>new Intl.DateTimeFormat(lang,{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),[lang,zone]);
@@ -174,11 +183,12 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   const canEdit = can("orders", "edit");
   const editableItem = (order: Row) => canEdit && order.status === "planned" &&
     !completionWork.some(work => work.item_id === String(order.id) && work.held) &&
-    Number(order.produced_quantity || 0) === 0 && !order.actual_start && !order.actual_finish && !order.planning_locked_at;
+    (Boolean(order.execution_interrupted_at) || Number(order.produced_quantity || 0) === 0 && !order.actual_start) && !order.actual_finish && !order.planning_locked_at;
   const canToggleLock = (order: Row) => canEdit && order.status === "planned" &&
     Number(order.produced_quantity || 0) === 0 && isScheduled(order) &&
     Date.parse(String(order.start_time)) > Date.now();
-  const hasPlanningHistory = (order: Row) => Boolean(order.planning_ever_scheduled) || isScheduled(order);
+  // A new assignment is routine even when historical revisions exist.
+  const needsPlanningReason = (order: Row) => isScheduled(order);
   const lockInfo = (order: Row) => order.planning_locked_at
     ? [t("planningLocked"), order.planning_locked_by_name,
       formatTime(String(order.planning_locked_at), lang, zone)].filter(Boolean).join(" · ") : "";
@@ -213,7 +223,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
     if (completionWork.some(work => work.item_id === String(order.id) && work.held)) return 'planningQualityHold';
     if (order.planning_locked_at) return "planningLockedMessage";
     if (order.status !== "planned") return planningBoardStatus(order);
-    if (Number(order.produced_quantity || 0) > 0 || order.actual_start || order.actual_finish) return "planningAlreadyStarted";
+    if ((!order.execution_interrupted_at && (Number(order.produced_quantity || 0) > 0 || order.actual_start)) || order.actual_finish) return "planningAlreadyStarted";
     const candidates = capableLines(order, lines, centers, capabilities);
     const checks = candidates.map((line: Row) => durationMs(order, line, centers, capabilities));
     if (checks[0]?.error === "planningMissingRate" && !["meter", "piece", "kg"].includes(String(order.unit)))
@@ -403,7 +413,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         Math.max(rangeStart,Math.ceil(Date.now() / 900_000) * 900_000), duration.totalMs,
         rangeEnd, calendar, zone) : null;
     const initial = proposedTime ?? (order.start_time ? Date.parse(String(order.start_time)) : next?.start);
-    setStart(Number.isFinite(initial) ? formatLocalInput(new Date(initial).toISOString(), zone) : "");
+    setStart(Number.isFinite(initial) ? formatLocalInput(new Date(initial).toISOString(), zone, true) : "");
     setError("");
   }
   function askReason(pending: PendingReason) {
@@ -417,18 +427,22 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   }
   async function submitReason(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!pendingReason) return;
+    if (!pendingReason || policySubmitting.current) return;
     if (!reasonCodes.includes(reasonCode as typeof reasonCodes[number]) ||
       (reasonCode === "other" && !reasonNote.trim())) {
       setError("planningReasonRequired"); return;
     }
     if(!policyReview.current.ready||policyReview.current.required&&(!policyReview.current.confirmed||!reasonNote.trim())){setError('planning_confirmation_required');return;}
     const pending = pendingReason;
-    setBusy(true); setError("");
+    policySubmitting.current=true;setBusy(true); setError("");
     try {
       const args={factory:s.factory?.id,item:pending.item,target_line:pending.target_line,planned_start:pending.planned_start,reason_code:reasonCode,reason_note:reasonNote.trim(),expected_fingerprint:policyReview.current.fingerprint,exception_confirmed:policyReview.current.confirmed};
       const intent=JSON.stringify(args);if(policyAttempt.current?.intent!==intent)policyAttempt.current={intent,id:crypto.randomUUID()};
       await planningPolicyCommand('revise_product_plan_confirmed',{...args,request_id:policyAttempt.current!.id});policyAttempt.current=null;
+      // This endpoint bypasses the shared command handler. Reload confirmed
+      // schedule data now instead of waiting for the background snapshot poll.
+      if(refreshSnapshot)await refreshSnapshot();
+      else {maintenanceRead.reload();completionRead.reload();}
       setPendingReason(null);
       if (pending.source !== "drop") closeEditor();
     } catch (cause) {
@@ -439,7 +453,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         setTimeout(() => setRejectedId(null), 450);
       }
     } finally {
-      setBusy(false);
+      policySubmitting.current=false;setBusy(false);
       if (pending.source === "drop") {
         setOptimistic(null); setSavingDropId(null);
         setTimeout(() => setSettlingId(null), 450);
@@ -465,7 +479,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
       String(editing.id), calendar, zone, maintenance,editing.product_id),
       Math.max(rangeStart,Math.ceil(Date.now() / 900_000) * 900_000), duration.totalMs,
       rangeEnd, calendar, zone);
-    setStart(Number.isFinite(slot.start) ? formatLocalInput(new Date(slot.start).toISOString(), zone) : "");
+    setStart(Number.isFinite(slot.start) ? formatLocalInput(new Date(slot.start).toISOString(), zone, true) : "");
     setError(slot.error || "");
   }
   function previewAt(event: React.DragEvent<HTMLDivElement>, line: Row, order: Row) {
@@ -502,7 +516,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
     setError(""); setSavingDropId(id); setSettlingId(id);
     setOptimistic({ id, line_id: String(line.id), start_time: startTime,
       expected_finish: new Date(placement.finish).toISOString() });
-    if (hasPlanningHistory(order)) {
+    if (needsPlanningReason(order)) {
       askReason({ source: "drop", item: id, target_line: String(line.id),
         planned_start: startTime });
       return;
@@ -555,7 +569,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
     const check: any = proposeSchedule(editing, selectedLine, Date.parse(utc), scoped?orders:[], centers, capabilities,
       Date.now(), calendar, zone, scoped?maintenance:[]);
     if (check.error) { setError(check.error); return; }
-    if (hasPlanningHistory(editing) && (!isScheduled(editing) ||
+    if (needsPlanningReason(editing) && (
       String(editing.line_id) !== String(selectedLine.id) ||
       Date.parse(String(editing.start_time)) !== check.start ||
       Date.parse(String(editing.expected_finish)) !== check.finish)) {
@@ -631,7 +645,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
       setError(check.error || "planningSlotChanged"); return;
     }
     const plannedStart = new Date(chosenSlot.start).toISOString();
-    if (hasPlanningHistory(slotOrder)) {
+    if (needsPlanningReason(slotOrder)) {
       askReason({ source: "save", item: String(slotOrder.id), target_line: chosenSlot.lineId,
         planned_start: plannedStart });
       return;
@@ -704,7 +718,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
               beginDrag(event,order);event.dataTransfer.setData('text/plain',String(order.id));event.dataTransfer.effectAllowed='move';
               draggingRef.current=String(order.id);lastHoverRef.current=null;setDraggingId(String(order.id));setError('');}}
             onDragEnd={()=>finishDrag(String(order.id))}><bdi dir="ltr">{String(order.code||requestOf(order)?.code)}</bdi></button></td>
-          <td data-label={t('product')}><ProductIdentity productId={order.product_id} productItemId={order.id}>{localName(productOf(order),lang)}</ProductIdentity></td>
+          <td data-label={t('product')}><DeliveryContext rows={fulfillment.data?.rows||[]} item={order.id} t={t} lang={lang} zone={zone}/><ProductIdentity productId={order.product_id} productItemId={order.id}>{localName(productOf(order),lang)}</ProductIdentity></td>
           <td data-label={t('quantity')}>{amountOf(order)}</td><td data-label={t('planningWorkType')}>{t(planningWorkKind(order,requestOf(order),recovery).type)}</td>
           {waiting?<><td data-label={t('priority')}>{requestOf(order)?.priority==='unspecified'?t('notSpecified'):priorityBadge(order)}</td><td data-label={t('requiredBy')}>{requestOf(order)?.required_by?formatTime(requestOf(order)?.required_by,lang,zone):'—'}</td>
             <td data-label={t('planningEligibility')}>{recovery?.held?<strong className="planning-warning">{t('planningQualityHold')}</strong>:blocked?<span className="planning-warning">{t(blocked)}</span>:t('planningReadyToSchedule')}
@@ -737,7 +751,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
 
   const tipOrder=barTip?orders.find(o=>String(o.id)===barTip.id):null;
   return <section className="planning-page planning-v3 ops-workbench" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-    {barTip&&tipOrder&&!draggingId&&typeof document!=='undefined'&&createPortal(<div id="planning-bar-tooltip" role="tooltip" className="planning-bar-tooltip" dir={lang==='ar'?'rtl':'ltr'} style={{left:barTip.left,top:barTip.top,width:barTip.width,maxHeight:`calc(100dvh - ${barTip.top}px - 8px)`}}><strong><bdi>{String(tipOrder.code)}</bdi></strong><p>{localName(productOf(tipOrder),lang)}</p><p>{localName(lines.find(l=>l.id===tipOrder.line_id),lang)}</p><dl>{[[t('executionPlannedStart'),formatTime(tipOrder.start_time,lang,zone)],[t('executionPlannedFinish'),formatTime(tipOrder.expected_finish,lang,zone)],[t('planningTotalWorking'),Number.isFinite(Date.parse(String(tipOrder.expected_finish)))?formatDuration(Math.ceil((Date.parse(String(tipOrder.expected_finish))-Date.parse(String(tipOrder.start_time)))/60000),lang):t('planningUnknownFinish')],[t('status'),t(planningBoardStatus(tipOrder))]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>,document.body)}
+    {barTip&&tipOrder&&!draggingId&&typeof document!=='undefined'&&createPortal(<div id="planning-bar-tooltip" role="tooltip" className="planning-bar-tooltip" dir={lang==='ar'?'rtl':'ltr'} style={{left:barTip.left,top:barTip.top,width:barTip.width,maxHeight:`calc(100dvh - ${barTip.top}px - 8px)`}}><strong><bdi>{String(tipOrder.code)}</bdi></strong><DeliveryContext rows={fulfillment.data?.rows||[]} item={tipOrder.id} t={t} lang={lang} zone={zone}/><p>{localName(productOf(tipOrder),lang)} · {amountOf(tipOrder)}</p><p>{localName(lines.find(l=>l.id===tipOrder.line_id),lang)}</p><dl>{[[t('executionPlannedStart'),formatTime(tipOrder.start_time,lang,zone)],[t('executionPlannedFinish'),formatTime(tipOrder.expected_finish,lang,zone)],[t('planningTotalWorking'),Number.isFinite(Date.parse(String(tipOrder.expected_finish)))?formatDuration(Math.ceil((Date.parse(String(tipOrder.expected_finish))-Date.parse(String(tipOrder.start_time)))/60000),lang):t('planningUnknownFinish')],[t('status'),t(planningBoardStatus(tipOrder))]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>,document.body)}
     <p className="ops-page-subtitle">{t('planningOperationalSubtitle')}</p>
     <div className="planning-filters">
       <label>{t("line")} <select value={lineFilter} onChange={(event) => setLineFilter(event.target.value)}>
@@ -964,6 +978,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
                       (hasRisk ? " · " + t(dueState) : "") +
                       (order.planning_locked_at ? " · " + t("planningLocked") : "")}>
                     <span className="planning-duration-band" aria-hidden="true"/>
+                    <MeasuredGanttCode code={String(order.code||request?.code)}/>
                     <span className="planning-job-caption" dir={lang==='ar'?'rtl':'ltr'}>
                      <strong>{warning&&<span className="planning-risk-mark" title={t(warning)} aria-label={t(warning)}>!</span>}<bdi dir="ltr">{String(order.code||request?.code)}</bdi>{!slot.compact&&' · '+localName(productOf(order),lang)}</strong>
                      {!slot.compact&&<small>{amountOf(order)} · {t(planningBoardStatus(order))}{hasRisk?' · '+t(dueState):''}</small>}
@@ -1029,7 +1044,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         <p className="planning-detail-product" style={productStyle(editing)} dir="auto">
           {localName(productOf(editing), lang)}</p><strong className="planning-detail-quantity">{amountOf(editing)}</strong></div>
         <button type="button" aria-label={t("close")} onClick={closeEditor}>×</button></header>
-      <p className="planning-detail-status">{t(planningBoardStatus(editing))}{planningTiming(editing,requestOf(editing))&&' · '+t(planningTiming(editing,requestOf(editing))!)}</p>
+      <DeliveryContext rows={fulfillment.data?.rows||[]} item={editing.id} t={t} lang={lang} zone={zone}/><p className="planning-detail-status">{t(planningBoardStatus(editing))}{planningTiming(editing,requestOf(editing))&&' · '+t(planningTiming(editing,requestOf(editing))!)}</p>
       {dragReason(editing)&&<p className="planning-warning" role="status">{t(dragReason(editing))}</p>}
       {completionWork.find(w=>w.item_id===editingId)?.held&&<p className="planning-warning" role="alert">{t('planningQualityHold')}</p>}
       <section className="planning-order-summary" aria-label={t('planningOrderReference')}><div className="planning-summary-heading"><strong>{t(editingKind.type)}</strong>{priorityBadge(editing)}</div>
@@ -1037,6 +1052,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         <div><dt>{t('requiredBy')}</dt><dd>{requestOf(editing)?.required_by?formatTime(requestOf(editing)?.required_by,lang,zone):t('planningNoRequestedDeadline')}</dd></div></dl>
       </section>
       {isScheduled(editing)&&<p className="planning-saved-interval"><span>{historyLineName(String(editing.line_id))}</span><span>{t('executionPlannedStart')}: <bdi>{formatTime(editing.start_time,lang,zone)}</bdi></span><span>{t('executionPlannedFinish')}: <bdi>{formatTime(editing.expected_finish,lang,zone)}</bdi></span></p>}
+      <ProductionExecutionActions props={{snapshot:s,t,lang,can,command,refreshSnapshot}} item={editing} historyOnly />
       {isScheduled(editing)&&<button type="button" className="planning-show-on-timeline" onClick={()=>showSchedule(editing)}>{t('planningShowTimeline')}</button>}
       {editing.planning_locked_at && <p className="planning-lock-detail">{lockInfo(editing)}</p>}
       {editing.planning_locked_at&&canToggleLock(editing) && <button type="button" className="planning-lock-action"
@@ -1051,7 +1067,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         {!canSeeResources ? <p className="planning-warning">{t("planningResourcesPermission")}</p> :
           !availableLines.length && <p className="planning-warning">{t(dragReason(editing) || "planningNoCapableLine")}</p>}
         <label className="planning-field"><span>{t("planningPlannedStart")}</span>
-          <input type="datetime-local" required value={start} disabled={!editableItem(editing)}
+          <input type="datetime-local" step="0.001" required value={start} disabled={!editableItem(editing)}
             onChange={(event) => setStart(event.target.value)} /></label>
         <p className="planning-time-basis">{s.factory?.timezone?t('planningFactoryTime'):t('planningTimezoneMissing')}</p>
         {selectedLine && <div className="planning-proposal" role="status">
@@ -1077,12 +1093,12 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
            const line=availableLines.find((l:Row)=>String(l.id)===candidate.line);if(!line||!maintenanceReady)return 'mpAvailabilityUnknown';
            const check:any=proposeSchedule(editing,line,Date.parse(candidate.start),orders,centers,capabilities,Date.now(),calendar,zone,maintenance);
            return check.error||(check.start!==Date.parse(candidate.start)||check.finish!==Date.parse(candidate.finish)?'planningAvailabilityChanged':!sourceCovers(line,check.start,check.finish)?'mpBoardOutside':null);
-          }} checking={maintenanceRead.loading||completionRead.loading} needsTimelineCheck={candidate=>Date.parse(candidate.start)<rangeStart||Date.parse(candidate.finish)>rangeEnd} onInspect={candidate=>{setZoomIndex(3);setViewStart(Date.parse(localDateTimeToUtc(formatLocalInput(candidate.start,zone).slice(0,10)+'T00:00',zone)));}} onChoose={candidate=>{setLineId(candidate.line);setStart(formatLocalInput(candidate.start,zone));setError('');}} />}
+          }} checking={maintenanceRead.loading||completionRead.loading} needsTimelineCheck={candidate=>Date.parse(candidate.start)<rangeStart||Date.parse(candidate.finish)>rangeEnd} onInspect={candidate=>{setZoomIndex(3);setViewStart(Date.parse(localDateTimeToUtc(formatLocalInput(candidate.start,zone).slice(0,10)+'T00:00',zone)));}} onChoose={candidate=>{setLineId(candidate.line);setStart(formatLocalInput(candidate.start,zone,true));setError('');}} />}
         {suggestedGaps.length > 0 && <div className="planning-gap-choices">
           <strong>{t("planningEarliestAvailable")}</strong>
           {suggestedGaps.map((gap: { start: number; finish: number; slot: { start: number } }) =>
             <button type="button" className="planning-earliest-choice" key={gap.start} disabled={!maintenanceReady||!editableItem(editing)}
-              onClick={() => { setStart(formatLocalInput(new Date(gap.slot.start).toISOString(), zone)); setError(""); }}>
+              onClick={() => { setStart(formatLocalInput(new Date(gap.slot.start).toISOString(), zone, true)); setError(""); }}>
               {formatTime(new Date(gap.slot.start).toISOString(), lang, zone)} ·
               {t("planningGapUntil")} {formatTime(new Date(gap.finish).toISOString(), lang, zone)}
             </button>)}
@@ -1160,7 +1176,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
           <div className="planning-actions">
             <button type="button" disabled={busy} onClick={cancelReason}>{t("cancel")}</button>
             <button type="submit" className="primary" disabled={busy || !reasonCode ||
-              (reasonCode === "other" && !reasonNote.trim())}>{t("planningSaveRevision")}</button>
+              (reasonCode === "other" && !reasonNote.trim())}>{t(busy?'updating':'planningSaveRevision')}</button>
           </div>
         </form>
       </div>

@@ -1,4 +1,5 @@
 "use client";
+import {OrderIdentityProvider} from './OrderReference';
 import {MaterialPreparationWindow} from '@/features/MaterialPreparation';
 import ManufacturedOutputExplorer from '@/features/ManufacturedOutputExplorer';
 import type {OutputDestination} from '@/features/types';
@@ -101,7 +102,9 @@ export default function FactoryApp() {
         `${permissionModule(module)}:${action}`,
       ),
     );
+  const snapshotRequest=useRef(0);
   const load = useCallback(async () => {
+    const request=++snapshotRequest.current;
     try {
       const res = await fetch(
         "/api/data" +
@@ -110,24 +113,29 @@ export default function FactoryApp() {
             : ""),
         { cache: "no-store" },
       );
+      // A newer read owns the refresh; supersession is not a failed operation.
+      if(request!==snapshotRequest.current)return;
       if (res.status === 401) {
         setSnapshot(null);
         setPreview("full");
         setLoadNotice("");
-        return;
+        return false;
       }
       const body = await res.json();
+      if(request!==snapshotRequest.current)return;
       if (!res.ok) {
         if (res.status === 403) setSnapshot(null);
         setLoadNotice(commandErrorKey(body.error));
-        return;
+        return false;
       }
       setSnapshot(body);
       setLoadNotice("");
+      return true;
     } catch {
-      setLoadNotice("dataWarning");
+      if(request===snapshotRequest.current)setLoadNotice("dataWarning");
+      return false;
     } finally {
-      setLoading(false);
+      if(request===snapshotRequest.current)setLoading(false);
     }
   }, [supportFactory]);
   useEffect(() => {
@@ -468,7 +476,7 @@ export default function FactoryApp() {
                 </button>
               </div>
             </header>
-            <main className="main-content">
+            <main className="main-content"><OrderIdentityProvider snapshot={props!.snapshot} enabled={can('sales_orders')}>
               {previewMode !== "full" && <div className="preview-indicator" role="status">
                 <span>{t("previewing")}: <strong>{t(`preview_${previewMode}`)}</strong></span>
                 <button type="button" onClick={() => changePreview("full")}>{t("exitPreview")}</button>
@@ -548,7 +556,7 @@ export default function FactoryApp() {
                 ) : (
                   <div className="panel">{t("noPermission")}</div>
                 ))}</div>
-            </main>
+            </OrderIdentityProvider></main>
           </div>
           {outputDestination&&props&&outputDestination.factory===String(snapshot?.factory?.id||'')&&<ManufacturedOutputExplorer {...props} key={JSON.stringify(outputDestination)} target={outputDestination} onClose={()=>setOutputDestination(null)} onSchedule={id=>{setOutputDestination(null);setPlanningItemId(id);setView('planning');}}/>}
           {center && props && (

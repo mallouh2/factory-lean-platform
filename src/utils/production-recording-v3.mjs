@@ -36,6 +36,9 @@ export function recordingFailure(error) {
   const code = error?.code;
   if (message === 'unauthorized') return {status:401,error:'unauthorized'};
   if (code === '42501' || message === 'permission_denied') return {status:403,error:'permissionError'};
+  if (message === 'output_paused' || message === 'output_enrollment_required') return {status:409,error:message==='output_paused'?'outputPaused':'outputEnrollmentRequired',reason:message,outcome:'REJECTED'};
+  if (message === 'output_carryover_unsupported') return {status:422,error:'outputCarryoverUnsupported',reason:message,outcome:'REJECTED'};
+  if (['production_stock_shortage','production_stock_legacy_review','production_stock_recipe_review'].includes(message)) return {status:422,error:message,reason:message,outcome:'REJECTED'};
   if (code === '40001') return {status:409,error:message === 'request_conflict' ? 'recordingRequestConflict' : 'recordingContextChanged',outcome:'REJECTED'};
   if (code === '55000') return {status:503,error:message==='recording_disabled'?'prv3LateDisabled':'recordingUnavailable',outcome:'REJECTED'};
   const reasons={recording_shift_expired:'SHIFT_EXPIRED',recording_shift_unavailable:'SHIFT_UNAVAILABLE',recording_shift_declaration:'SHIFT_DECLARATION_REQUIRED',

@@ -1,3 +1,4 @@
+import OrderReference from '@/components/OrderReference';
 import {useEffect,useState} from 'react';
 import {Field,formatTime,localName} from '@/components/ui';
 import TableExport from '@/components/TableExport';
@@ -16,7 +17,7 @@ export function MovementRow({props,movement:m,compact=false}:{props:FeatureProps
  const quantity=(v:unknown)=>(decimalCompare(String(v),'0')===1?'+':'')+(historyNumber(v,lang)??t('notAvailable'))+' '+t(m.unit||'historicalUnitUnknown');
  return <article className={'warehouse-movement-row '+(sign===1?'movement-in':sign===-1?'movement-out':'movement-neutral')}>
   <div className="warehouse-movement-main"><strong>{t('movement_'+m.kind)}</strong><bdi className="warehouse-movement-delta">{quantity(m.quantity)}</bdi></div>
-  <div className="warehouse-movement-meta"><span>{sign===1?say('Stock in','وارد مخزون'):sign===-1?say('Stock out','صادر مخزون'):say('No physical stock change','دون تغيير المخزون الفعلي')}</span>{(m.order_reference||m.reference)&&<bdi>{m.order_reference||m.reference}</bdi>}<time>{formatTime(m.created_at,lang,String(s.factory?.timezone||'UTC'))}</time></div>
+  <div className="warehouse-movement-meta"><span>{sign===1?say('Stock in','وارد مخزون'):sign===-1?say('Stock out','صادر مخزون'):say('No physical stock change','دون تغيير المخزون الفعلي')}</span>{(m.order_reference||m.reference)&&<OrderReference reference={m.order_reference||m.reference}/>}<time>{formatTime(m.created_at,lang,String(s.factory?.timezone||'UTC'))}</time></div>
   {reserved&&<p className="warehouse-reservation-delta">{t('reservedMovementDelta')}: <bdi>{quantity(m.reserved_delta)}</bdi></p>}
   {!compact&&<>{m.actor_name&&<small>{t('receivingActor')}: {m.actor_name}</small>}{m.note&&<p dir="auto">{m.note}</p>}</>}
  </article>;

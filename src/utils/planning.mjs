@@ -95,6 +95,7 @@ export function isScheduled(order) {
 
 /** Board placement follows the stored production state; it never advances an item. */
 export function planningBoardStatus(order) {
+  if (order.execution_interrupted_at) return "f34Interrupted";
   if (order.status === "completed") return "planningCompleted";
   if (order.status === "active") return "planningInProduction";
   return isScheduled(order) ? "planningPlannedState" : "planningWaiting";
@@ -150,7 +151,7 @@ export function lineRate(order, line, centers, capabilities) {
 export function durationMs(order, line, centers, capabilities) {
   const throughput = lineRate(order, line, centers, capabilities);
   if (throughput.error) return throughput;
-  const quantity = Number(order.target_quantity);
+  const quantity = order.execution_interrupted_at ? Number(order.execution_remaining_quantity) : Number(order.target_quantity);
   if (!Number.isFinite(quantity) || quantity <= 0) return { error: "planningInvalidQuantity" };
   const productionMs = Math.ceil(quantity / throughput.rate * 60) * MINUTE;
   const setupMs = throughput.setupMinutes * MINUTE;
@@ -262,7 +263,7 @@ export function firstAvailable(schedule, from, duration, until = from + 365 * 24
 /** @param {{mask:number,start:string,end:string}|null} calendar */
 export function proposeSchedule(order, line, start, orders, centers, capabilities, now = Date.now(),
   calendar = null, zone = "UTC", maintenance = []) {
-  if (order.status !== "planned" || Number(order.produced_quantity || 0) > 0)
+  if (order.status !== "planned" || (!order.execution_interrupted_at && Number(order.produced_quantity || 0) > 0))
     return { error: "planningAlreadyStarted" };
   const duration = durationMs(order, line, centers, capabilities);
   if (duration.error) return duration;

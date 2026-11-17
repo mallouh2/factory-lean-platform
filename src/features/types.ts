@@ -10,7 +10,7 @@ export type FeatureProps = {
   command: Command;
   can: (module: string, action?: string) => boolean;
   onLanguageChange?: () => void;
-  refreshSnapshot?: () => Promise<void>;
+  refreshSnapshot?: () => Promise<void | boolean>;
   onProductionHistoryOpen?: (mode?:'production'|'quality') => void;
   onOutputRelated?: (destination:OutputDestination) => void;
 };

@@ -31,7 +31,7 @@ test('table removes combined summaries and shows one pagination count',()=>{cons
 
 test('NULL shift stays explicit; audit and submitting employee stay out of default columns',()=>{for(const lang of ['en','ar']){const words=lang==='ar'?ar:en,html=render(lang);assert.ok(html.includes(words.shiftNotRecorded));assert.ok(!html.includes('Counter reconciliation'));assert.ok(!html.includes('Supervisor'));assert.ok(html.includes('250'));}});
 test('row correction is absent before selection for both editors and viewers',()=>{assert.ok(!render('en',false).includes(en.recordingCorrect));assert.ok(!render('en',true).includes(en.recordingCorrect));});
-test('mobile has compact cards without default original values; Arabic has explicit RTL',()=>{assert.match(render(),/history-mobile/);assert.ok(!render().includes(en.recordingOriginal));assert.match(render('ar'),/dir="rtl"/);assert.match(render('ar'),/<bdi>/);assert.ok(!render().includes('uuid'));});
+test('mobile has compact cards without default original values; Arabic has explicit RTL',()=>{assert.match(render(),/history-mobile/);assert.ok(!render().includes(en.recordingOriginal));assert.match(render('ar'),/dir="rtl"/);assert.match(render('ar'),/<bdi(?:\s[^>]*)?>/);assert.ok(!render().includes('uuid'));});
 test('empty results show actionable state and page actions disabled',()=>{const html=render('en',true,{...result,rows:[],total:0,totals:[],highest:[]});assert.ok(html.includes(en.historyNoMatches));assert.match(html,/<button disabled="">Previous/);assert.match(html,/<button disabled="">Next/);});
 
 test('default table has no correction-status or action column, retaining correction filter',()=>{

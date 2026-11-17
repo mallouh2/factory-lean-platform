@@ -19,7 +19,7 @@ export function completionSummary(row,factory,item){
  const produced=decimalSubtract(row.produced_good??recorded,'0'),remaining=decimalSubtract(row.ordinary_remaining??(decimalCompare(requested,recorded)===1?decimalSubtract(requested,recorded):'0'),'0');
  if(produced===null||remaining===null||decimalCompare(produced,'0')===-1||decimalCompare(remaining,'0')===-1)throw Error('recordingUnavailable');
  return{factory_id:factory,item_id:item,code:row.code,requested,recorded_good:recorded,produced_good:produced,makeup_committed:row.makeup_committed===true,
-  remaining,unit:row.unit,status:row.status,
+  remaining,remaining_demand:row.remaining_demand==null?null:decimalSubtract(row.remaining_demand,'0'),unit:row.unit,status:row.status,
   actual_start:row.actual_start,actual_finish:row.actual_finish,request_id:row.request_id,
   replacement_original_item_id:row.replacement_original_item_id,quality_origin_rejection_id:row.quality_origin_rejection_id};
 }

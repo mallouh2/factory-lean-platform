@@ -113,6 +113,31 @@ test('real permission denial or expired sign-in discards the inaccessible snapsh
     assert.equal(app.states[15],status===401?'':'permissionError');
   }
 });
+
+test('a slow pre-command snapshot cannot overwrite a newer confirmed refresh',async()=>{
+  const app=appHarness(),original=globalThis.fetch,pending=[];
+  try{
+    globalThis.fetch=()=>new Promise(resolve=>pending.push(resolve));
+    const old=app.refresh(),fresh=app.refresh();
+    const latest={...app.snapshot,fetchedAt:'after-confirmed-command'};
+    pending[1]({status:200,ok:true,json:async()=>latest});await fresh;
+    pending[0]({status:200,ok:true,json:async()=>({...app.snapshot,fetchedAt:'old-poll'})});await old;
+    assert.equal(app.states[3],latest);
+  }finally{globalThis.fetch=original;}
+});
+
+test('independent authorized snapshot hydration starts concurrently and keeps permission gates',async()=>{
+  for(const permissions of [['orders:view'],['settings:view'],[]]){
+    const started=[],pending=[],snapshot={factory:{id:'F'},permissions,tables:{}};
+    const defer=name=>{started.push(name);return new Promise(resolve=>pending.push(()=>resolve({data:name==='production_recording_units'?{units:[],technicians:[]}:name==='production_shifts'?[]:{},error:null})));};
+    const db={rpc:(name)=>name==='factory_snapshot'?Promise.resolve({data:snapshot,error:null}):defer(name),from:()=>({select:()=>({eq:()=>({order:()=>defer('production_shifts')})})})};
+    const route=loadModule(apiBundle,name=>name==='test-auth'?{...realAuth,authenticatedClient:async()=>({db,user:{id:'U'}})}:require(name));
+    const response=route.GET(new NextRequest('http://localhost/api/data'));
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(started,permissions.includes('orders:view')?['production_recording_units','production_shifts','production_shift_context']:permissions.includes('settings:view')?['production_shifts','production_shift_context']:[]);
+    pending.forEach(resolve=>resolve());assert.equal((await response).status,200);
+  }
+});
 test('normal Factory Floor navigation issues no write command or snapshot request',()=>{
   const app=appHarness();
   function find(node){if(!node||typeof node!=='object')return null;

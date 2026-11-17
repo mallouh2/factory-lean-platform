@@ -1,3 +1,8 @@
+import ProductionStock from './ProductionStock';
+import ProductionMaterialSummary from './ProductionMaterialSummary';
+import ProductionExecutionActions from './ProductionExecutionActions';
+import ProductionExecutionSelector from './ProductionExecutionSelector';
+import RawMaterialReturns from './RawMaterialReturns';
 import { useEffect, useRef, useState } from "react";
 import { downtimeReasonChoices } from "@/utils/downtime-reasons";
 import { evaluateFlow, formatDuration } from "@/utils/production-flow.mjs";
@@ -11,7 +16,9 @@ import NavigationIcon from '@/components/NavigationIcon';
 import MachineVisual, { machineVisualType } from "@/components/FloorMachineMotion";
 import FactoryRoute from "@/components/FactoryRoute";
 import { formatTime, localName } from "@/components/ui";
-import { executionTiming, lineExecutionQueue } from "@/utils/execution-queue.mjs";
+import { executionTiming } from "@/utils/execution-queue.mjs";
+import {executionScheduled,executionStatus,selectedExecution} from '@/utils/execution-selection.mjs';
+import {useExecutionOrders} from './useExecutionOrders';
 import {
   machineVisualStates,
   noDemandIdle,
@@ -36,7 +43,6 @@ import DeliveryContext from '@/components/DeliveryContext';
 import { useFulfillment, type ProductionDemand } from './useFulfillment';
 import MaintenanceContext from './MaintenanceRequest';
 import { MaintenanceStopChoice, type StopSchedule } from './MaintenanceActualStops';
-import ProductionStartReadiness from './ProductionStartReadiness';
 /**
  * Factory Floor V2. Renders the SAME snapshot through the
  * SAME logic as V1: physical status comes from work_centers.status, computed
@@ -95,13 +101,13 @@ export default function FactoryFloorV2(
   const [transferReason, setTransferReason] = useState("");
   const [flowNotice, setFlowNotice] = useState("");
   const [flowBusy, setFlowBusy] = useState(false);
-  const [executionBusyId, setExecutionBusyId] = useState<string | null>(null);
   const [quickAction, setQuickAction] = useState<"stop" | null>(null);
   const [stopNature, setStopNature] = useState<"unplanned" | "planned">("unplanned");
   const [plannedActivity, setPlannedActivity] = useState("");
   const [stopReason, setStopReason] = useState("");
   const [stopDetail, setStopDetail] = useState("");
   const [stopSchedule, setStopSchedule] = useState<StopSchedule | null>(null);
+  const [stopImpact,setStopImpact]=useState('');
   const stopRetry = useRef<{key:string;id:string}|null>(null);
   const [motionPaused, setMotionPaused] = useState(false);
   const fulfillment = useFulfillment<{ rows: ProductionDemand[] }>(s, 'production', 1, can('orders'));
@@ -110,7 +116,14 @@ export default function FactoryFloorV2(
   const openerRef = useRef<HTMLButtonElement>(null);
   const centers = (s.tables.work_centers || []).filter((c) => !c.archived);
   const lines = (s.tables.production_lines || []).filter((l) => !l.archived);
-  const orders = s.tables.production_orders || [];
+  const executionOrders=useExecutionOrders(props);
+  const [executionChoices,setExecutionChoices]=useState<Record<string,string>>({});
+  const [executionNotice,setExecutionNotice]=useState<{identity:string;code:string;key:string}|null>(null);
+  const [selector,setSelector]=useState<{factory:string;line:string}|null>(null);
+  const selectorOpener=useRef<HTMLButtonElement|null>(null);
+  // A complete reader replaces scheduled snapshot rows; never merge a removed
+  // assignment back from an older bounded snapshot. Unscheduled work stays visible.
+  const orders = [...new Map([...(s.tables.production_orders||[]).filter(o=>!executionOrders.complete||!executionScheduled(o)),...executionOrders.rows].map(o=>[String(o.id),o])).values()];
   const requests = s.tables.production_requests || [];
   const stops = s.tables.downtime_events || [];
   const stopCategories = downtimeReasonChoices.map(([name, key]) => ({
@@ -131,36 +144,29 @@ export default function FactoryFloorV2(
   ).map((e): Row => ({ ...e, produced: entryQuantities(e).good }));
   const [recordingItem,setRecordingItem]=useState<string|null>(null);
   const [completionItem,setCompletionItem]=useState<string|null>(null);
-  async function executeItem(action: "start_product_item", itemId: string) {
-    setExecutionBusyId(itemId);
-    try {
-      await props.command(action, { factory: s.factory?.id, item: itemId });
-    } catch { /* The shared command handler shows the database error. */ }
-    finally { setExecutionBusyId(null); }
-  }
-  function executionJob(item: Row, label: string, ready: boolean) {
+  function executionJob(item: Row, label: string, ready: boolean, lineBusy=false) {
     const product = s.tables.products?.find((p) => String(p.id) === String(item.product_id));
     const request = requests.find((r) => String(r.id) === String(item.request_id));
     const timing = executionTiming(item);
     const unit = t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : item.unit === "kg" ? "kg" : "legacyUnit");
     const variance = (minutes: number) => minutes === 0 ? t("executionOnTime")
       : `${formatDuration(Math.abs(minutes), lang)} ${t(minutes > 0 ? "executionLate" : "executionEarly")}`;
-    return <div className={`ff2-queue-job${ready ? " ff2-queue-ready" : ""}`} key={String(item.id)} data-product-item-id={String(item.id)} data-execution-state={String(item.status)}>
+    return <div className={`ff2-queue-job${item.status==='active' ? " ff2-queue-ready" : ""}`} key={String(item.id)} data-product-item-id={String(item.id)} data-execution-state={String(item.status)}>
       <div className="ff2-queue-job-head">
         <strong>{label}</strong>
-        <span>{item.status === "active" ? t("executionInProduction") : ready ? t("productionQueueReady") : t("executionWaiting")}</span>
+        <span>{t(executionStatus(item))}</span>
       </div>
-      <div className="ff2-job-identity"><bdi className="ff2-job-order">{String(request?.code || item.code || "")}</bdi>
+      <div className="ff2-job-identity"><bdi className="ff2-job-order">{String(item.code || request?.code || "")}</bdi>
         <div className="ff2-queue-product" dir="auto"><ProductIdentity productId={item.product_id} productItemId={item.id}>{product ? localName(product, lang) : t("notAvailable")}</ProductIdentity></div></div>
       <DeliveryContext rows={fulfillment.data?.rows || []} item={item.id} t={t} lang={lang} zone={zone} />
       <dl className="recording-figures">
         {(["required", "good", "remaining"] as const).map(key => <div key={key}><dt>{t(key === "required" ? "recordingRequired" : key === "good" ? "recordingGoodSoFar" : "recordingRemaining")}</dt><dd>{productionProgress(item)[key].toLocaleString(lang)} {unit}</dd></div>)}
         {productionProgress(item).overproduction > 0 && <div><dt>{t("recordingOverproduction")}</dt><dd>{productionProgress(item).overproduction.toLocaleString(lang)} {unit}</dd></div>}
       </dl>
-      <details className="ff2-queue-timing"><summary>{t("ffProductionTiming")}</summary><bdi>{String(item.code || "")}</bdi><dl className="ff2-queue-times">
+      <details className="ff2-queue-timing"><summary>{t("ffProductionTiming")}</summary><p>{t("productionParentRequest")}: <bdi>{String(request?.code || "")}</bdi></p><dl className="ff2-queue-times">
         <div><dt>{t("executionPlannedStart")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>
         <div><dt>{t("executionPlannedFinish")}</dt><dd>{formatTime(item.expected_finish, lang, zone)}</dd></div>
-        {item.actual_start && <div><dt>{t("executionActualStart")}</dt><dd>{formatTime(item.actual_start, lang, zone)}</dd></div>}
+        {item.actual_start && <div><dt>{t("executionActualStart")}</dt><dd>{formatTime(item.execution_started_at||item.actual_start, lang, zone)}</dd></div>}
         {item.actual_finish && <div><dt>{t("executionActualFinish")}</dt><dd>{formatTime(item.actual_finish, lang, zone)}</dd></div>}
       </dl><div className="ff2-queue-variance">
       {timing.startVarianceMinutes !== null && <small>{t("executionStartVariance")}: {variance(timing.startVarianceMinutes)}</small>}
@@ -169,12 +175,13 @@ export default function FactoryFloorV2(
       {item.status === "active" && timing.overdueMinutes !== null && <small>{t("executionFinishLateBy")}: {formatDuration(timing.overdueMinutes, lang)}</small>}
       {item.status === "active" && !item.actual_start && <small>{t("executionLegacyStartMissing")}</small>}
       </div></details>
-      {can("orders") && ready && <ProductionStartReadiness {...props} item={String(item.id)} busy={Boolean(executionBusyId)}
-        onStart={()=>executeItem("start_product_item",String(item.id))} />}
+      {item.status==='planned'&&(item.execution_start_blocker||lineBusy)&&<p>{t(String(item.execution_start_blocker||'f341ReleaseCurrentFirst'))}</p>}
+      {can('orders','view')&&<ProductionMaterialSummary props={props} item={String(item.id)}/>}
       {can('orders','view')&&item.status==='active'&&item.actual_start&&<button type="button" disabled={!can('orders','edit')} onClick={()=>setRecordingItem(String(item.id))}>{t('prv3Record')}</button>}
       {can("orders", "edit") && item.status === "active" && item.actual_start && <button className="primary"
-        disabled={Boolean(executionBusyId)||!can('orders','view')} title={!can('orders','view')?t('prv3NoPermission'):undefined}
+        disabled={!can('orders','view')} title={!can('orders','view')?t('prv3NoPermission'):undefined}
         onClick={() => setCompletionItem(String(item.id))}>{t("finishProduction")}</button>}
+      <ProductionExecutionActions props={props} item={item} allowDispatch={item.status==='planned'} dispatchBlocked={!ready||lineBusy||Boolean(item.execution_start_blocker)} onOutcome={key=>setExecutionNotice({identity:String(s.factory?.id),code:String(item.code||''),key})}/>
     </div>;
   }
   // Pure mapping (see utils/floor-visual.mjs): physical status is the
@@ -346,7 +353,7 @@ export default function FactoryFloorV2(
           {compactFlow !== flowKey && <span className="sr-only"> · {t(flowKey)}</span>}
         </span> : <span className="sr-only">{t("flowSummary")}: {t(flowKey)}</span>}
         {!c.line_id && !assignment && job && <span className="ff2-node-production"><strong dir="auto"><ProductIdentity productId={job.product_id} productItemId={job.id}>{product ? localName(product, lang) : String(job.code || "")}</ProductIdentity></strong>
-          <bdi>{String(requests.find(request => request.id === job.request_id)?.code || job.code || "")}</bdi>
+          <bdi>{String(job.code || requests.find(request => request.id === job.request_id)?.code || "")}</bdi><small>{t("productionParentRequest")}: <bdi>{String(requests.find(request => request.id === job.request_id)?.code || "")}</bdi></small>
           <span>{t("recordingRemaining")}: {productionProgress(job).remaining.toLocaleString(lang)} {t(job.unit === "meter" ? "meterShort" : job.unit === "piece" ? "pieceShort" : job.unit === "kg" ? "kg" : "legacyUnit")}</span></span>}
         {state === "stopped" && stop && <span className={`ff2-node-stop${stop.stop_nature === "planned" ? " ff2-stop-planned" : ""}`}>
           <strong dir="auto">{stop.stop_nature === "planned" ? t(`lossActivity_${stop.planned_activity}`)
@@ -403,7 +410,8 @@ export default function FactoryFloorV2(
   }
   function lineCard(line: Row | null) {
     const lineId = line ? String(line.id) : "";
-    const queue = line ? lineExecutionQueue(orders, lineId) : null;
+    const choices=executionOrders.rows.filter(o=>o.line_id===lineId);
+    const chosen=line?selectedExecution(choices,lineId,executionChoices[String(s.factory?.id)+':'+lineId]):null;
     const borrowed = borrowedInto(lineId);
     const homeMachines = centers
       .filter((c) =>
@@ -419,22 +427,19 @@ export default function FactoryFloorV2(
     const relevant = machines.filter(matchesFilter);
     // Filtering keeps the complete path: the line only disappears when nothing matches.
     if (filter !== "all" && !relevant.length && !borrowed.length) return null;
-    const pausedAt = line?.paused_at || null;
+    const activeOrder = line ? orders.find(o=>o.status==='active'&&o.line_id===line.id) : undefined;
+    const pausedAt = activeOrder ? line?.paused_at || null : null;
     const summaryMachines = machines.filter((m) => !line || m.dependency_mode !== "independent");
-    const status = lineOperationalStatus(lineVisualStatus(
+    const status = line && !activeOrder ? 'idle' : lineOperationalStatus(lineVisualStatus(
       summaryMachines.map((m) => String(m.id)),
       visual,
       allBranches,
       borrowedAwayIds,
       flow,
     ), pausedAt);
-    const noDemandLine = !pausedAt && summaryMachines.length > 0 &&
+    const noDemandLine = line ? !activeOrder : !pausedAt && summaryMachines.length > 0 &&
       summaryMachines.every((machine) => noDemandIdle(machine, orders, stops, transfers));
-    const activeOrder = line
-      ? orders.find(
-          (o) => o.status === "active" && o.line_id === line.id,
-        )
-      : undefined;
+
     // The shared summary owns flow aggregation; this only selects existing chrome.
     const hasBlockedFlow = status === "affected";
     const plannedProblem = hasBlockedFlow && [...machines, ...borrowed].some(machine => openStopOf(machine)?.stop_nature === "planned") &&
@@ -471,7 +476,7 @@ export default function FactoryFloorV2(
             {status && !hasBlockedFlow && <span className={`ff2-chip ff2-chip-line ff2-chip-${noDemandLine ? "idle" : status}`}>
               {t(noDemandLine ? "idleNoDemand" : status)}</span>}
             {hasBlockedFlow && <span className={`ff2-line-flow ff2-line-flow-${plannedProblem ? "planned" : "blocked"}`}><FloorStateIcon state={plannedProblem ? "planned" : "blocked"} />{t(plannedProblem ? "ffStatePlanned" : "ffStateBlocked")}</span>}
-            {line && can("centers", "edit") && (
+            {line && activeOrder && can("centers", "edit") && (
               <button className="ff2-line-action" disabled={pauseBusy} onClick={() => {
                 setPauseNotice("");
                 if (pausedAt) void changeLinePause(line, false);
@@ -495,9 +500,13 @@ export default function FactoryFloorV2(
         )}
         {pauseNotice && pauseLineId === lineId && <p role="status" className="ff2-muted">{t(pauseNotice)}</p>}
         {line && <section className="ff2-queue" aria-label={t("productionQueue")}>
-          {queue?.current
-            ? executionJob(queue.current, t("executionCurrentReady"), String(queue.readyId) === String(queue.current.id))
-            : <p className="muted">{t("executionNoQueuedJobs")}</p>}
+          {can('orders','view')&&<button type="button" className="ff2-select-order" onClick={e=>{selectorOpener.current=e.currentTarget;setSelector({factory:String(s.factory?.id),line:lineId});}}>{t('executionSelectOrder')}</button>}
+          {executionOrders.loading&&<p role="status">{t('updating')}</p>}
+          {executionOrders.error&&<p role="alert">{t(executionOrders.error)} <button type="button" onClick={executionOrders.reload}>{t('refresh')}</button></p>}
+          {activeOrder&&executionJob(activeOrder,t('f341ActualOrder'),false)}
+          {chosen&&chosen.id!==activeOrder?.id&&executionJob(chosen,t('f341SelectedOrder'),executionOrders.complete,Boolean(activeOrder))}
+          {!activeOrder&&!chosen&&<p className="muted">{t('executionNoQueuedJobs')}</p>}
+          <p className="muted">{t('f341PlanUnchanged')}</p>
         </section>}
         <div className="ff2-route-heading"><h4>{t("ffMachineSequence")}</h4></div>
         <FactoryRoute machines={machines} continuationLabel={t("routeContinues")}
@@ -552,7 +561,6 @@ export default function FactoryFloorV2(
             </>;
           }} />
         {!machines.length && <p className="ff2-empty">{t("noMachinesOnLine")}</p>}
-        {queue?.next && <details className="ff2-next-job"><summary>{t("executionNext")} · <bdi>{String(requests.find(request => request.id === queue.next?.request_id)?.code || queue.next.code || "")}</bdi> · <span dir="auto">{localName(s.tables.products?.find(product => product.id === queue.next?.product_id), lang)}</span></summary>{executionJob(queue.next, t("executionNext"), false)}</details>}
         <details className="ff2-line-detail"><summary>{t("ffTimingDetails")}</summary><footer className="ff2-card-foot">
           <span>
             {t("todayProduction")}:{" "}
@@ -674,7 +682,7 @@ export default function FactoryFloorV2(
     !selectedFromHomePlaceholder && !(actingFor ? borrowedBy?.paused_at : selectedLine?.paused_at);
   const canStartHere = selected?.status === "idle" &&
     !(actingFor ? borrowedBy?.paused_at : selectedLine?.paused_at) &&
-    !selectedFromHomePlaceholder && canChangeStatus;
+    !selectedFromHomePlaceholder && canChangeStatus && hasActiveProduction;
   const canTransferHere = selected?.status === "stopped" && !transferActive && canTransfer &&
     !selectedLine?.paused_at && !livePicker.blockedReason && transferCandidates.length > 0;
   const showQuickActions = canStopHere || canReturnHere || canRestartHere ||
@@ -729,7 +737,7 @@ export default function FactoryFloorV2(
     setFlowNotice("");
     try {
       await props.command("change_status", {
-        factory: s.factory?.id, work_center: selected.id, status: "running",
+        factory: s.factory?.id, work_center: selected.id, status: hasActiveProduction ? "running" : "idle",
         reason: null, sub_reason: null, notes: "", expected_restart: null,
         responsible: null, alternative: null, transferred: false,
       });
@@ -742,7 +750,7 @@ export default function FactoryFloorV2(
   }
   async function stopMachine(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || (stopNature === "unplanned"
+    if (!selected || !stopImpact || (stopNature === "unplanned"
       ? !stopCategories.some(({ row }) => String(row?.id) === stopReason)
       : !plannedActivity)) return;
     setFlowBusy(true);
@@ -758,8 +766,7 @@ export default function FactoryFloorV2(
         expected_request_revision:stopSchedule.request_revision} : null;
       const key=JSON.stringify(linkedArgs);
       if(linkedArgs && stopRetry.current?.key!==key) stopRetry.current={key,id:crypto.randomUUID()};
-      await props.command(linkedArgs?'stop_machine_for_maintenance':'stop_machine',linkedArgs
-        ? {...linkedArgs,request_id:stopRetry.current!.id}:args);
+      await props.command('stop_machine_with_impact', {...args,affects_production:stopImpact==='yes',maintenance:linkedArgs?{schedule:stopSchedule!.id,expected_revision:stopSchedule!.revision,expected_request_revision:stopSchedule!.request_revision,request_id:stopRetry.current!.id}:null});
       stopRetry.current=null;setStopSchedule(null);
       setQuickAction(null);
       setStopReason("");
@@ -772,13 +779,22 @@ export default function FactoryFloorV2(
       setFlowBusy(false);
     }
   }
+  const selecting=selector?.factory===String(s.factory?.id)?lines.find(l=>String(l.id)===selector.line):null;
+  function closeSelector(){setSelector(null);requestAnimationFrame(()=>selectorOpener.current?.isConnected&&selectorOpener.current.focus());}
+  if(selecting&&can('orders','view'))return <ProductionExecutionSelector props={props} line={selecting} orders={executionOrders.rows} selected={String(selectedExecution(executionOrders.rows,selecting.id,executionChoices[String(s.factory?.id)+':'+selecting.id])?.id||'')} complete={executionOrders.complete} loading={executionOrders.loading} error={executionOrders.error} onReload={executionOrders.reload} onBack={closeSelector} onSelect={id=>{setExecutionChoices(old=>({...old,[String(s.factory?.id)+':'+selecting.id]:id}));closeSelector();}}/>;
   return (
     <section className="ff2 ff2-engineer" dir={lang === "ar" ? "rtl" : "ltr"} data-motion-paused={motionPaused}>
-      <header className="ff2-head">
+      <header className="ff2-head"><ProductionStock props={props}/><RawMaterialReturns props={props}/>
         {can('orders','view')&&<ProductionRecordingV3 {...props} completionItem={completionItem} recordingItem={recordingItem} onCompletionClose={()=>{setCompletionItem(null);setRecordingItem(null);}} key={`${s.user.id}:${s.factory?.id}`}/>}
         {(can("lines", "edit") || can("centers", "edit") || can("lines", "create") || can("centers", "create")) &&
           <button className="ff2-manage" onClick={() => props.onManage()}><NavigationIcon name="lines"/>{t("manageLinesMachines")}</button>}
       </header>
+      {executionNotice?.identity===String(s.factory?.id)&&<p role="status" className="notice"><bdi>{executionNotice.code}</bdi> · {t(executionNotice.key)}</p>}
+      {orders.some(o=>o.execution_interrupted_at&&!o.line_id)&&<details className="ff2-queue"><summary>{t('f34AwaitingPlan')}</summary>
+        {orders.filter(o=>o.execution_interrupted_at&&!o.line_id).map(o=><div key={String(o.id)} className="ff2-queue-job"><strong><bdi>{String(o.code)}</bdi> · {t('f34Interrupted')}</strong>
+          <p>{t('f34ScheduleToContinue')}</p>{props.onOutputRelated&&<button type="button" onClick={()=>props.onOutputRelated?.({factory:String(s.factory?.id),view:'planning',item:String(o.id)})}>{t('planning')}</button>}
+          <ProductionExecutionActions props={props} item={o}/></div>)}
+      </details>}
       <section className="ff2-overview ff2-status-toolbar" aria-labelledby="ff2-status-heading">
         <div className="ff2-status-heading"><h2 id="ff2-status-heading">{t('ffProductionLineStatus')}</h2><div className="ff2-status-tools"><p className="ff2-floor-count"><strong>{lines.length.toLocaleString(lang)}</strong> {t('ffLines')}<span aria-hidden="true"> · </span><strong>{centers.length.toLocaleString(lang)}</strong> {t('ffMachines')}</p>
           <button type="button" className="ff2-motion-toggle" aria-label={t(motionPaused?'ffResumeMotion':'ffPauseMotion')} title={t('ffAnimationOnly')} aria-pressed={motionPaused} onClick={()=>setMotionPaused(value=>!value)}><FloorStateIcon state={motionPaused?'running':'idle'}/><span>{t(motionPaused?'ffResumeMotion':'ffPauseMotion')}</span></button></div>
@@ -942,7 +958,7 @@ export default function FactoryFloorV2(
                   <h4 id="ff2-quick-actions">{t("quickActions")}</h4>
                   <div className="ff2-quick-actions">
                     {canStopHere && (
-                      <button onClick={() => { setQuickAction("stop"); setStopSchedule(null); setStopReason(""); setStopDetail(""); setFlowNotice(""); }} disabled={flowBusy}>
+                      <button onClick={() => { setQuickAction("stop"); setStopImpact(""); setStopSchedule(null); setStopReason(""); setStopDetail(""); setFlowNotice(""); }} disabled={flowBusy}>
                         {t("stopMachine")}
                       </button>
                     )}
@@ -1006,12 +1022,14 @@ export default function FactoryFloorV2(
                             <option key={activity} value={activity}>{t(`lossActivity_${activity}`)}</option>)}
                         </select>
                       </label>}
+                      <label>{t("machineStopImpact")}<select required value={stopImpact} onChange={e=>setStopImpact(e.target.value)}><option value="">{t("select")}</option><option value="yes">{t("machineStopAffectsProduction")}</option><option value="no">{t("productionCanContinue")}</option></select></label>
+                      <p className="muted">{t("machineStopImpactValidated")}</p>
                       <label>{t("downtimeOperatorNote")}
                         <textarea maxLength={2000} value={stopDetail}
                           onChange={(event) => setStopDetail(event.target.value)} />
                       </label>
                       <div className="ff2-row-actions">
-                        <button className="primary" disabled={flowBusy ||
+                        <button className="primary" disabled={flowBusy || !stopImpact ||
                           (stopNature === "unplanned" ? !stopReason : !plannedActivity)}>{t("confirmStop")}</button>
                         <button type="button" onClick={() => setQuickAction(null)}>{t("cancel")}</button>
                       </div>

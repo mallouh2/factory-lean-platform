@@ -29,7 +29,8 @@ export function operationalRequest(dataset: OperationalDataset, filters: Row, so
   if ((sort !== undefined && typeof sort !== 'string') || (direction !== undefined && typeof direction !== 'string')) invalid();
   if(dataset==='warehouse-stored-wip'){if(sort!==undefined||direction!==undefined||Object.keys(filters).length)invalid();return{filters,sort:undefined,direction:undefined};}
   if(dataset==='warehouse-requests'){
-    if(sort!==undefined||direction!==undefined||Object.keys(filters).some(k=>!['department_page','kind','search'].includes(k))||!Number.isSafeInteger(filters.department_page)||Number(filters.department_page)<1||Number(filters.department_page)>1000000||typeof filters.search!=='string'||filters.search.length>200||typeof filters.kind!=='string'||!['','issue','unfinished','receipt','acknowledge','dispatch'].includes(filters.kind))invalid();
+    if(filters.status!==undefined&&(typeof filters.status!=='string'||!['active','completed','all'].includes(filters.status)))invalid();
+    if(sort!==undefined||direction!==undefined||Object.keys(filters).some(k=>!['department_page','kind','search','status'].includes(k))||!Number.isSafeInteger(filters.department_page)||Number(filters.department_page)<1||Number(filters.department_page)>1000000||typeof filters.search!=='string'||filters.search.length>200||typeof filters.kind!=='string'||!['','issue','unfinished','receipt','acknowledge','dispatch','raw-return','production-stock'].includes(filters.kind))invalid();
     return{filters,sort:undefined,direction:undefined};
   }
   if (dataset === 'production-history') {
@@ -141,7 +142,7 @@ export function operationalReport(dataset: OperationalDataset, language: 'en' | 
 
 export function operationalFilterText(dataset: OperationalDataset, filters: Row, sort: string | undefined, direction: string | undefined, t: (key: string) => string, identity?: Row, language: 'en' | 'ar' = 'en') {
   if(dataset==='warehouse-stored-wip')return t('all');
-  if(dataset==='warehouse-requests')return `${language==='ar'?'صفحة':'Page'} ${filters.department_page} · ${filters.search||t('all')} · ${filters.kind?warehouseRequestLabels(language)[filters.kind as keyof ReturnType<typeof warehouseRequestLabels>]:t('all')}`;
+  if(dataset==='warehouse-requests')return `${language==='ar'?'صفحة':'Page'} ${filters.department_page} · ${t(String(filters.status||'active'))} · ${filters.search||t('all')} · ${filters.kind?warehouseRequestLabels(language)[filters.kind as keyof ReturnType<typeof warehouseRequestLabels>]:t('all')}`;
   const labels: Record<string, string> = { from: 'historyFrom', to: 'historyTo', request: 'productionOrder', product: 'product', unit: 'recordingUnit', technician: 'recordingTechnician', shift: 'productionShift', corrected: 'historyCorrections', measurement_unit: 'unit', scrap: 'leanDiscardedLegacy', minimum_scrap: 'historyMinimum', scrap_metric: 'historyMetric', scrap_scope: 'historyScope' };
   const translated = (key: string, value: unknown) => {
     const v = String(value);

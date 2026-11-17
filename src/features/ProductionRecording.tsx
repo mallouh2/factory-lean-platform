@@ -32,6 +32,8 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const [shift,setShift]=useState('');
   const [manualShift,setManualShift]=useState(false),[overrideReason,setOverrideReason]=useState('');
   const shiftFactory=String(s.factory?.id || '');
+  const postingMode=useHistoryData<{available:boolean;activation_state?:string}>(surface==='history'?null:'/api/manufactured-output?'+new URLSearchParams({factory:shiftFactory,mode:'options'}),String(s.fetchedAt));
+  const enrolledFactory=postingMode.data?.activation_state==='ENABLED'||postingMode.data?.activation_state==='PAUSED';
   const [shiftPreview,setShiftPreview]=useState<{factory:string;context:Row | undefined}>({factory:shiftFactory,context:s.tables.production_shift_context?.[0]});
   const shiftContext=shiftPreview.factory===shiftFactory?shiftPreview.context:undefined;
   useEffect(()=>{
@@ -47,6 +49,8 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const needsManual=activeShifts.length>0 && !detectedShift;
   const shiftReady=manualShift ? Boolean(shift && overrideReason.trim().length>=3) : !needsManual;
   const [good, setGood] = useState("");
+  const eligibleOutput=Number(good)>0||Number(unfinished)>0||inputSource==='unfinished';
+  const postingBlocked=eligibleOutput&&(!postingMode.data||enrolledFactory);
   const [scrap, setScrap] = useState("0");
   const [discarded,setDiscarded]=useState('0'),[startupKg,setStartupKg]=useState('0');
   const [startupId,setStartupId]=useState(''),[startupAt,setStartupAt]=useState('');
@@ -78,7 +82,7 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   const validQuantities = validMass && (unfinishedOutputValid(good,discarded,unfinished,remainingWork,inputSource==='normal'?null:processQuantity,Number(lot?.production_available ?? lot?.quantity_available ?? 0)) || inputSource==='normal'&&unitTotal===0&&Number(scrap)>0);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!unit || !item || !validQuantities) return;
+    if (!unit || !item || !validQuantities || postingBlocked) return;
     setBusy(true);setNotice("");
     try {
       const measurement=(value:string)=>exactRecording?value:Number(value);
@@ -95,6 +99,7 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
   function openCorrection(entry:Row){setEditing(entry);}
   return <section className="production-recording" aria-labelledby="production-recording-heading">
     <header><div><h3 id="production-recording-heading">{t(surface==='history'?'productionHistory':"productionRecording")}</h3>{surface!=='history'&&<p className="muted">{t("recordingHelp")}</p>}</div></header>
+    {editable&&surface!=='history'&&postingBlocked&&<p role="status">{t(postingMode.data?.activation_state==='PAUSED'?'outputPaused':enrolledFactory?'outputEnrollmentRequired':postingMode.error?'dataWarning':'loading')}</p>}
     {editable && surface!=='history' && <form onSubmit={submit} className="recording-form">
       <fieldset disabled={busy}>
         <Field label={t("unfinishedInputSource")}><select value={inputSource} onChange={e=>{setInputSource(e.target.value);setUnitKey("");setLotId("");setProcessQuantity("");setConfirmed(false);}}><option value="normal">{t("unfinishedNormal")}</option><option value="unfinished">{t("unfinishedProduct")}</option></select></Field>
@@ -151,7 +156,7 @@ export default function ProductionRecording({ snapshot: s, lang, t, can, command
         {item && good!=="" && <p className="recording-preview">{t("recordingAfterRemaining")}: <strong>{q(progress.afterRemaining)} {quantityUnit(item)}</strong></p>}
         {(progress.afterOverproduction>0 || serverOverproduction) && <label className="recording-confirm"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} />
           {t("recordingOverproductionConfirm")}{progress.afterOverproduction>0 && <> · {q(progress.afterOverproduction)} {quantityUnit(item)}</>}</label>}
-        <button className="primary" disabled={!item || !technician || !shiftReady || !validQuantities || ((progress.afterOverproduction>0 || serverOverproduction) && !confirmed)}>
+        <button className="primary" disabled={postingBlocked || !item || !technician || !shiftReady || !validQuantities || ((progress.afterOverproduction>0 || serverOverproduction) && !confirmed)}>
           {t(busy ? "recordingSaving" : "recordingSubmit")}</button>
       </fieldset>
     </form>}

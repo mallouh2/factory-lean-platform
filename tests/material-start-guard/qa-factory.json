@@ -1,0 +1,24 @@
+{
+  "line": "0bad82ff-e6e3-44cf-8a3a-5ce5420eceb1",
+  "owner": "9bd93b3e-2a88-4d7f-9050-786dfe1c0d73",
+  "viewer": "46590697-4611-4420-b050-65f7774328cd",
+  "worker": "82bab6e7-30a0-4ab8-b1dd-143984785a1a",
+  "factory": "dd636f69-05e7-4a02-88d1-5954369b7307",
+  "machine": "71193150-0cb0-4c31-bc91-8731b910f9c3",
+  "product": "40ef9c81-a14a-4631-b7a1-ecd6836c9441",
+  "compound": "e5865462-e028-4bf1-b4f6-49be9b6aad0d",
+  "products": [
+    "40ef9c81-a14a-4631-b7a1-ecd6836c9441",
+    "7f178f9a-631f-4863-85cd-9a6ba9ace795",
+    "a443443c-6065-4fc4-834f-c3ed87a0c721"
+  ],
+  "materials": [
+    "96d45a81-ea80-431e-97ee-f5260ccc6295",
+    "c506e3eb-8b7c-4ae1-834a-e73170442967",
+    "c3d8ff7f-8d35-4167-8c37-be1c661775c9"
+  ],
+  "other_line": "607a1aa6-ca75-4e62-a850-6b4c5161304d",
+  "other_machine": "419ff494-ca20-4d5b-aea8-4d3b49bcefb9",
+  "finished_warehouse": "697957f5-592a-48ce-bd22-c5ba7dd28fcc",
+  "unfinished_warehouse": "6d28ea3e-4d10-4654-86ee-55417791a0c1"
+}

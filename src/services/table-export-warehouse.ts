@@ -6,7 +6,7 @@ import type {authenticatedClient} from './authorization';
 type Client=Awaited<ReturnType<typeof authenticatedClient>>['db'];
 type Row=Record<string,any>;
 export async function warehouseRequestExportRows(db:Client,factory:string,filters:Row,language:'en'|'ar'){
- return (await warehouseRequestsPage(db,factory,{page:filters.department_page,kind:filters.kind,search:filters.search,language})).rows;
+ return (await warehouseRequestsPage(db,factory,{page:filters.department_page,kind:filters.kind,search:filters.search,status:filters.status||'active',language})).rows;
 }
 export function warehouseSupplementReport(dataset:string,language:'en'|'ar',rows:Row[]){
  const words:Record<string,string>=language==='ar'?ar:en,t=(key:string)=>words[key]||key,say=(a:string,b:string)=>language==='ar'?b:a;

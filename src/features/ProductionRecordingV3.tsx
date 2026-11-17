@@ -1,3 +1,5 @@
+import OrderReference from '@/components/OrderReference';
+import {recordingRejectionKey} from '@/utils/recording-rejection.mjs';
 import {ProductionMaterials} from './MaterialPreparation';
 import PlanningChangeUpdates from './PlanningChangeUpdates';
 import HistoricalProductionRecording,{HistoricalApprovalQueue} from './HistoricalProductionRecording';
@@ -29,7 +31,7 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
  const [open,setOpen]=useState(false),[history,setHistory]=useState(false),[mode,setMode]=useState<'current'|'existing'>('current');
  const [workPage,setWorkPage]=useState<WorkPage|null>(null),[selected,setSelected]=useState(''),[query,setQuery]=useState('');
  const [draft,setDraft]=useState(initial),[hasWip,setHasWip]=useState(false),[technician,setTechnician]=useState('');
- const [outputOptions,setOutputOptions]=useState<{item:string;available:boolean;operations:OutputOperation[];work_kind?:'COMPLETE'|'REPLACE'|'STOCK'|null;replacement_allowance?:string;recovery?:{lot_id:string;remaining:string;missing_operations:string[];operations:string[];material_status:string}}|null>(null),[outputError,setOutputError]=useState(false);
+ const [outputOptions,setOutputOptions]=useState<{item:string;available:boolean;activation_state?:string;operations:OutputOperation[];work_kind?:'COMPLETE'|'REPLACE'|'STOCK'|null;replacement_allowance?:string;recovery?:{lot_id:string;remaining:string;missing_operations:string[];operations:string[];material_status:string}}|null>(null),[outputError,setOutputError]=useState(false);
  const [unfinishedGroups,setUnfinishedGroups]=useState<OutputGroup[]>([]);
  const outputDrafts=useRef(new Map<string,OutputGroup[]>());
  const [loading,setLoading]=useState(false),[workError,setWorkError]=useState(''),[error,setError]=useState(''),[retry,setRetry]=useState(0);
@@ -48,8 +50,9 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
  const currentSummary=summary?.item_id===selected?summary:null;
  const ending=!!endItem&&selected===endItem&&currentSummary?.status==='active';
  const outputMode=outputOptions?.item===selected&&outputOptions.available;
- useEffect(()=>{if(!open||!selected)return;const abort=new AbortController();setOutputOptions(null);setOutputError(false);
-  fetch('/api/manufactured-output?'+new URLSearchParams({factory,mode:'options',target:selected}),{signal:abort.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error();const d=await r.json();if(typeof d.available!=='boolean'||(d.available&&(!Array.isArray(d.operations)||!Object.hasOwn(d,'work_kind')||(d.work_kind!==null&&!['COMPLETE','REPLACE','STOCK'].includes(d.work_kind)))))throw Error();setOutputOptions({item:selected,available:d.available,operations:d.operations||[],work_kind:d.work_kind,replacement_allowance:d.replacement_allowance,recovery:d.recovery});}).catch(e=>{if(e.name!=='AbortError')setOutputError(true);});return()=>abort.abort();
+ const outputPaused=outputOptions?.item===selected&&outputOptions.activation_state==='PAUSED';
+ useEffect(()=>{if(!open)return;const abort=new AbortController();setOutputOptions(null);setOutputError(false);
+  fetch('/api/manufactured-output?'+new URLSearchParams({factory,mode:'options',...(selected?{target:selected}:{})}),{signal:abort.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error();const d=await r.json();if(typeof d.available!=='boolean'||(d.available&&(!Array.isArray(d.operations)||!Object.hasOwn(d,'work_kind')||(d.work_kind!==null&&!['COMPLETE','REPLACE','STOCK'].includes(d.work_kind)))))throw Error();setOutputOptions({item:selected,available:d.available,activation_state:d.activation_state,operations:d.operations||[],work_kind:d.work_kind,replacement_allowance:d.replacement_allowance,recovery:d.recovery});}).catch(e=>{if(e.name!=='AbortError')setOutputError(true);});return()=>abort.abort();
  },[factory,selected,open,retry]);
  const recovery=outputMode?outputOptions?.recovery:null;
  const workKind=currentSummary&&outputOptions?.item===selected&&(outputOptions.work_kind||currentSummary.request_type||currentSummary.replacement_original_item_id||currentSummary.quality_origin_rejection_id)
@@ -137,6 +140,7 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
  async function submitPayload(payload:Record<string,unknown>,completion?:CompletionTarget){
   if(inFlight.current)throw Error('prv3Unresolved');
   if(!allowed)throw Error('permissionError');
+  if(outputPaused)throw Error('outputPaused');
   inFlight.current=true;setBusy(true);setError('');
   try{
    if(!navigator.locks)throw Error('prv3StorageUnavailable');
@@ -175,6 +179,7 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
   try{
    if(expired)throw Error('prv3Expired');
    if(currentSummary.makeup_committed)throw Error('prv3MakeupCommitted');
+   if(outputPaused)throw Error('outputPaused');
    if(outputError||outputOptions?.item!==selected)throw Error('recordingUnavailable');
    let good:string,scrap:string;
    try{good=recordingNumber(draft.good);if(row.unit==='piece'&&good.includes('.'))throw Error();}catch{throw Error('prv3InvalidGood');}
@@ -196,7 +201,7 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
  const field=(key:'input'|'discarded'|'good'|'scrap'|'unfinished'|'remaining'|'notes',value:string)=>{if(key==='good')goodTouched.current.add(selected);setDraft(d=>({...d,[key]:value}));};
  const workMessage=recordingWorkMessage(workPage,row,selected,expired);
  const identity=s.tables.production_orders?.find(x=>x.id===selected),product=s.tables.products?.find(x=>x.id===identity?.product_id),line=s.tables.production_lines?.find(x=>x.id===identity?.line_id),request=s.tables.production_requests?.find(x=>x.id===identity?.request_id);
- const quantitySummary=currentSummary?<><dl className="prv3-quantity-summary">{[['prv3Requested',currentSummary.requested],['prv3Produced',currentSummary.produced_good||currentSummary.recorded_good],['recordingRemaining',currentSummary.remaining]].map(([label,value])=><div key={label}><dt>{t(label)}</dt><dd><bdi>{value}</bdi> {unit(currentSummary.unit)}</dd></div>)}</dl>{currentSummary.produced_good&&currentSummary.produced_good!==currentSummary.recorded_good&&<details className="prv3-details"><summary>{lang==='ar'?'التسجيل الأصلي':'Original recording'}</summary><bdi>{currentSummary.recorded_good}</bdi> {unit(currentSummary.unit)}</details>}</>:null;
+ const quantitySummary=currentSummary?<><dl className="prv3-quantity-summary">{[['prv3Requested',currentSummary.requested],['prv3Produced',currentSummary.produced_good||currentSummary.recorded_good],['recordingOrdinaryRemaining',currentSummary.remaining],...(currentSummary.remaining_demand!=null?[['recordingDemandRemaining',currentSummary.remaining_demand]]:[])].map(([label,value])=><div key={label}><dt>{t(label)}</dt><dd><bdi>{value}</bdi> {unit(currentSummary.unit)}</dd></div>)}</dl>{currentSummary.produced_good&&currentSummary.produced_good!==currentSummary.recorded_good&&<details className="prv3-details"><summary>{lang==='ar'?'التسجيل الأصلي':'Original recording'}</summary><bdi>{currentSummary.recorded_good}</bdi> {unit(currentSummary.unit)}</details>}</>:null;
  const similar=row&&recent.some(e=>e.recorded_by===actor&&sameMeasurement(e,row.item_id,draft.good,draft.scrap));
  const footer=(buttons:React.ReactNode)=><footer className="prv3-footer"><span>{t(!intent&&mode==='current'?'prv3CurrentShiftOnly':'productionRecording')}</span><div>{buttons}</div></footer>;
  const message=(key:string,kind='info')=><p className={`prv3-notice ${kind}`} role={kind==='error'?'alert':'status'}>{t(key)}</p>;
@@ -219,7 +224,7 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
       <div className={`prv3-values${[result.receipt.original_payload?.good,result.receipt.original_payload?.scrap_kg].some(value=>String(value??'').length>16)?' prv3-values-precise':''}`}><div><strong><bdi>{String(result.receipt.original_payload?.good??'—')}</bdi> {unit(unitName)}</strong><p>{t('recordingGood')}</p></div><div><strong><bdi>{String(result.receipt.original_payload?.scrap_kg??'—')}</bdi> {t('kg')}</strong><p>{t('recordingScrap')}</p></div></div>
       {result.current&&<details><summary>{t('prv3CurrentValues')}</summary><p>{t('recordingGood')}: <bdi>{String(result.current.good??'—')}</bdi> {unit(unitName)} · {t('recordingScrap')}: <bdi>{String(result.current.scrap_kg??'—')}</bdi> {t('kg')}</p></details>}
       {recentError&&message(recentError,'warning')}</section>
-    :intent?<section className="prv3-result"><h3>{t(result?.kind==='REJECTED'?'prv3Rejected':'prv3Unconfirmed')}</h3><p>{t(result?.kind==='REJECTED'?(result.reason==='SHIFT_EXPIRED'?'prv3Expired':result.reason==='OVERPRODUCTION_CONFIRMATION_REQUIRED'?'recordingOverproductionConfirm':result.error):'prv3UnknownHelp')}</p>
+    :intent?<section className="prv3-result"><h3>{t(result?.kind==='REJECTED'?'prv3Rejected':'prv3Unconfirmed')}</h3><p>{t(result?.kind==='REJECTED'?(recordingRejectionKey(result.reason,result.error)):'prv3UnknownHelp')}</p>
       {result?.kind==='UNKNOWN'&&result.error!=='prv3Unconfirmed'&&message(result.error,'warning')}
       <details><summary>{t('prv3SubmissionDetails')}</summary><p>{t('prv3SameIntent')}</p><bdi className="prv3-reference">{intent.request}</bdi></details></section>
     :endOnly?<section className="prv3-end-confirm"><h3>{t('prv3EndWithout')}</h3>{quantitySummary}<p>{t('prv3EndWithoutConfirm')}</p><button type="button" onClick={()=>setEndOnly(false)} disabled={busy}>{t('cancel')}</button><button type="button" className="primary" disabled={busy||!allowed||!currentSummary?.actual_start} onClick={()=>{if(currentSummary?.actual_start)void completeExecution({item:selected,actual_start:currentSummary.actual_start});}}>{t('prv3ConfirmEnd')}</button></section>
@@ -238,10 +243,10 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
        </select></label>}
        {workPage?.next_cursor&&<button type="button" onClick={async()=>{setLoading(true);try{const response=await fetch('/api/production-shift-work?'+new URLSearchParams({factory,page_size:'100',cursor:workPage.next_cursor!}),{cache:'no-store'});const data=await response.json();if(!response.ok||data.factory_id!==factory||data.contract_version!==3)throw Error('shiftWorkChanged');setWorkPage({...data,rows:[...workPage.rows,...data.rows]});}catch{setWorkError('prv3WorkChanged');}finally{setLoading(false);}}}>{t('prv3MoreWork')}</button>}
        {row&&<>
-        <section className="prv3-work"><h3>{name(row,'product')}</h3><p>{row.request_code&&row.request_code!==row.item_code&&<><bdi>{row.request_code}</bdi> / </>}<bdi>{row.item_code}</bdi> · {name(row,'line')} · {t(workKind)}</p><span className={`prv3-badge ${row.status==='completed'?'idle':'success'}`}>{t(row.status==='completed'?'prv3Completed':'prv3Active')}</span>{row.status==='completed'&&row.actual_finish&&<p>{t('prv3CompletedAt')} {formatTime(row.actual_finish,lang,String(s.factory?.timezone||occ?.timezone||'UTC'))}</p>}</section>
+        <section className="prv3-work"><h3>{name(row,'product')}</h3><p>{row.request_code&&row.request_code!==row.item_code&&<><bdi>{row.request_code}</bdi> / </>}<OrderReference reference={row.item_code} item={row.item_id}/> · {name(row,'line')} · {t(workKind)}</p><span className={`prv3-badge ${row.status==='completed'?'idle':'success'}`}>{t(row.status==='completed'?'prv3Completed':'prv3Active')}</span>{row.status==='completed'&&row.actual_finish&&<p>{t('prv3CompletedAt')} {formatTime(row.actual_finish,lang,String(s.factory?.timezone||occ?.timezone||'UTC'))}</p>}</section>
         {quantitySummary}
 
-        {outputError&&message('recordingUnavailable','error')}
+        {outputError&&message('recordingUnavailable','error')}{outputPaused&&message('outputPaused','info')}
         {occ&&<details className="prv3-details"><summary>{t('prv3ShiftDetails')}</summary><p className="prv3-shift">{lang==='ar'?occ.name_ar||occ.name:occ.name} · <bdi>{occ.business_date}</bdi><br/>{formatTime(occ.starts_at,lang,String(s.factory?.timezone||occ.timezone))} — {formatTime(occ.ends_at,lang,String(s.factory?.timezone||occ.timezone))}</p></details>}
         {currentSummary?.makeup_committed&&message('prv3MakeupCommitted','warning')}
         {row.status==='completed'&&row.same_shift_recording_available===true&&canRecordWork(workPage,row)&&message('prv3CompletedSameShift','info')}
@@ -262,9 +267,9 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
       </fieldset>
      </form>
      <details className="prv3-details"><summary>{t('prv3Recent')}</summary>{recentError&&message(recentError,'warning')}{recent.length?recent.map(entry=><div className="prv3-recent" key={entry.id}><p><strong><bdi>{entry.good}</bdi> {unit(entry.unit)}</strong> · {t('recordingScrap')} <bdi>{entry.scrap_kg}</bdi> {t('kg')}</p><p><bdi>{entry.request_code}</bdi> · {lang==='ar'?entry.line_name_ar||entry.line_name:entry.line_name} · {formatTime(entry.recorded_at,lang,String(s.factory?.timezone||'UTC'))}</p></div>):<p>{t('prv3NoRecent')}</p>}{props.onProductionHistoryOpen&&<button type="button" onClick={()=>{close();props.onProductionHistoryOpen?.();}}>{t('productionHistory')}</button>}</details>
-     {!outputMode&&!endItem&&<details className="prv3-details"><summary>{t('prv3OtherOptions')}</summary><p>{t('prv3OtherHelp')}</p><button type="button" onClick={()=>{setExistingMounted(true);setMode('existing');}}>{t('prv3OpenExisting')}</button></details>}
+     {!outputMode&&!outputPaused&&!endItem&&<details className="prv3-details"><summary>{t('prv3OtherOptions')}</summary><p>{t('prv3OtherHelp')}</p><button type="button" onClick={()=>{setExistingMounted(true);setMode('existing');}}>{t('prv3OpenExisting')}</button></details>}
     </>}
-    {existingMounted&&<div hidden={mode!=='existing'||!!intent}><p className="prv3-notice">{t('prv3ExistingHelp')}</p><button type="button" onClick={()=>setMode('current')} disabled={busy}>{t('prv3BackToCurrent')}</button>
+    {existingMounted&&<div hidden={mode!=='existing'||!!intent||outputPaused}><p className="prv3-notice">{t('prv3ExistingHelp')}</p><button type="button" onClick={()=>setMode('current')} disabled={busy}>{t('prv3BackToCurrent')}</button>
       <ProductionRecording {...props} surface="record" exactRecording command={async(command,args)=>{
        if(command!=='record_lean_production')return props.command(command,args);
        return submitPayload(args.payload as Record<string,unknown>);
@@ -273,7 +278,7 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
    {endState==='ended'&&!intent?footer(<button type="button" className="primary" onClick={close}>{t('done')}</button>)
    :result?.kind==='COMMITTED'?footer(intent?.completion&&endState!=='ended'?<><button type="button" onClick={close} disabled={busy}>{t('prv3Keep')}</button><button type="button" className="primary" disabled={busy||!allowed} onClick={()=>void completeExecution(intent.completion!)}>{t('prv3RetryEnd')}</button></>:<button type="button" className="primary" onClick={acknowledge} disabled={busy}>{t('done')}</button>)
    :intent?footer(<><button type="button" onClick={close} disabled={busy}>{t('prv3Keep')}</button>{result?.kind==='REJECTED'?<button type="button" className="primary" onClick={acknowledge} disabled={busy}>{t('prv3ReviewDraft')}</button>:<><button type="button" onClick={()=>void checkStatus()} disabled={busy}>{t('prv3Check')}</button><button type="button" className="primary" onClick={()=>void retryIntent()} disabled={busy||!allowed}>{t('prv3RetrySame')}</button></>}</>)
-   :endOnly||period==='previous'?null:mode==='current'?footer(<><button type="button" onClick={close} disabled={busy}>{t('cancel')}</button>{ending&&<button type="button" onClick={()=>setEndOnly(true)} disabled={busy||!allowed||summaryLoading||summaryError}>{t('prv3EndWithout')}</button>}<button key="submit-recording" className="primary" form="prv3-record-form" type="submit" disabled={busy||!row||!occ||loading||!!workError||summaryLoading||summaryError||!currentSummary||currentSummary.makeup_committed||!canRecordWork(workPage,row)||!allowed||expired||outputError||outputOptions?.item!==selected}>{busy?t('recordingSaving'):t(ending?'prv3SaveAndEnd':'prv3Save')}</button></>):null}
+   :endOnly||period==='previous'?null:mode==='current'?footer(<><button type="button" onClick={close} disabled={busy}>{t('cancel')}</button>{ending&&<button type="button" onClick={()=>setEndOnly(true)} disabled={busy||!allowed||summaryLoading||summaryError}>{t('prv3EndWithout')}</button>}<button key="submit-recording" className="primary" form="prv3-record-form" type="submit" disabled={busy||!row||!occ||loading||!!workError||summaryLoading||summaryError||!currentSummary||currentSummary.makeup_committed||!canRecordWork(workPage,row)||!allowed||expired||outputError||outputPaused||outputOptions?.item!==selected}>{busy?t('recordingSaving'):t(ending?'prv3SaveAndEnd':'prv3Save')}</button></>):null}
   </Dialog>}
   {history&&<Dialog title={t('productionHistory')} t={t} onClose={close} className="prv3-dialog prv3-history" headerActions={headerActions}><div className="prv3-body"><ProductionRecording {...props} surface="history"/></div></Dialog>}
  </div>;

@@ -1,3 +1,9 @@
+# Current rule — 10 November 2026, Group 1B
+
+Warehouse owns material quantity recording and reconciliation. Production material views are read-only. Use independent raw-material returns rather than an action on the original issue. The dated operator measured-use step and return instructions below are retained as historical evidence and are superseded by [the current accounting and return contract](material-accounting-independent-returns.md). The current owner preview is on D: at port 29721; old 4222 references below describe earlier verification.
+
+---
+
 # Physical production inputs and local material preparation
 
 Locally implemented only in the isolated4222 source. See [verified rollout](automatic-material-preparation-rollout.md) for exact paths, migrations, evidence and release limits.

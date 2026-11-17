@@ -67,5 +67,5 @@ export function correctionFailure(error,write=false){
   code==='40001'||message==='request_conflict'||typeof message==='string'&&(/^source_/.test(message)||message==='unfinished_already_consumed')?409:code==='P0002'?404:
   code==='22023'||code==='23514'||['quality_weight','unfinished_conservation','recording_correction_reason','lean_invalid','recording_overproduction_confirmation'].includes(message)?422:503;
  const key=status===401?'unauthorized':status===403?'permissionError':status===409?'correctionChanged':status===404?'noResults':status===422?'invalidCorrection':'dataWarning';
- return {status,body:{error:key,...(status===409?{refresh:true}:{}),...(write&&status===503?{outcome:'UNKNOWN',retry_same_request:true}:{})}};
+ return {status,body:{error:['production_stock_shortage','production_stock_legacy_review','production_stock_recipe_review'].includes(message)?message:key,...(status===409?{refresh:true}:{}),...(write&&status===503?{outcome:'UNKNOWN',retry_same_request:true}:{})}};
 }

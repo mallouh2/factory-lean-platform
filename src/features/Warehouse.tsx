@@ -1,3 +1,4 @@
+import MaterialDeviationPolicy from './MaterialDeviationPolicy';
 import PlanningChangeUpdates from './PlanningChangeUpdates';
 import StoredUnfinishedInventory from './StoredUnfinishedInventory';
 import WarehouseRequests from './WarehouseRequests';
@@ -82,6 +83,7 @@ export default function Warehouse(props: FeatureProps & {initialWorkspace?:'inve
     </Dialog>}
     {dialog==='warehouses'&&<Dialog {...props} title={lang==='ar'?'إدارة المستودعات':'Manage Warehouses'} busy={busy} onClose={()=>{if(!busy)setDialog('');}}><WarehouseDefinitions {...props} onBusyChange={setBusy}/></Dialog>}
     {dialog && dialog!=='warehouses' && <Dialog {...props} title={t(dialog === 'configure' ? 'configureStock' : 'adjustStock')} t={t} onClose={() => { if (!busy) setDialog(''); }}>
+      {dialog==='configure'&&<MaterialDeviationPolicy props={props}/>}
       {dialog==='configure'&&<button onClick={()=>{setDialog('adjust');setQuantity('');setReason('');setNotice('');}}>{t('adjustStock')}</button>}
       <form onSubmit={event => { event.preventDefault();
         if (dialog === 'configure') run('configure_warehouse_product', { product, source, mode, unit, minimum: mode === 'MAKE_TO_STOCK' ? Number(minimum) : null, maximum: mode === 'MAKE_TO_STOCK' && maximum !== '' ? Number(maximum) : null });

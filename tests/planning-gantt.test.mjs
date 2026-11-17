@@ -21,9 +21,10 @@ test('unknown start or finish never fabricates an hour or an actual timestamp',(
  const x=ganttLayout([job('unknown-end',60,null),{order:{id:'no-start'}}],at,at+day);
  assert.equal(x.jobs[0].width,0);assert.equal(x.jobs[0].finish,null);assert.equal(x.unknown[0].id,'no-start');
 });
-test('nonoverlapping jobs share one lane; adjacent short labels and real overlaps gain only needed tracks',()=>{
+test('nonoverlapping sequential jobs share one lane, including adjacent short jobs; only actual overlaps gain tracks',()=>{
  assert.equal(ganttLayout([job('a',0,360),job('b',480,840)],at,at+day).tracks,1);
- assert.equal(ganttLayout([job('a',60,61),job('b',62,63)],at,at+day).tracks,2);
+ assert.equal(ganttLayout([job('a',60,61),job('b',62,63)],at,at+day).tracks,1);
+ assert.equal(ganttLayout([job('a',60,61),job('b',61,62)],at,at+day).tracks,1);
  assert.equal(ganttLayout([job('a',0,240),job('b',120,360)],at,at+day).tracks,2);
 });
 test('maintenance and production share presentation tracks without changing capacity state',()=>{
@@ -31,14 +32,16 @@ test('maintenance and production share presentation tracks without changing capa
  const before=structuredClone(reservation),x=ganttLayout([job('a',0,20)],at,at+day,1000,[reservation]);
  assert.equal(x.reservations.length,1);assert.equal(x.tracks,1);assert.equal(x.reservations[0].track,0);assert.deepEqual(reservation,before);
  assert.equal(ganttLayout([job('a',250,400)],at,at+day,1000,[reservation]).tracks,2);
+ const overlap=ganttLayout([job('a',0,20),job('b',310,330)],at,at+day,1000,[reservation]);assert.deepEqual(overlap.jobs.map(j=>j.track),[0,0]);assert.equal(overlap.reservations[0].track,1);
 });
-test('short annotation has a visible gap and includes the marker in collision packing',()=>{
+test('compact annotation metadata preserves its gap but cannot move a saved time bar to another lane',()=>{
  const x=ganttLayout([job('a',60,61),job('b',62,63)],at,at+day,1000);
  for(const y of x.jobs){assert.equal(y.a,y.left/100*1000);assert.equal(y.b,(y.left+y.width)/100*1000+12+168);}
- assert.equal(x.tracks,2);assert.equal(x.jobs[0].width,1/1440*100);
+ assert.equal(x.tracks,1);assert.equal(x.jobs[0].width,1/1440*100);
  const edge=ganttLayout([job('edge',1439,1440)],at,at+day,1000).jobs[0];
  assert.equal(edge.captionEnd,true);assert.equal(edge.a,edge.left/100*1000-12-168);assert.equal(edge.b,1000);
 });
+test('lane identities depend on the full approved intervals, never clipping, zoom, pixel width or server ordering',()=>{const schedule=[job('a',0,400),job('b',60,120),job('c',140,180),job('d',400,401),job('e',401,402)];const baseline=Object.fromEntries(ganttLayout(schedule,at,at+day).jobs.map(j=>[j.order.id,j.track]));for(const [from,until,width]of [[at+90*minute,at+500*minute,390],[at,at+day*7,2200],[at+130*minute,at+day,700]])for(const list of [schedule,[...schedule].reverse()])for(const j of ganttLayout(list,from,until,width).jobs)assert.equal(j.track,baseline[j.order.id]);assert.deepEqual(baseline,{a:0,b:1,c:1,d:0,e:0});});
 test('annotation stacking is deterministic regardless of server row order and repeated refresh',()=>{
  const jobs=[job('a',60,61),job('b',62,63),job('c',63,64)];
  assert.deepEqual(ganttLayout(jobs,at,at+day),ganttLayout([...jobs].reverse(),at,at+day));

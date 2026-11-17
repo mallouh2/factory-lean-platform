@@ -1,3 +1,35 @@
+# 2026-11-16 — trustworthy execution outcomes and line timeline selection (local)
+
+Post-F34.1 distinguishes committed, rejected and unresolved operations with receipt-based recovery; routine scheduled execution no longer demands an invented reason. A scoped Floor timeline shows unfinished work, true planned intervals and basic blockers while Planning remains independent. Stable Gantt tracks now follow saved intervals rather than hidden caption widths. These are expected MES usability/integrity parity, not unique differentiation or measured productivity claims. Focused local tests/browser checks passed; owner acceptance, including F34.1, and hosted rollout remain pending. F37 dual-Gantt Lean comparison is still future work. See [the current contract](production-order-interruption.md) and D:/FactoryLean/Reports/Post-F341-20261116/REPORT.md. Earlier entries retain their dated evidence.
+
+# 2026-11-16 — independent approved plan and actual execution (local)
+
+F34.1 keeps approved Gantt assignments and revisions unchanged while engineers select scheduled work, pause/release actual capacity, switch and resume. Protected run history retains actual times, actors and reasons; paused bookings do not consume physical stock. This is expected MES workflow parity, not a unique differentiator or measured benefit. F37 original-plan/revision/actual dual-Gantt analysis remains future Lean work and is not implemented. Owner acceptance and hosted rollout remain pending. See [the current contract](production-order-interruption.md). Earlier dated entries are historical.
+
+# 2026-11-15 — reasoned production interruption and line release (local)
+
+F34 separates unscheduling, order interruption, priority dispatch and final Finish while preserving the same order, recorded output/Quality and physical stock. Remaining-work rescheduling, current-run identity and audited reasons protect continuation and retries. This is expected manufacturing workflow parity, not a unique differentiator or measured productivity claim. Owner acceptance and hosted rollout remain pending. See [the bounded contract](production-order-interruption.md).
+
+# 2026-11-11 — shared Production Stock and shift handover (local)
+
+Independent multi-material deliveries, shift-limited bookings, actual-output/Scrap theoretical consumption and immutable handover discrepancies/notes now separate physical custody from forecasts and use. This is ordinary manufacturing workflow parity; discrepancy history supports future Lean analysis but does not claim automated root-cause findings or measured savings. Focused local checks and browser smoke passed;owner acceptance/hosted rollout remain pending. See [the bounded contract](production-stock-shift-handover.md). Earlier decisions remain historical.
+
+# 2026-11-11 — execution and machine status synchronization (local)
+
+Start/Finish now synchronize eligible Running/Idle states, retain legitimate downtime and open transfer ownership, validate stop impact, and prevent idle-line Pause/Resume. This is expected manufacturing usability parity, not a unique differentiator or a telemetry/productivity claim. Focused local checks and browser smoke passed; owner acceptance and hosted rollout remain pending. See [the bounded contract](execution-machine-status.md).
+
+# 2026-11-10 — Warehouse accounting and independent raw returns (local)
+
+Warehouse now owns material reconciliation; Production can request consolidated unused-material returns without choosing each original order. Physical partial receipt transfers custody once with retained origin and audit, while original issues remain fulfilled. Primary execution references distinguish Product Items from parent requests. This is expected manufacturing parity (C), not a unique differentiator, automatic consumption or measured savings claim. EN/AR desktop/mobile and protected local accounting were tested. Hosted rollout and owner acceptance of this Group 1B remain pending. See [the bounded contract and limits](material-accounting-independent-returns.md). Earlier Group 1 Start handover has been manually accepted by the owner.
+
+# 2026-11-09 — material custody admission (local verification)
+
+The existing material-request workflow now presents authoritative fractional handover limits and enforces physical Production custody before a new item execution starts. Genuine postponements explain their cause; eligible obsolete requests have an explicit audited recheck, while completed historical custody gaps remain visible for reconciliation. This is expected manufacturing workflow parity (C), not a new differentiation, automatic consumption or measured savings claim. Partial handovers are supported; bounded partial-run authorization remains a separate contract. See [the local contract and verification limits](material-custody-start-guard.md). Hosted rollout and owner acceptance remain pending.
+
+# 2026-11-09 — cut-length stock identity (local verification)
+
+Sales supports explicit whole-pipe count and length for configured meter-based finished products. Separate stock identities preserve physical length through production, Quality, receipts, reservation and dispatch; equal total meters do not make lengths interchangeable. This is expected inventory/manufacturing parity (C), not a new differentiation or measured savings claim. Shared permission-gated customer references and width-measured Gantt labels improve operational clarity. See [the bounded model and verification limits](pipe-length-stock-identity.md). Hosted rollout and owner acceptance remain pending.
+
 # Factory Lean — Product Differentiators
 
 ## 2026-11-04 — explicit physical-input preparation and custody (local)
