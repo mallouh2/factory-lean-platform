@@ -8,11 +8,12 @@ import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {randomBytes,randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {createLeanComparisonHandler} from '../../supabase/functions/lean-comparison/handler.mjs';
 const runtimePath=process.argv[2];if(!runtimePath)throw Error('Explicit disposable runtime required');
 const config=JSON.parse(fs.readFileSync(runtimePath,'utf8').replace(/^\ufeff/,''));
 if(process.env.NODE_ENV==='production'||config.marker!=='FACTORY_LEAN_DISPOSABLE_LOOPBACK_ONLY'||config.databaseHost!=='127.0.0.1'||config.database!=='factory_lean_quality_local'||!path.resolve(config.root).startsWith(path.resolve(tmpdir())+path.sep))throw Error('Not a disposable local fixture');
 const appOrigin=`http://127.0.0.1:${config.applicationPort}`,backendOrigin=`http://127.0.0.1:${config.backendPort}`,key='local-preview-public-not-a-hosted-key';
-const env=fs.readFileSync(path.join(config.app,'.env.local'),'utf8');if(!env.includes('SUPABASE_URL='+backendOrigin)||/https:\/\//.test(env))throw Error('Application environment is not isolated');
+const env=fs.readFileSync(config.environmentFile||path.join(config.app,'.env.local'),'utf8');if(!env.includes('SUPABASE_URL='+backendOrigin)||/https:\/\//.test(env))throw Error('Application environment is not isolated');
 const quote=s=>"'"+String(s).replaceAll("'","''")+"'";
 function sql(query){return new Promise((resolve,reject)=>{const child=spawn(path.join(config.bin,'psql.exe'),['-X','-qAt','-h','127.0.0.1','-p',String(config.databasePort),'-U','quality_fixture','-d',config.database,'-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose'],{windowsHide:true});let data='',error='';child.stdout.on('data',v=>data+=v);child.stderr.on('data',v=>error+=v);child.on('error',reject);child.on('close',code=>code?reject(Error(error)):resolve(data.trim()));child.stdin.end(query)})}
 verifyRuntime(config,env);
@@ -34,6 +35,24 @@ function issue(account,session=randomUUID()){
 function user(a){return{id:a.id,aud:'authenticated',role:'authenticated',email:a.email,email_confirmed_at:'2026-01-01T00:00:00Z',confirmed_at:'2026-01-01T00:00:00Z',created_at:'2026-01-01T00:00:00Z',app_metadata:{provider:'email',providers:['email']},user_metadata:{},identities:[]}}
 function authenticated(req){try{const raw=String(req.headers.authorization||'').replace(/^Bearer /,''),[head,payload,signature]=raw.split('.'),want=Buffer.from(sign(head+'.'+payload)),actual=Buffer.from(signature||'');if(want.length!==actual.length||!timingSafeEqual(want,actual))return null;const claims=JSON.parse(Buffer.from(payload,'base64url'));const account=sessions.get(claims.session_id);return account&&claims.exp>Date.now()/1000&&claims.sub===account.id?{account,claims}:null}catch{return null}}
 const metadata=new Map();
+// Private in-process transport only: this key is never served, persisted, or
+// accepted by the HTTP Data API. The existing Edge handler supplies evidence;
+// ordinary clients retain their authenticated SQL grants, never service_role.
+const leanService=randomBytes(48).toString('hex');
+const leanComparison=createLeanComparisonHandler({url:backendOrigin,key,service:leanService,fetch:async(input,init)=>{
+ const url=new URL(input),headers=new Headers(init.headers);
+ assert.equal(url.origin,backendOrigin);
+ if(headers.get('authorization')!==`Bearer ${leanService}`)return fetch(input,init);
+ assert.equal(url.pathname,'/rest/v1/rpc/store_lean_evidence');assert.equal(init.method,'POST');
+ const a=JSON.parse(init.body);
+ try{
+  const data=await sql(`begin;${databaseGuard(config)}set local statement_timeout='30s';set local lock_timeout='10s';do $$begin perform set_config('request.jwt.claim.role','service_role',true);perform set_config('request.jwt.claims','{"role":"service_role"}',true);end$$;set local role service_role;with args as(select ${quote(JSON.stringify(a))}::jsonb a)select public.store_lean_evidence((a->>'factory')::uuid,(a->>'actor')::uuid,a->>'operation',(a->>'target')::uuid,(a->>'expected_revision')::integer,a->'evidence',a->'payload',(a->>'request_id')::uuid)from args;commit;`);
+  return new Response(data,{headers:{'Content-Type':'application/json'}});
+ }catch(error){
+  const match=/ERROR:\s+([A-Z0-9]{5}):\s+([^\r\n]+)/.exec(error.message||'');
+  return Response.json({message:match?.[2]||'dataWarning'},{status:match?.[1]==='42501'?403:match?.[1]==='40001'?409:400});
+ }
+}});
 async function rpc(name,args,raw,identity,isGet=false){
  // Mirror the existing public Data API exposure. SQL EXECUTE grants and the
  // original authenticated actor remain authoritative; never expose private RPCs.
@@ -63,6 +82,10 @@ const server=createServer(async(req,res)=>{try{
   return account?json(issue(account,session)):json({code:'invalid_credentials',error_code:'invalid_credentials',msg:'Invalid local fixture credentials'},400);
  }
  if(!identity){counts.denied++;return json({code:'42501',message:'Invalid local fixture session'},401)}
+ if(url.pathname==='/functions/v1/lean-comparison'){
+  const result=await leanComparison(new Request(backendOrigin+url.pathname,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:raw}:{})}));
+  res.writeHead(result.status,{'Content-Type':'application/json'});return res.end(await result.text());
+ }
  if(url.pathname==='/auth/v1/user'&&req.method==='GET')return json(user(identity.account));
  if(url.pathname==='/auth/v1/logout'&&req.method==='POST'){sessions.delete(identity.claims.session_id);return json({})}
  if(url.pathname.startsWith('/rest/v1/rpc/')){
