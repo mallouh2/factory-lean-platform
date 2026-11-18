@@ -62,7 +62,7 @@ test("Factory Floor shows separate physical and flow states in both languages", 
 });
 
 test("redesigned transfer drawer requires an active assignment, valid category/capability and permissions", () => {
-  const offered = (html) => html.includes(`>${en.transferProduction}</button>`);
+  const offered = (html) => html.includes(`>${en.f20ReplaceEquipmentOnly}</button>`);
   assert.ok(offered(render("stopped", "en", "M2")));
   assert.ok(!offered(render("stopped", "en", "M2", [])));
   for (const missing of ["orders:edit", "centers:edit"]) {
@@ -80,7 +80,7 @@ test("redesigned transfer drawer requires an active assignment, valid category/c
   assert.ok(!offered(render("borrowed", "en", "M2")));
   assert.ok(!offered(render("alternative-stopped", "en", "M2")));
   const arHtml = render("stopped", "ar", "M2");
-  assert.ok(arHtml.includes(`>${ar.transferProduction}</button>`));
+  assert.ok(arHtml.includes(`>${ar.f20ReplaceEquipmentOnly}</button>`));
 });
 test("all requested floor scenarios render without changing their inputs", () => {
   for (const scenario of floorScenarios) for (const lang of ["en", "ar"]) {
@@ -116,7 +116,7 @@ test("existing execution and machine actions retain per-person permission gates"
   assert.ok(!readonly.includes(en.recordOutput));
   assert.ok(!readonly.includes(en.stopMachine));
   assert.ok(!readonly.includes(en.finishProduction));
-  assert.ok(render("borrowed", "en", "M2").includes(en.returnProduction));
+  assert.ok(!render("borrowed", "en", "M2").includes(en.transferReturnRequiresStop));
   assert.ok(render("alternative-stopped", "en", "A1").includes(en.downtimeEnd));
 });
 test("current line progress and today's output use corrected good output, excluding scrap", () => {

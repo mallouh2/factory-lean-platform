@@ -5,7 +5,7 @@ import type {MaintenancePlanningBoard} from './maintenance-planning-types';
 import type {Row} from '@/types';
 export type OperationalBoard=MaintenancePlanningBoard & {orders:Row[];production_requests:Row[];reservations:any[];
  completeness:'COMPLETE'|'INCOMPLETE';reason:string|null;total:number|null;loaded:number;valid_until:string};
-export function useOperationalPlanningBoard(props:FeatureProps,from:number,until:number,line='',domain:'all'|'maintenance'='all') {
+export function useOperationalPlanningBoard(props:FeatureProps,from:number,until:number,line='',domain:'all'|'maintenance'|'production_plan'='all') {
  const {snapshot:s,can}=props;
  const allowed=can('factory','view')&&can('maintenance','view')&&(domain==='maintenance'||can('orders','view'));
  const factory=String(s.factory?.id||''),identity=JSON.stringify([factory,from,until,line,domain,s.user?.id]);

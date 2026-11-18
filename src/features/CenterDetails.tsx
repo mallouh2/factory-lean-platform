@@ -1,6 +1,9 @@
 import ProductionTransfers from "./ProductionTransfers";
+import ProductionLineTransfer from './ProductionLineTransfer';
+import ProductionReturn from './ProductionReturn';
+import {executionLine} from '@/utils/execution-selection.mjs';
 import { evaluateFlow, formatDuration } from "@/utils/production-flow.mjs";
-import { impactChoice, transferReturnReady } from "@/utils/floor-visual.mjs";
+import { impactChoice } from "@/utils/floor-visual.mjs";
 import DowntimePlan from "./DowntimePlan";
 import { downtimeMinutes } from "@/utils/manufacturing.mjs";
 import { useRef, useState } from "react";
@@ -27,7 +30,7 @@ export default function CenterDetails({
     (x) => x.work_center_id === current.id && !x.ended_at,
   );
   const reasons = s.tables.downtime_reasons || [];
-  const returnReady = transferReturnReady(current.id, s.tables.work_centers, s.tables.production_transfers || []);
+  const returnReady = !(s.tables.production_transfers || []).some(x=>x.original_id===current.id&&!x.ended_at);
   const borrowed = s.tables.production_transfers?.find(x => x.alternative_id === current.id && !x.ended_at);
   const original = s.tables.work_centers.find(x => x.id === borrowed?.original_id);
   const flow = evaluateFlow(s.tables.work_centers, s.tables.downtime_events || [], s.tables.production_transfers || []);
@@ -173,7 +176,7 @@ export default function CenterDetails({
       {(can("centers", "edit") || can("machine_status", "edit")) && (
         <form onSubmit={submit}>
           <h3>{t("operatorView")}</h3>
-          {!returnReady && <p role="status" className="notice">{t("transferReturnRequiresStop")}</p>}
+          {!returnReady && <p role="status" className="notice">{t("f48UseReturn")}</p>}
           <fieldset disabled={busy}><div className="operator-actions">
             {["running", "idle", "offline"].map((x) => (
               <button
@@ -201,7 +204,9 @@ export default function CenterDetails({
           </fieldset>
         </form>
       )}
+      <ProductionReturn props={props} center={current} onReturned={onClose}/>
       <ProductionTransfers {...props} center={current} />
+      {current.status==='stopped'&&current.line_id&&can('orders','view')&&<ProductionLineTransfer props={props} source={current} orders={(s.tables.production_orders||[]).filter(o=>executionLine(o)===current.line_id&&['planned','active'].includes(String(o.status))&&!o.actual_finish)} preferred={String(order?.id||'')} onTransferred={()=>onClose()}/>}
       <details className="machine-secondary"><summary>{t("machineProductionDetails")}</summary><dl className="detail-grid">{info.slice(4).map(([label,value])=><div key={String(label)}><dt>{t(String(label))}</dt><dd>{String(value ?? "—")}</dd></div>)}</dl></details>
       <details className="machine-secondary"><summary>{t("maintenance")}</summary>
       <MaintenanceContext {...props} key={String(current.id)} machine={current} />

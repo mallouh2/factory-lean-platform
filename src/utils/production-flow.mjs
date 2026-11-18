@@ -16,6 +16,11 @@ export function formatDuration(minutes, locale = "en", signed = false) {
   if (rest || !parts.length) parts.push(`${digit(rest)} ${units[2]}`);
   return `${signed && total ? value < 0 ? "-" : "+" : ""}${parts.join(" ")}`;
 }
+/** Saved rank first; immutable identity resolves legacy tied ranks, never state/read order. */
+export function machineSequence(a,b){
+  const rank=c=>Number.isFinite(Number(c.position))?Number(c.position):0;
+  return rank(a)-rank(b)||(String(a.id)<String(b.id)?-1:String(a.id)>String(b.id)?1:0);
+}
 /** A sequence describes downstream dependency, never a replacement for the machine's actual state. */
 export function evaluateFlow(centers, stops, transfers, now = Date.now()) {
   /** @type {Record<string,{state:string,source:string|null,homeState?:string}>} */

@@ -1,3 +1,19 @@
+# 2026-11-18 — confirmed return and stable machine sequence (local)
+
+F47/F48 keep machine order stable and provide one explicit reasoned recovery/handover return without inventing downtime on a healthy spare. Machine borrowing remains distinct from actual-line execution, and both preserve Planning and accounting. This is operational usability/integrity parity, not a measured Lean benefit or unique differentiator. Owner acceptance and hosted rollout remain pending; F37 stays future. See [the continuity contract](machine-alternatives-continuity.md).
+
+# 2026-11-18 — independent Planning and nonblocking actual-delay evidence (local)
+
+F46 keeps approved production intervals distinct from unknown actual completion, while preserving planned conflicts and actual execution safety. Immediate delays, a factory-configurable default 15-minute reason grace, optional revised estimates and append-only actor evidence support operational clarity. This is expected MES parity, not a unique differentiator or measured productivity gain. F37 dual-Gantt analysis is future work. Local checks passed; owner acceptance and hosted rollout remain pending. See [the contract](planning-independence-delays.md).
+
+# 2026-11-17 — unified product setup (local)
+
+F45 brings basic identity, explicit weight derivation, inline or reusable recipes and multiple line capabilities into one product form over existing records. Atomic save, preserved batch/decimal semantics and protected history reduce configuration friction without adding an inventory model. This is ordinary manufacturing usability parity, not unique differentiation or measured productivity gain. Local verification passed; owner acceptance and hosted alignment remain pending. See [the product contract](product-configuration.md).
+
+# 2026-11-17 — audited alternative-line execution (local)
+
+F20 now separates actual emergency execution handover from approved Planning and equipment borrowing. Eligible stopped-machine alternatives offer reasoned continuation of the same item with protected stock/run identity and audit, including an empty destination schedule. This is expected MES continuity parity, not unique differentiation or measured loss reduction. Fixed external process dependencies and unresolved physical-source/custody cases remain blocked. Local checks/browser transfer passed; owner acceptance and hosted alignment remain pending. See [the continuity contract](machine-alternatives-continuity.md).
+
 # 2026-11-16 — trustworthy execution outcomes and line timeline selection (local)
 
 Post-F34.1 distinguishes committed, rejected and unresolved operations with receipt-based recovery; routine scheduled execution no longer demands an invented reason. A scoped Floor timeline shows unfinished work, true planned intervals and basic blockers while Planning remains independent. Stable Gantt tracks now follow saved intervals rather than hidden caption widths. These are expected MES usability/integrity parity, not unique differentiation or measured productivity claims. Focused local tests/browser checks passed; owner acceptance, including F34.1, and hosted rollout remain pending. F37 dual-Gantt Lean comparison is still future work. See [the current contract](production-order-interruption.md) and D:/FactoryLean/Reports/Post-F341-20261116/REPORT.md. Earlier entries retain their dated evidence.

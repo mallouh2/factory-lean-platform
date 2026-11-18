@@ -40,10 +40,10 @@ test('Range/scope/cursor validation rejects unsafe and duplicated requests',()=>
  const duplicate=q();duplicate.append('factory',id(2));assert.throws(()=>operationalBoardArgs(duplicate));
  const cursor=q();cursor.set('after_kind','MAINTENANCE');cursor.set('after_id',id(3));cursor.set('context_hash','a'.repeat(64));cursor.set('evaluated_at',at);assert.equal(operationalBoardArgs(cursor).after_id,id(3));
 });
-test('Active production uses protected open-ended capacity while saved timestamps stay unchanged',()=>{
+test('Production Planning uses approved intervals; actual occupancy cannot indefinitely reserve future capacity',()=>{
  const order={id:'P',line_id:'L',status:'active',start_time:start,expected_finish:'2026-10-14T01:00:00Z',operational_occupancy:{start:null,finish:null}};
- const schedule=sortedLineSchedule({id:'L'},[order],[],[]);assert.equal(schedule[0].start,-Infinity);assert.equal(schedule[0].finish,Infinity);
- assert.deepEqual(freeGaps(schedule,Date.parse(start),Date.parse(end)).gaps,[]);assert.equal(order.expected_finish,'2026-10-14T01:00:00Z');
+ const schedule=sortedLineSchedule({id:'L'},[order],[],[]);assert.equal(schedule[0].start,Date.parse(start));assert.equal(schedule[0].finish,Date.parse(order.expected_finish));
+ assert.equal(freeGaps(schedule,Date.parse(start),Date.parse(end)).gaps[0].start,Date.parse(order.expected_finish));assert.equal(order.expected_finish,'2026-10-14T01:00:00Z');
  const r={id:'M',lineIds:['L'],machineIds:['C'],productIds:[],start:Date.parse(start),finish:Date.parse(end)};
  assert.equal(maintenanceSlots([r],{id:'L'}).length,1);assert.equal(lineCapacity(sortedLineSchedule({id:'L'},[order],[],[],null,null,'UTC',[r]),Date.parse(start),Date.parse(end)).percent,100);
 });

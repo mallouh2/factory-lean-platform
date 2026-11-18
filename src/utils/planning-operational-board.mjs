@@ -4,7 +4,7 @@ export function operationalBoardArgs(params) {
  const allowed=['factory','view','start','end','line','machine','domain','after_kind','after_id','context_hash','evaluated_at'];
  if(params.get('view')!=='operational'||[...params.keys()].some(k=>!allowed.includes(k)||params.getAll(k).length!==1))throw {code:'22023'};
  const f=params.get('factory'),a=params.get('start'),b=params.get('end'),l=params.get('line'),w=params.get('machine'),domain=params.get('domain')||'all';
- if(!uuid(f)||!stamp(a)||!stamp(b)||Date.parse(b)<=Date.parse(a)||Date.parse(b)-Date.parse(a)>31*86400000||l&&!uuid(l)||w&&!uuid(w)||!['all','maintenance'].includes(domain))throw {code:'22023'};
+ if(!uuid(f)||!stamp(a)||!stamp(b)||Date.parse(b)<=Date.parse(a)||Date.parse(b)-Date.parse(a)>31*86400000||l&&!uuid(l)||w&&!uuid(w)||!['all','maintenance','production_plan'].includes(domain))throw {code:'22023'};
  const kind=params.get('after_kind'),id=params.get('after_id'),hash=params.get('context_hash'),at=params.get('evaluated_at');
  if([kind,id,hash,at].some(Boolean)&&(!['PRODUCTION','MAINTENANCE','REQUEST'].includes(kind)||!uuid(id)||!/^[a-f0-9]{64}$/.test(hash||'')||!stamp(at)))throw {code:'22023'};
  return {factory:f,range_start:a,range_end:b,line_id:l,machine:w,domain,page_size:100,after_kind:kind,after_id:id,expected_hash:hash,evaluated_at:at};

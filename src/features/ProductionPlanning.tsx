@@ -1,5 +1,6 @@
 import MeasuredGanttCode from '@/components/MeasuredGanttCode';
 import ProductionExecutionActions from './ProductionExecutionActions';
+import {useProductionDelays,ProductionDelayNotice,ProductionDelaySetting} from './ProductionDelay';
 import {createPortal} from 'react-dom';
 import {MaterialWarnings} from './MaterialPreparation';
 import {PlanningWarningSetting,PlanningExceptionReview,planningPolicyCommand,type PlanningProtection} from './PlanningWarningPolicy';
@@ -100,7 +101,9 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   const scale = zoomLevels[zoomIndex] || zoomLevels[1];
   const rangeStart = viewStart;
   const rangeEnd = rangeStart + scale.span;
-  const maintenanceRead = useOperationalPlanningBoard({snapshot:s,t,lang,can,command:sendCommand},rangeStart,rangeEnd,lineFilter);
+  const maintenanceRead = useOperationalPlanningBoard({snapshot:s,t,lang,can,command:sendCommand},rangeStart,rangeEnd,lineFilter,'production_plan');
+  const delayProps:FeatureProps={snapshot:s,t,lang,can,command:sendCommand,refreshSnapshot};
+  const delays=useProductionDelays(delayProps);
   const command:FeatureProps['command']=async(name,args)=>{
     const result=await sendCommand(name,args);
     // The shared command already refreshes s.fetchedAt. Do not cancel and
@@ -249,6 +252,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
     : "planningDeadlineUnknown";
   const visualState = (order: Row) => {
     if (['completed', 'cancelled'].includes(String(order.status))) return String(order.status);
+    if(order.status==='active'&&!order.actual_finish&&Date.parse(String(order.expected_finish))<Date.now())return 'delayed';
     const due = requestById.get(String(order.request_id))?.required_by;
     const risk = deadlineStatus(Date.parse(String(order.expected_finish || '')), due);
     if (orderAttention(order) || Date.parse(String(due || '')) < Date.now() || risk === 'planningLate') return 'delayed';
@@ -847,7 +851,9 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         <button type="button" aria-pressed={zoomIndex===3} onClick={()=>changeZoom(3)}>{t('planningWeek')}</button>
       </div>
       <p className="planning-range-summary">{jobsInView} {t('planningJobsInView')}</p>
-      <MaterialWarnings props={{snapshot:s,t,lang,can,command}}/><details className="planning-support"><summary>{t('planningAdvancedRange')}</summary><div className="planning-board-toolbar"><PlanningWarningSetting props={{snapshot:s,t,lang,can,command}}/>
+      <MaterialWarnings props={{snapshot:s,t,lang,can,command}}/>
+      {delays.error&&<p role="alert">{t('f46ReadUnavailable')} <button type="button" onClick={delays.reload}>{t('refresh')}</button></p>}
+      {!!delays.data?.rows.length&&<section className="f46-planning-delays"><h3>{t('f46ExecutionWarnings')}</h3>{delays.data.rows.filter(row=>!lineFilter||row.actual_line===lineFilter||row.planned_line===lineFilter).map(row=><ProductionDelayNotice key={row.item} props={delayProps} row={row} orders={orders} onSaved={delays.reload} showOrder/>)}</section>}<details className="planning-support"><summary>{t('planningAdvancedRange')}</summary><div className="planning-board-toolbar"><PlanningWarningSetting props={{snapshot:s,t,lang,can,command}}/>{delays.data&&<ProductionDelaySetting props={delayProps} grace={delays.data.grace_minutes} onSaved={delays.reload}/>}
         <label className="planning-window-start"><span>{t("planningVisibleStart")}</span>
           <input type="datetime-local" dir="ltr" value={formatLocalInput(new Date(viewStart).toISOString(), zone)}
             onChange={(event) => { if (!event.target.value) return;

@@ -6,7 +6,7 @@ import {pendingExecution,retainExecution,clearExecution,submitExecution,executio
 
 type Operation='INTERRUPT'|'RESUME'|'START_SELECTED'|'HISTORY';
 type Run={id:string;line_id:string;started_at:string;ended_at:string|null;state:string;reason:string|null;start_reason?:string|null;start_actor:string|null;end_actor:string|null;planned:{start:string;finish:string};recorded_after:Row|null};
-type Context={factory:string;item:string;fingerprint:string;order:Row;remaining:string;history:Run[];reason_required?:boolean;bypassed_order?:{id:string;code:string}|null};
+type Context={factory:string;item:string;fingerprint:string;order:Row;remaining:string;history:Run[];reason_required?:boolean;bypassed_order?:{id:string;code:string}|null;return_transfers?:{request_id:string;actor:string;reason:string;returned_at:string;mode:string;source_machine:string;alternative_machine:string}[];line_transfers?:{request_id:string;actor:string;reason:string;started_at:string;source_line:string;destination_line:string;source_machine:string;alternative_machine:string}[]};
 const labels:Record<Operation,string>={INTERRUPT:'f34PauseRelease',RESUME:'f34Resume',START_SELECTED:'startProduction',HISTORY:'f34History'};
 export default function ProductionExecutionActions({props,item,allowDispatch=false,dispatchBlocked=false,historyOnly=false,onOutcome}:{props:FeatureProps;item:Row;allowDispatch?:boolean;dispatchBlocked?:boolean;historyOnly?:boolean;onOutcome?:(key:string)=>void}){
  const {snapshot:s,t,lang,can}=props,factory=String(s.factory?.id||''),actorId=String(s.user?.id||''),id=String(item.id),zone=String(s.factory?.timezone||'UTC');
@@ -37,7 +37,7 @@ export default function ProductionExecutionActions({props,item,allowDispatch=fal
   if(value.outcome==='REJECTED'){
    setRejected(true);setShortages(value.materials?.rows||[]);setLegacy(value.materials?.legacy||[]);setMaterialReason(value.materials?.reason||'');await load();setError(t(value.error)!==value.error?value.error:'executionRejected');return;
   }
-  setOperation(null);const key=intent.operation==='INTERRUPT'?'executionPaused':intent.operation==='RESUME'?'executionResumed':'executionStarted';setNotice(key);onOutcome?.(key);
+  setOperation(null);const key=intent.operation==='RETURN_PRODUCTION'?'f48Returned':intent.operation==='TRANSFER_LINE'?'f20Transferred':intent.operation==='INTERRUPT'?'executionPaused':intent.operation==='RESUME'?'executionResumed':'executionStarted';setNotice(key);onOutcome?.(key);
   try{if(await props.refreshSnapshot?.()===false){setNotice('executionRefreshAfterSuccess');onOutcome?.('executionRefreshAfterSuccess');}}catch{setNotice('executionRefreshAfterSuccess');onOutcome?.('executionRefreshAfterSuccess');}
  }
  async function recover(){if(submitting.current||!retry.current)return;submitting.current=true;setBusy(true);try{await result(await executionOutcome(retry.current),retry.current);}finally{submitting.current=false;setBusy(false);}}
@@ -111,7 +111,7 @@ export default function ProductionExecutionActions({props,item,allowDispatch=fal
     <p>{t('f34StartedBy')}: {String(actor(run.start_actor))}{run.end_actor&&<> · {t('f34EndedBy')}: {String(actor(run.end_actor))}</>}</p>
     {run.start_reason&&<p dir="auto">{t('f341StartReason')}: {run.start_reason}</p>}
     {run.reason&&run.reason!==run.start_reason&&<p dir="auto">{t('f34Reason')}: {run.reason}</p>}
-   </section>)}</details>}
+   </section>)}{!!context.line_transfers?.length&&<><h4>{t('f20TransferHistory')}</h4>{context.line_transfers.map(move=><section className="f34-run" key={move.request_id}><strong>{localName(s.tables.production_lines?.find(l=>l.id===move.source_line),lang)} → {localName(s.tables.production_lines?.find(l=>l.id===move.destination_line),lang)}</strong><p>{localName(s.tables.work_centers?.find(c=>c.id===move.source_machine),lang)} → {localName(s.tables.work_centers?.find(c=>c.id===move.alternative_machine),lang)}</p><p>{String(actor(move.actor))} · {formatTime(move.started_at,lang,zone)}</p><p dir="auto">{move.reason}</p></section>)}</>}{!!context.return_transfers?.length&&<><h4>{t('f48History')}</h4>{context.return_transfers.map(move=><section className="f34-run" key={move.request_id}><strong>{localName(s.tables.work_centers?.find(c=>c.id===move.alternative_machine),lang)} → {localName(s.tables.work_centers?.find(c=>c.id===move.source_machine),lang)}</strong><p>{String(actor(move.actor))} · {formatTime(move.returned_at,lang,zone)}</p><p dir="auto">{move.reason}</p></section>)}</>}</details>}
   </dialog>}
  </div>;
 }

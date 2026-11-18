@@ -139,7 +139,7 @@ export function noDemandIdle(center, orders, stops, transfers, now = Date.now())
     String(item.id) === String(center.order_id) && expectedNow(item))) return false;
   const lineId = String(center.line_id || "");
   return !(orders || []).some((item) => lineId &&
-    String(item.line_id || "") === lineId && expectedNow(item));
+    String(item.actual_line_id || item.line_id || "") === lineId && expectedNow(item));
 }
 export function matchesVisualFilter(filter, state) {
   if (filter === "all") return true;

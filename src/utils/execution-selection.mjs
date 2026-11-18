@@ -1,7 +1,8 @@
 export const executionScheduled=o=>Boolean(o.line_id&&o.start_time&&o.expected_finish&&Date.parse(o.expected_finish)>Date.parse(o.start_time));
+export const executionLine=o=>o.actual_line_id||o.line_id;
 export const executionStatus=o=>o.execution_interrupted_at?'f341Paused':o.status==='active'?'executionInProduction':String(o.status);
 export const executionCandidate=o=>executionScheduled(o)&&['planned','active'].includes(o.status)&&!o.actual_finish&&typeof o.execution_remaining_quantity==='string'&&/^\d+(\.\d+)?$/.test(o.execution_remaining_quantity)&&/[1-9]/.test(o.execution_remaining_quantity);
-export function selectedExecution(items,line,id){const rows=items.filter(o=>String(o.line_id)===String(line)&&executionCandidate(o));return rows.find(o=>String(o.id)===String(id))||rows.find(o=>o.status==='active')||rows[0]||null;}
+export function selectedExecution(items,line,id){const rows=items.filter(o=>String(executionLine(o))===String(line)&&executionCandidate(o));return rows.find(o=>String(o.id)===String(id))||rows.find(o=>o.status==='active')||rows[0]||null;}
 // Pack only true intervals. Details and accessible short-order targets live
 // outside the time track, so annotation width cannot displace sequential work.
 export function executionTimeline(items,pixelsPerHour=64,rowHeight=56){

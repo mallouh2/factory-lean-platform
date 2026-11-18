@@ -6,6 +6,7 @@ import MachineIcon from "@/components/MachineIcon";
 import FactoryRoute from "@/components/FactoryRoute";
 import { categoryIconKey } from "@/utils/floor-visual.mjs";
 import Configuration from "./Configuration";
+import {machineSequence} from '@/utils/production-flow.mjs';
 
 type Screen =
   | { kind: "overview" }
@@ -59,7 +60,7 @@ export default function LineBuilder(props: FeatureProps & {
     if (!item) return;
     const siblings = centers
       .filter((c) => String(c.id) !== id && String(c.line_id || "") === lineId)
-      .sort((a, b) => Number(a.position) - Number(b.position));
+      .sort(machineSequence);
     siblings.splice(Math.max(0, index), 0, {
       ...item,
       line_id: lineId || null,
@@ -92,7 +93,7 @@ export default function LineBuilder(props: FeatureProps & {
   }
   const ordered = (lineId: string) => centers
     .filter((c) => String(c.line_id || "") === lineId)
-    .sort((a, b) => Number(a.position) - Number(b.position) || String(a.id).localeCompare(String(b.id)));
+    .sort(machineSequence);
   const machineCard = (machine: Row) => {
     const category = (s.tables.work_center_categories || []).find((x) => x.id === machine.category_id);
     return <button className="management-machine" onClick={() => go({ kind: "machine", id: String(machine.id) })}>

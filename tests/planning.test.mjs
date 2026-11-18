@@ -562,7 +562,7 @@ test("reason save sends an atomic revision command with the selected category", 
   });
 });
 
-test("re-scheduling after an unschedule is replanning for both manual and drag paths", () => {
+test("reassigning a wholly unscheduled item needs no reason for either manual or drag paths", () => {
   const waitingAgain = { ...orders[0], planning_ever_scheduled: true };
   const visual = { ...snapshot, tables: { ...snapshot.tables,
     production_orders: [waitingAgain],
@@ -572,14 +572,14 @@ test("re-scheduling after an unschedule is replanning for both manual and drag p
     { item: "O1", line: "L", start: "2026-10-09T08:00" },
     async (name, args) => saved.push({ name, args }));
   allNodes(manual.tree, (node) => node.type === "form")[0].props.onSubmit({ preventDefault() {} });
-  assert.equal(manual.updates.find((update) => update.position === 17)?.value.source, "save");
+  assert.equal(manual.updates.find((update) => update.position === 17)?.value.source, undefined);
   const drag = interactivePlanner(visual, { dragging: "O1" },
     async (name, args) => saved.push({ name, args }));
   const lane = allNodes(drag.tree, (node) => node.props?.className === "planning-lane-track")[0];
   lane.props.onDrop({ preventDefault() {}, dataTransfer: { getData: () => "O1" },
     clientX: 500, currentTarget: { getBoundingClientRect: () => ({ left: 0, width: 1000 }) } });
-  assert.equal(drag.updates.find((update) => update.position === 17)?.value.source, "drop");
-  assert.equal(saved.length, 0);
+  assert.equal(drag.updates.find((update) => update.position === 17)?.value.source, undefined);
+  assert.equal(saved.length, 2);assert.ok(saved.every(x=>x.name==='plan_product_item'));
 });
 
 test("clicking or dragging an item targets only its own product and quantity", () => {
@@ -1409,7 +1409,7 @@ test("Advanced line comparison is localized, previews on Gantt, and writes only 
   }
 });
 
-test("Smart Slot for a previously scheduled waiting item requests a revision reason before writing", async () => {
+test("Smart Slot for a wholly unscheduled item needs no historical revision reason", async () => {
   const waiting = { ...orders[0], unit: "piece", target_quantity: 50, planning_ever_scheduled: true };
   const visual = { ...snapshot, tables: { ...snapshot.tables, production_orders: [waiting] } };
   const search = suggestPlanningSlots(waiting, requests[0], lines, [waiting], centers, capabilities,
@@ -1420,10 +1420,8 @@ test("Smart Slot for a previously scheduled waiting item requests a revision rea
   const confirm = allNodes(tree, (node) => node.type === "button" &&
     node.props.children === en.planningConfirmSlot)[0];
   await confirm.props.onClick();
-  assert.equal(writes, 0);
-  const reason = updates.find((update) => update.position === 17).value;
-  assert.equal(reason.source, "save");
-  assert.equal(reason.item, "O1");
+  assert.equal(writes, 1);
+  assert.equal(updates.find((update) => update.position === 17)?.value?.source, undefined);
 });
 
 test('A Smart Slot outside the fully loaded horizon cannot be confirmed from the Gantt',async()=>{
@@ -1465,11 +1463,11 @@ const saved=[],{tree,updates}=interactivePlanner(visual,{dragging:'O1',lang},asy
 tracks[0].props.onDragOver(event);assert.equal(event.dataTransfer.dropEffect,'none');tracks[0].props.onDrop(event);allNodes(tree,n=>n.type==='button'&&n.props?.draggable).find(n=>n.props.onDragEnd)?.props.onDragEnd();assert.ok((lang==='en'?/Printing.*Extrusion/:/الطباعة.*البثق/).test(updates.filter(u=>u.position===4).at(-1).value));assert.equal(saved.length,0);assert.ok(updates.some(u=>u.position===4&&(lang==='en'?/Printing.*Extrusion/:/الطباعة.*البثق/).test(u.value)));tracks[1].props.onDragOver(event);assert.equal(event.dataTransfer.dropEffect,'move');
 }});
 
-for(const lang of ['en','ar'])test(`open-ended active capacity gives safe localized drag feedback without a scheduling write (${lang})`,async()=>{
+for(const lang of ['en','ar'])test(`actual open-ended occupancy cannot block future planned placement (${lang})`,async()=>{
  const active={...orders[1],status:'active',actual_start:'2030-10-08T00:00:00Z',operational_occupancy:{start:'2030-10-08T00:00:00Z',finish:null}};
  const visual={...snapshot,tables:{...snapshot.tables,production_orders:[{...orders[0],unit:'piece'},active]}};
  const before=structuredClone(visual),writes=[],{tree,updates}=interactivePlanner(visual,{dragging:'O1',anchor:'2030-10-09T00:00:00Z',lang},async(...args)=>writes.push(args));
  const track=allNodes(tree,n=>n.props?.className==='planning-lane-track')[0],event={preventDefault(){},dataTransfer:{getData:()=> 'O1'},clientX:500,currentTarget:{getBoundingClientRect:()=>({left:0,width:1000})}};
- assert.doesNotThrow(()=>track.props.onDragOver(event));assert.equal(event.dataTransfer.dropEffect,'none');await track.props.onDrop(event);
- assert.equal(writes.length,0);assert.deepEqual(visual,before);const feedback=updates.filter(u=>u.position===4).at(-1)?.value;assert.ok(feedback.includes(active.code));assert.ok(feedback.includes((lang==='ar'?ar:en).planningUnknownFinish));
+ assert.doesNotThrow(()=>track.props.onDragOver(event));assert.equal(event.dataTransfer.dropEffect,'move');await track.props.onDrop(event);
+ assert.equal(writes.length,1);assert.equal(writes[0][0],'plan_product_item');assert.deepEqual(visual,before);
 });

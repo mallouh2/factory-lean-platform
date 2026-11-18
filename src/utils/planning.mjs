@@ -160,10 +160,8 @@ export function durationMs(order, line, centers, capabilities) {
 
 /** @param {{mask:number,start:string,end:string}|null} calendar */
 export function plannedInterval(order, line, centers, capabilities, calendar = null, zone = "UTC") {
-  // Protected operational projection is capacity truth; stored Planning times remain unchanged.
-  if(order.operational_occupancy) return {order,
-    start:order.operational_occupancy.start===null?-Infinity:Date.parse(order.operational_occupancy.start),
-    finish:order.operational_occupancy.finish===null?Infinity:Date.parse(order.operational_occupancy.finish)};
+  // Production Planning reserves approved intervals. Actual occupancy belongs
+  // to execution/Maintenance and must not extend an approved plan implicitly.
   const start = Date.parse(String(order.start_time || ""));
   if (!Number.isFinite(start)) return null;
   const recordedFinish = Date.parse(String(order.expected_finish || ""));
@@ -183,7 +181,9 @@ export function plannedInterval(order, line, centers, capabilities, calendar = n
 export function sortedLineSchedule(line, orders, centers, capabilities, excludeId = null,
   calendar = null, zone = "UTC", maintenance = [], product = null) {
   return orders.filter((order) => ["planned", "active"].includes(order.status) &&
-    String(order.line_id) === String(line.id) && String(order.id) !== String(excludeId))
+    String(order.line_id) === String(line.id) && String(order.id) !== String(excludeId) &&
+    (order.status!=='active'||Number.isFinite(Date.parse(order.start_time))&&
+      Number.isFinite(Date.parse(order.expected_finish))&&Date.parse(order.expected_finish)>Date.parse(order.start_time)))
     .map((order) => plannedInterval(order, line, centers, capabilities, calendar, zone) ||
       { order, start: Date.now(), finish: null, error: "planningUnknownBlock" })
     .filter(Boolean).concat(maintenanceSlots(maintenance,line,product)).sort((a, b) => a.start - b.start);
@@ -351,7 +351,10 @@ export function planningWarnings(order, request, line, centers, capabilities, or
     if (eligible.length && eligible.every((center) => ["stopped", "offline"].includes(String(center.status))))
       warnings.push("planningCentersUnavailable");
     if (orders.some((other) => other.id !== order.id && other.status === "active" &&
-      String(other.line_id) === String(line.id))) warnings.push("planningLineActive");
+      String(other.actual_line_id||other.line_id) === String(line.id))) warnings.push("planningLineActive");
+    if (orders.some(other=>other.status==='active'&&!other.actual_finish&&
+      String(other.actual_line_id||other.line_id)===String(line.id)&&Date.parse(other.expected_finish)<now))
+      warnings.push('f46PotentialDelay');
     if (Number.isFinite(start) && orders.some((other) =>
       other.id !== order.id && other.status === "planned" &&
       String(other.line_id) === String(line.id) &&

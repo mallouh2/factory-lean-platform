@@ -2,10 +2,13 @@ import ProductionStock from './ProductionStock';
 import ProductionMaterialSummary from './ProductionMaterialSummary';
 import ProductionExecutionActions from './ProductionExecutionActions';
 import ProductionExecutionSelector from './ProductionExecutionSelector';
+import ProductionLineTransfer from './ProductionLineTransfer';
+import ProductionReturn from './ProductionReturn';
+import {useProductionDelays,ProductionDelayNotice} from './ProductionDelay';
 import RawMaterialReturns from './RawMaterialReturns';
 import { useEffect, useRef, useState } from "react";
 import { downtimeReasonChoices } from "@/utils/downtime-reasons";
-import { evaluateFlow, formatDuration } from "@/utils/production-flow.mjs";
+import { evaluateFlow, formatDuration, machineSequence } from "@/utils/production-flow.mjs";
 import {
   downtimeMinutes,
   lineTodayOutput,
@@ -17,7 +20,7 @@ import MachineVisual, { machineVisualType } from "@/components/FloorMachineMotio
 import FactoryRoute from "@/components/FactoryRoute";
 import { formatTime, localName } from "@/components/ui";
 import { executionTiming } from "@/utils/execution-queue.mjs";
-import {executionScheduled,executionStatus,selectedExecution} from '@/utils/execution-selection.mjs';
+import {executionScheduled,executionStatus,selectedExecution,executionLine} from '@/utils/execution-selection.mjs';
 import {useExecutionOrders} from './useExecutionOrders';
 import {
   machineVisualStates,
@@ -30,7 +33,6 @@ import {
   borrowingLineOf,
   categoryIconKey,
   liveTransferPicker,
-  transferReturnReady,
   lineOperationalStatus,
   lineFlowActive,
 } from "@/utils/floor-visual.mjs";
@@ -118,6 +120,7 @@ export default function FactoryFloorV2(
   const centers = (s.tables.work_centers || []).filter((c) => !c.archived);
   const lines = (s.tables.production_lines || []).filter((l) => !l.archived);
   const executionOrders=useExecutionOrders(props);
+  const delays=useProductionDelays(props);
   const [executionChoices,setExecutionChoices]=useState<Record<string,string>>({});
   const [executionNotice,setExecutionNotice]=useState<{identity:string;code:string;key:string}|null>(null);
   const [selector,setSelector]=useState<{factory:string;line:string}|null>(null);
@@ -149,10 +152,12 @@ export default function FactoryFloorV2(
     const product = s.tables.products?.find((p) => String(p.id) === String(item.product_id));
     const request = requests.find((r) => String(r.id) === String(item.request_id));
     const timing = executionTiming(item);
+    const delay=delays.data?.rows.find(row=>row.item===item.id);
     const unit = t(item.unit === "meter" ? "meterShort" : item.unit === "piece" ? "pieceShort" : item.unit === "kg" ? "kg" : "legacyUnit");
     const variance = (minutes: number) => minutes === 0 ? t("executionOnTime")
       : `${formatDuration(Math.abs(minutes), lang)} ${t(minutes > 0 ? "executionLate" : "executionEarly")}`;
     return <div className={`ff2-queue-job${item.status==='active' ? " ff2-queue-ready" : ""}`} key={String(item.id)} data-product-item-id={String(item.id)} data-execution-state={String(item.status)}>
+      {item.actual_line_id&&item.actual_line_id!==item.line_id&&<p className="notice">{t('f20ActualExecutionLine')}: {localName(lines.find(l=>l.id===item.actual_line_id),lang)} · {t('f20ApprovedLine')}: {localName(lines.find(l=>l.id===item.line_id),lang)}</p>}
       <div className="ff2-queue-job-head">
         <strong>{label}</strong>
         <span>{t(executionStatus(item))}</span>
@@ -164,6 +169,7 @@ export default function FactoryFloorV2(
         {(["required", "good", "remaining"] as const).map(key => <div key={key}><dt>{t(key === "required" ? "recordingRequired" : key === "good" ? "recordingGoodSoFar" : "recordingRemaining")}</dt><dd>{productionProgress(item)[key].toLocaleString(lang)} {unit}</dd></div>)}
         {productionProgress(item).overproduction > 0 && <div><dt>{t("recordingOverproduction")}</dt><dd>{productionProgress(item).overproduction.toLocaleString(lang)} {unit}</dd></div>}
       </dl>
+      {delay&&<ProductionDelayNotice props={props} row={delay} onSaved={delays.reload}/>}
       <details className="ff2-queue-timing"><summary>{t("ffProductionTiming")}</summary><p>{t("productionParentRequest")}: <bdi>{String(request?.code || "")}</bdi></p><dl className="ff2-queue-times">
         <div><dt>{t("executionPlannedStart")}</dt><dd>{formatTime(item.start_time, lang, zone)}</dd></div>
         <div><dt>{t("executionPlannedFinish")}</dt><dd>{formatTime(item.expected_finish, lang, zone)}</dd></div>
@@ -411,7 +417,7 @@ export default function FactoryFloorV2(
   }
   function lineCard(line: Row | null) {
     const lineId = line ? String(line.id) : "";
-    const choices=executionOrders.rows.filter(o=>o.line_id===lineId);
+    const choices=executionOrders.rows.filter(o=>executionLine(o)===lineId);
     const chosen=line?selectedExecution(choices,lineId,executionChoices[String(s.factory?.id)+':'+lineId]):null;
     const borrowed = borrowedInto(lineId);
     const homeMachines = centers
@@ -419,7 +425,7 @@ export default function FactoryFloorV2(
         line ? c.line_id === line.id : !c.line_id,
       )
       .filter((c) => !borrowed.some((b) => String(b.id) === String(c.id)))
-      .sort((a, b) => Number(a.position) - Number(b.position));
+      .sort(machineSequence);
     if (!line && !homeMachines.length) return null;
     const machines = homeMachines;
     const borrowedAwayIds = machines
@@ -428,7 +434,7 @@ export default function FactoryFloorV2(
     const relevant = machines.filter(matchesFilter);
     // Filtering keeps the complete path: the line only disappears when nothing matches.
     if (filter !== "all" && !relevant.length && !borrowed.length) return null;
-    const activeOrder = line ? orders.find(o=>o.status==='active'&&o.line_id===line.id) : undefined;
+    const activeOrder = line ? orders.find(o=>o.status==='active'&&executionLine(o)===line.id) : undefined;
     const pausedAt = activeOrder ? line?.paused_at || null : null;
     const summaryMachines = machines.filter((m) => !line || m.dependency_mode !== "independent");
     const status = line && !activeOrder ? 'idle' : lineOperationalStatus(lineVisualStatus(
@@ -679,16 +685,14 @@ export default function FactoryFloorV2(
   const hasActiveProduction = selectedOrder?.status === "active";
   const canStopHere = !selectedFromHomePlaceholder && canChangeStatus &&
     (selectedDisplayState === "running" || selectedDisplayState === "alternative");
-  const canReturnHere = selected?.status === "stopped" && transferActive && canReturn;
-  const returnReady = !selected || transferReturnReady(selected.id, centers, transfers);
   const canRestartHere = selected?.status === "stopped" && !transferActive && canChangeStatus &&
     !selectedFromHomePlaceholder && !(actingFor ? borrowedBy?.paused_at : selectedLine?.paused_at);
-  const canStartHere = selected?.status === "idle" &&
+  const canStartHere = selected?.status === "idle" && !transferActive &&
     !(actingFor ? borrowedBy?.paused_at : selectedLine?.paused_at) &&
     !selectedFromHomePlaceholder && canChangeStatus && hasActiveProduction;
   const canTransferHere = selected?.status === "stopped" && !transferActive && canTransfer &&
     !selectedLine?.paused_at && !livePicker.blockedReason && transferCandidates.length > 0;
-  const showQuickActions = canStopHere || canReturnHere || canRestartHere ||
+  const showQuickActions = canStopHere || canRestartHere ||
     canStartHere || canTransferHere || Boolean(activeAltRow && transferActive) || Boolean(actingOriginal);
   async function runTransfer() {
     if (!selected || !transferTarget) return;
@@ -703,30 +707,6 @@ export default function FactoryFloorV2(
       });
       setTransferTarget(null);
       setTransferReason("");
-      setFlowNotice("saved");
-    } catch (error) {
-      setFlowNotice(error instanceof Error ? error.message : "error");
-    } finally {
-      setFlowBusy(false);
-    }
-  }
-  async function returnProduction() {
-    if (!selected || flowBusy || !returnReady) return;
-    setFlowBusy(true);
-    setFlowNotice("");
-    try {
-      await props.command("change_status", {
-        factory: s.factory?.id,
-        work_center: selected.id,
-        status: "running",
-        reason: null,
-        sub_reason: null,
-        notes: "",
-        expected_restart: null,
-        responsible: null,
-        alternative: null,
-        transferred: false,
-      });
       setFlowNotice("saved");
     } catch (error) {
       setFlowNotice(error instanceof Error ? error.message : "error");
@@ -784,7 +764,7 @@ export default function FactoryFloorV2(
   }
   const selecting=selector?.factory===String(s.factory?.id)?lines.find(l=>String(l.id)===selector.line):null;
   function closeSelector(){setSelector(null);requestAnimationFrame(()=>selectorOpener.current?.isConnected&&selectorOpener.current.focus());}
-  if(selecting&&can('orders','view'))return <ProductionExecutionSelector props={props} line={selecting} orders={executionOrders.rows} selected={String(selectedExecution(executionOrders.rows,selecting.id,executionChoices[String(s.factory?.id)+':'+selecting.id])?.id||'')} complete={executionOrders.complete} loading={executionOrders.loading} error={executionOrders.error} onReload={executionOrders.reload} onBack={closeSelector} onSelect={id=>{setExecutionChoices(old=>({...old,[String(s.factory?.id)+':'+selecting.id]:id}));closeSelector();}}/>;
+  if(selecting&&can('orders','view'))return <ProductionExecutionSelector props={props} line={selecting} orders={executionOrders.rows.filter(o=>!o.actual_line_id||o.actual_line_id===selecting.id)} selected={String(selectedExecution(executionOrders.rows,selecting.id,executionChoices[String(s.factory?.id)+':'+selecting.id])?.id||'')} complete={executionOrders.complete} loading={executionOrders.loading} error={executionOrders.error} onReload={executionOrders.reload} onBack={closeSelector} onSelect={id=>{setExecutionChoices(old=>({...old,[String(s.factory?.id)+':'+selecting.id]:id}));closeSelector();}}/>;
   return (
     <section className="ff2 ff2-engineer" dir={lang === "ar" ? "rtl" : "ltr"} data-motion-paused={motionPaused}>
       <header className="ff2-head"><ProductionStock props={props}/><RawMaterialReturns props={props}/>
@@ -793,6 +773,7 @@ export default function FactoryFloorV2(
           <button className="ff2-manage" onClick={() => props.onManage()}><NavigationIcon name="lines"/>{t("manageLinesMachines")}</button>}
       </header>
       {executionNotice?.identity===String(s.factory?.id)&&<p role="status" className="notice"><bdi>{executionNotice.code}</bdi> · {t(executionNotice.key)}</p>}
+      {delays.error&&<p role="alert">{t('f46ReadUnavailable')} <button type="button" onClick={delays.reload}>{t('refresh')}</button></p>}
       {orders.some(o=>o.execution_interrupted_at&&!o.line_id)&&<details className="ff2-queue"><summary>{t('f34AwaitingPlan')}</summary>
         {orders.filter(o=>o.execution_interrupted_at&&!o.line_id).map(o=><div key={String(o.id)} className="ff2-queue-job"><strong><bdi>{String(o.code)}</bdi> · {t('f34Interrupted')}</strong>
           <p>{t('f34ScheduleToContinue')}</p>{props.onOutputRelated&&<button type="button" onClick={()=>props.onOutputRelated?.({factory:String(s.factory?.id),view:'planning',item:String(o.id)})}>{t('planning')}</button>}
@@ -956,6 +937,7 @@ export default function FactoryFloorV2(
                 </p>
               </section>
 
+              {selected&&<ProductionReturn props={props} center={selected} onReturned={executionOrders.reload}/>}
               {showQuickActions && (
                 <section className="ff2-operational-section" aria-labelledby="ff2-quick-actions">
                   <h4 id="ff2-quick-actions">{t("quickActions")}</h4>
@@ -965,12 +947,6 @@ export default function FactoryFloorV2(
                         {t("stopMachine")}
                       </button>
                     )}
-                    {canReturnHere && (
-                      <button className="primary" disabled={flowBusy || !returnReady} onClick={() => void returnProduction()}>
-                        {t("returnProduction")}
-                      </button>
-                    )}
-                    {canReturnHere && !returnReady && <p role="status" className="notice">{t("transferReturnRequiresStop")}</p>}
                     {canRestartHere && (
                       <button className="primary" disabled={flowBusy} onClick={() => void startMachine()}>
                         {t("downtimeEnd")}
@@ -985,7 +961,7 @@ export default function FactoryFloorV2(
                         <button disabled={flowBusy} onClick={() => {
                           setTransferTarget(String(transferCandidates[0].id));
                           setFlowNotice("");
-                        }}>{t("transferProduction")}</button>
+                        }}>{t("f20ReplaceEquipmentOnly")}</button>
                     )}
                     {transferActive && activeAltRow && (
                       <button onClick={() => { setSelectedId(String(activeAltRow.id)); setQuickAction(null); setFlowNotice(""); }}>
@@ -1061,7 +1037,8 @@ export default function FactoryFloorV2(
                   )}
                 </section>
               )}
-              {flowNotice && flowNotice !== 'saved' && <p role="alert" className="notice">{t(flowNotice)}</p>}
+              {selected.status==='stopped'&&!transferActive&&selected.line_id&&can('orders','view')&&<ProductionLineTransfer key={`line-transfer:${selected.id}`} props={props} source={selected} orders={executionOrders.rows.filter(o=>executionLine(o)===selected.line_id&&['planned','active'].includes(String(o.status))&&Number(o.execution_remaining_quantity)>0)} preferred={String(selectedOrder?.id||'')} onTransferred={machine=>{setFlowNotice('f20Transferred');setSelectedId(machine);executionOrders.reload();}}/>}
+              {flowNotice && flowNotice !== 'saved' && <p role={flowNotice==='f20Transferred'?'status':'alert'} className="notice">{t(flowNotice)}</p>}
             </div>
             {(can("centers", "view") || can("centers", "edit")) && (
               <footer className="ff2-drawer-foot">
