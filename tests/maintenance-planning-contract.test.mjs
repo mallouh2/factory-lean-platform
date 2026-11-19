@@ -9,8 +9,8 @@ const id='10000000-0000-0000-0000-000000000001',hash='a'.repeat(64),now=Date.par
 const candidate={factory:id,request:id,requestRevision:2,scheduleRevision:1,start:'2030-01-02T00:00:00Z',end:null,timezone:'UTC',now};
 const preview={factory_id:id,request_id:id,request_revision:2,schedule_revision:1,start:candidate.start,end:'2030-01-02T00:30:00Z',timezone:'UTC',evaluated_at:'2030-01-01T00:00:00Z',context_hash:hash,capacity:'CLEAR',eligible:true,occupancy_complete:true,scope:{machine_id:id}};
 test('confirmation and rescheduling reject missing fingerprint and request revision at API boundary',()=>{
- for(const operation of ['confirm','reschedule']){
-  const args={operation,payload:{reason:'Reviewed move',context_hash:hash,request_revision:2},expected_revision:1};
+ for(const operation of ['confirm','reschedule','save']){
+  const args={operation,payload:{reason:'Reviewed move',context_hash:hash,request_revision:2,...(operation==='save'?{start:candidate.start}:{})},expected_revision:1};
   assert.ok(maintenancePlanningCommandValid(args));
   for(const change of [{context_hash:null},{context_hash:'a'.repeat(32)},{request_revision:0},{request_revision:'2'},{enabled:true}])assert.equal(maintenancePlanningCommandValid({...args,payload:{...args.payload,...change}}),false);
  }

@@ -17,10 +17,11 @@ export default function MaintenancePlanningReaders({request,schedule,start,end,o
  const [from,setFrom]=useState(formatLocalInput(new Date(Date.now()+60000).toISOString(),zone));
  const [until,setUntil]=useState(formatLocalInput(new Date(Date.now()+7*86400000).toISOString(),zone));
  const [gapQuery,setGapQuery]=useState(''),[gapKey,setGapKey]=useState(''),[before,setBefore]=useState<number|null>(null),[high,setHigh]=useState<number|null>(null),[inputError,setInputError]=useState('');
- const base={factory:String(s.factory?.id),request:request.id,request_revision:String(request.revision),schedule_revision:String(schedule?.revision||0)};
- const identity=JSON.stringify({factory:base.factory,request:request.id,zone,snapshot:s.fetchedAt,start,end,revision:request.revision,schedule:schedule?.revision||0});
+ const revision=schedule?.revision ?? request.planning_schedule_revision ?? 0;
+ const base={factory:String(s.factory?.id),request:request.id,request_revision:String(request.revision),schedule_revision:String(revision)};
+ const identity=JSON.stringify({factory:base.factory,request:request.id,zone,snapshot:s.fetchedAt,start,end,revision:request.revision,schedule:revision});
  const preview=useHistoryData<MaintenancePreview>(previewQuery&&previewKey===identity?previewQuery:null,s.fetchedAt);
- const gapIdentity=JSON.stringify({from,until,request:request.id,revision:request.revision,schedule:schedule?.revision||0});
+ const gapIdentity=JSON.stringify({from,until,request:request.id,revision:request.revision,schedule:revision});
  const gaps=useHistoryData<MaintenanceGaps>(gapQuery&&gapKey===gapIdentity?gapQuery:null,s.fetchedAt);
  const historyParams=new URLSearchParams({factory:base.factory,request:request.id,mode:'history',limit:'10',...(before?{before_revision:String(before)}:{}),...(high!==null?{through_revision:String(high)}:{})});
  const history=useHistoryData<MaintenanceHistory>(can('maintenance','view')?`/api/maintenance-planning?${historyParams}`:null,s.fetchedAt);
@@ -42,11 +43,11 @@ export default function MaintenancePlanningReaders({request,schedule,start,end,o
  let windowStart='',windowEnd:string|null=null,windowValid=true;
  try {windowStart=start?localDateTimeToUtc(start,zone):'';windowEnd=end?localDateTimeToUtc(end,zone):null;}catch{windowValid=false;}
  const matches=windowValid&&preview.data?.factory_id===base.factory&&preview.data?.request_id===request.id&&
-  preview.data?.request_revision===request.revision&&preview.data?.schedule_revision===(schedule?.revision||0)&&
+  preview.data?.request_revision===request.revision&&preview.data?.schedule_revision===revision&&
   Date.parse(preview.data?.start||'')===Date.parse(windowStart)&&(!windowEnd||Date.parse(preview.data?.end||'')===Date.parse(windowEnd));
  const display=previewKey===identity&&!preview.loading&&!preview.error&&!expired&&preview.data?.timezone===zone&&matches?preview.data:null;
  const current=display&&maintenancePreviewCurrent(display,{factory:base.factory,request:request.id,requestRevision:request.revision,
-  scheduleRevision:schedule?.revision||0,start:windowStart,end:windowEnd,timezone:zone,now})?display:null;
+  scheduleRevision:revision,start:windowStart,end:windowEnd,timezone:zone,now})?display:null;
  useEffect(()=>{onPreview(current);},[current,onPreview]);
  useEffect(()=>{if(!preview.data)return;const timer=setTimeout(()=>setNow(Date.now()),Math.max(0,Date.parse(preview.data.evaluated_at)+60001-Date.now()));return()=>clearTimeout(timer);},[preview.data]);
  const scope=(resources:MaintenanceRecordedScope[]|null)=>resources===null?<p>{t('mpEvidenceMissing')}</p>:resources.map((resource,index)=><div key={index}>

@@ -1,3 +1,62 @@
+# 19 November 2026 — Group 4 hotfix F53 and F54
+
+The owner accepted Group 4, including the unified work queue, maintenance drag/drop, compact scheduling, role separation, repair navigation, late starts and stable Gantt rendering. This checkpoint records the approved implementation on development. Earlier acceptance statements below are historical.
+
+- F53. Repairs shows the estimated finish, expected overrun and affected work as applicable. A late start is allowed when equipment and shared capacity are clear through the expected finish. A hard conflict blocks Start and directs authorized staff to Planning or to wait for active work. Actual start and completion and their deviations are recorded separately from the approved reservation. The existing hold and independent release verification still apply.
+- F54. Moving the Gantt previously cleared the maintenance bars while range availability loaded. The last authorized maintenance bars stay visible during movement. Scheduling still requires current availability. Bar timing, selection, the unified queue and role ownership are preserved.
+
+MR-0000104 remains open at revision 2, with no actual start. Its confirmed reservation is 20 November 2026, 11:00–12:30 Asia/Qatar, on Secondary Extruder / Line 2. Entries below reflect historical checkpoints.
+
+TypeScript, 139 focused tests and rollback SQL passed. English desktop and Arabic RTL mobile browser checks confirmed uninterrupted maintenance bar rendering during panning and zoom, and the same approved interval in the details drawer. Actual Start was tested in rollback to preserve MR-0000104. The forward migration was applied only to the existing verified local database. All 181 prior migrations and the three unrelated drafts were verified byte-for-byte.
+
+Preview http://127.0.0.1:29721/?view=planning. Evidence is at D:/FactoryLean/Reports/Group4-Hotfix-20261119/VERIFICATION.md.
+
+---
+
+# 19 November 2026 — Group 4 final maintenance scheduling fix
+
+F49, F51 and F52 are implemented and locally verified. Group 4 remains uncommitted and pending owner acceptance. Development is at 17edd71. The canonical preview is http://127.0.0.1:29721/?view=planning.
+
+- F49. The browser showed MR-0000104 as non-draggable because both the queue and backend excluded corrective work. The owner had already classified it as manual corrective work with a 90-minute estimate. Prepared manual corrective requests now use the existing reservation path. Downtime-linked corrective requests stay in Repairs. Maintenance drag uses the existing timeline scroll and snap behavior and accepts only the equipment's scheduling target. A native browser drop on Line 2 filled in 15:00 and calculated a 16:30 finish from the request's estimate. The request was left unscheduled.
+- F51. The maintenance side drawer uses the production scheduling layout. The request, equipment, line, type, description, duration, requested window and urgency are read-only. Planning chooses the start and sees the calculated finish. Out-of-window scheduling requires an audited reason. Recommendations and advanced controls were removed. Existing capacity, permissions, activation, retry and history checks guard Save.
+- F52. Authorized Maintenance staff edit the request in Repairs. Normal and Urgent are the current urgency choices. Existing legacy priorities remain readable. Urgent maintenance appears first under Planning's default priority sort. Changing urgency or saving a reservation preserves the production plan and actual equipment state. A confirmed reservation must be removed explicitly before editing its underlying request details.
+
+TypeScript and 148 focused tests passed. Three rollback SQL checks covered corrective scheduling, permissions, advisory reasons, conflicts, retained revisions and unchanged actual production. The browser checks covered native English desktop drag, Arabic desktop, English and Arabic mobile at 390 pixels, and the Arabic Repairs editor. The new forward migration was applied only to the verified local cluster. Installation details and browser evidence are in this folder.
+
+MR-0000104 remains open at revision 2, Corrective, 90 minutes and Normal, with no saved schedule. The existing actual start guard requires the full estimate to fit inside the approved window. A slot booked for exactly the estimate has no late-start margin.
+
+---
+
+# 19 November 2026 — Group 4 completion (F49/F50/F51)
+
+**Implemented and locally verified. Group 4 remains uncommitted and pending owner acceptance.** Development HEAD remains 17edd7147cf032a61bcc4f5b3f617cf51630bcda. Canonical preview runs on port 29721 with the existing guarded local database and worker.
+
+- F49: Planning has one Unscheduled Work table, with All, Production and Maintenance filters. Eligible planned maintenance can be dropped on the equipment's existing line or independent-equipment lane to prefill a start. The operator saves the slot explicitly. Maintenance still owns the repair workflow and preparation details. Production scheduling and existing Gantt reservations retain their own rules.
+- F50: The old repair button emitted an event listened to only on the Maintenance page. The action now routes through the existing permission-aware navigation and opens the selected row in the original Repairs workflow. Unavailable destinations and missing or inaccessible records have visible feedback. MR-0000104 navigation was verified in English and Arabic.
+- F51: Maintenance provides equipment, description, type, estimated elapsed minutes and an advisory preferred window. Planning provides the start and sees the calculated finish and current conflicts. A single Save Schedule reuses the existing protected maintenance command, activation, capacity, exact window/revision checks and audit history. An out-of-window save requires an audited reason. Existing proposals, gap search, history and unscheduling remain under Advanced scheduling. Save writes a reservation only. It leaves actual execution and machine status to the original workflows.
+
+The new forward migration 20261119054352_maintenance_schedule_save.sql is applied only to the existing identity-verified local database (SHA-256 be3bae866975334e7393ba4508a014103dc4fc5e05e0e84a487a78c91ee6533e). It adds the guarded save action and supplies the retained schedule revision for requeued work outside the old Gantt horizon. Prior 179 migration hashes and three unrelated draft hashes matched their previous records. Existing activation is enabled and was preserved. The adapter cluster has no hosted migration alignment evidence.
+
+Verification passed TypeScript and 137 focused Planning and Maintenance tests. Rollback SQL verified single-save duration, required advisory reason and history, retry behavior, denied access, stale and fresh overlap rejection, requeue revision and preserved production plan, equipment status and activation. EN/AR desktop and 390px checks covered queue filtering, fields and repair navigation. Eligible drag/drop was tested through the Planning handlers. MR-0000104 remains open at revision 1 with no type, estimate or schedule. The browser checks used that unchanged owner record. Confirmed scheduling was verified with a rollback fixture. The owner still needs to provide actual type and duration before scheduling the request.
+
+Preview http://127.0.0.1:29721/?view=planning. No hosted changes, reset, new environment, commit, push or deployment. Group 6 Lean scenario work and F37 remain deferred.
+
+---
+
+# 18 November 2026 — approved Git checkpoint / Group 4 Planning & Maintenance
+
+**Phase A pushed; Group 4 IMPLEMENTED AND LOCALLY VERIFIED, uncommitted and awaiting owner acceptance.** Approved baseline commits c50559c (F20/F45/F46/F47/F48 operational work and dependencies) and 17edd7147cf032a61bcc4f5b3f617cf51630bcda (canonical preview and trusted local Lean wiring) are verified on origin/development. Three unrelated drafts remain excluded and byte-preserved: UX_POLISH_BACKLOG.md, docs/design/FACTORY_LEAN_DESIGN_SYSTEM.md, public/f36-observer.js. Lean is technically verified only; its owner scenario testing remains pending.
+
+F23: Planning now exposes the existing Maintenance scheduling queue on demand, including unknown/unconfigured requests, through its existing protected reader/drawer. MR-0000104 is OPEN/MANUAL on Secondary Extruder / Line 2, still revision 1, with no kind, duration or schedule. Required configuration opens visibly and line identity falls back to current equipment scope. Owner must select the real kind/duration/window; none was invented or saved. The already-enabled local gate was inspected and preserved.
+
+A second confirmed blocker was PO-0000306: its wholly unassigned planned route was incorrectly treated as infinite machine occupancy. New forward migration 20261118111604_maintenance_unassigned_queue_capacity.sql replaces only private.maintenance_occupancy, excluding wholly unscheduled planned orders with no physical machine assignment. Assigned/partial windows, active work, effective-line routing, open machine loans, maintenance holds, revision proofs, original commands and lock/permission/conflict checks are retained. Applied only to the existing identity-verified local cluster; exact hash/owner-row evidence in the report. The adapter cluster has no Supabase migration history table; this is a local application record, not hosted alignment. All previous 178 migration bytes are unchanged; 179 files total.
+
+Verification: 182 focused baseline checks and TypeScript before commits; 137 Group 4 focused checks and TypeScript; five rollback capacity assertions; actual MR104 rollback rehearsal prepared/proposed/previewed/confirmed a reservation and verified conflict enforcement, unchanged production plans/machine states and unchanged activation. Everything in that rehearsal rolled back; MR104 remains untouched. EN/AR request discovery/details and 390px browser smoke passed. F9/F12 existing short bars/labels, lanes, zoom and Planning data protection passed; no Gantt code was rebuilt.
+
+Preview remains http://127.0.0.1:29721/?view=planning using canonical source, existing DB and worker. Report: D:/FactoryLean/Reports/Group4-20261118/REPORT.md. No new environment, hosted writes, reset, deployment, new Lean scenario or Group 4 commit/push. Future Group 6: verify surviving Lean functions first, then controlled downtime/loss/root-cause/action/plan-versus-actual scenarios. F37 dual-Gantt stays in Lean backlog; not implemented here. Earlier entries are historical checkpoints and acceptance statements.
+
+---
+
 # 18 November 2026 — canonical preview and local Lean binding
 
 **IMPLEMENTED AND LOCALLY VERIFIED; owner acceptance pending; not committed/pushed.** Canonical development HEAD remains b6efb22e470417a7f62d0a830770ddc7a9855898. Port 29721 now serves canonical source directly; no repository copy, worktree, database clone or second preview was created. Existing PostgreSQL 127.0.0.1:29719/factory_lean_quality_local (data D:/FactoryLean/Preview/review-20261108/data) and material worker were retained. Explicit local configuration is preserved byte-for-byte in that runtime's preview.env; canonical private .env.local is unchanged. Three old copied-source launchers are explicitly retired with their historical implementations retained.

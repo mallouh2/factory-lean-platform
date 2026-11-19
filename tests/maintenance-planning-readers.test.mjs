@@ -52,9 +52,9 @@ test('new migration preserves command signatures, private scope and disabled act
  assert.match(sql,/range_start,range_end,10001/);assert.match(sql,/statement_timestamp\(\)/);assert.match(sql,/prev\.revision=h\.revision-1/);
  assert.match(sql,/revoke all on function private\.maintenance_occupancy/);
 });
-test('UI allows only PLANNED proposals, hides obsolete evaluation and requires activation for confirmation',()=>{
+test('the Planning drawer requires bookable maintenance, capacity proof and activation',()=>{
  const ui=readFileSync('src/features/MaintenancePlanning.tsx','utf8'),readers=readFileSync('src/features/MaintenancePlanningReaders.tsx','utf8');
- assert.match(ui,/r\.maintenance_kind!=='PLANNED'/);assert.match(ui,/disabled=\{busy \|\| !confirmationReady\(\)\}/);
+ assert.match(ui,/maintenanceKindCanBook\(request\)/);assert.doesNotMatch(ui,/MaintenancePlanningReaders|onSubmit=\{saveDetails\}/);assert.match(ui,/disabled=\{busy \|\| !board\.active \|\| !proofCurrent/);
  assert.match(readers,/previewKey===identity&&!preview.loading&&!preview.error&&!expired/);assert.match(readers,/context_hash:preview.data.context_hash/);
  for(const lang of ['en','ar']){const d=JSON.parse(readFileSync(`src/locales/${lang}.json`));for(const key of ['mpCapacity_CLEAR','mpCapacity_BLOCKED','mpCapacity_UNKNOWN','mpCapacity_INCOMPLETE','mpPreviewStale','mpEvidenceMissing'])assert.ok(d[key]);}
 });

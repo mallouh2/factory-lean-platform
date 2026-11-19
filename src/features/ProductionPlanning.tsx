@@ -22,6 +22,8 @@ import RequestOrigin from '@/components/RequestOrigin';
 import { useFulfillment, type ProductionDemand } from './useFulfillment';
 import { productColor } from '@/utils/product-colors.mjs';
 import { MaintenancePlanningDrawer } from './MaintenancePlanning';
+import type { MaintenanceRequest } from './maintenance-types';
+import { maintenanceKindCanBook } from '@/utils/maintenance-planning.mjs';
 import MaintenanceTimelineBlock from './MaintenanceTimelineBlock';
 import { useOperationalPlanningBoard } from './useOperationalPlanningBoard';
 import {
@@ -46,7 +48,7 @@ type SlotSuggestion = { lineId: string; start: number; finish: number; setupMs: 
 const reasonCodes = ["priority_change", "customer_request", "machine_unavailable", "maintenance",
   "material_delay", "capacity_conflict", "quality_issue", "management_decision", "other"] as const;
 
-export default function ProductionPlanning({ snapshot: s, t, lang, can, command:sendCommand, refreshSnapshot, initialItemId,onOutputRelated }:
+export default function ProductionPlanning({ snapshot: s, t, lang, can, command:sendCommand, refreshSnapshot, initialItemId,onOutputRelated,onMaintenanceRepairOpen }:
   FeatureProps & { initialItemId?: string | null }) {
   const [editingId, setEditingId] = useState<string | null>(initialItemId || null);
   const [lineId, setLineId] = useState("");
@@ -88,6 +90,9 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   const [workSort,setWorkSort]=useState('start');
   const [ganttWidth,setGanttWidth]=useState(1000);
   const [barTip,setBarTip]=useState<{id:string;left:number;top:number;width:number}|null>(null);
+  const [queueType,setQueueType] = useState('all');
+  const [maintenanceStart,setMaintenanceStart] = useState('');
+  const maintenanceDrag = useRef<string|null>(null);
   useEffect(()=>{const clear=()=>setBarTip(null);window.addEventListener('scroll',clear,true);window.addEventListener('resize',clear);return()=>{window.removeEventListener('scroll',clear,true);window.removeEventListener('resize',clear);};},[]);
   function showBarTip(el:HTMLElement,id:string){const r=el.getBoundingClientRect(),width=Math.min(320,window.innerWidth-16);setBarTip({id,left:Math.max(8,Math.min(r.left,window.innerWidth-width-8)),top:Math.max(8,Math.min(r.bottom+8,window.innerHeight-240)),width});}
   const zoomLevels = [
@@ -123,13 +128,16 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   const lastPlacementRef=useRef<{itemId:string;lineId:string;start:number;finish:number;error?:string}|null>(null);
   const stopDragScroll=useRef<(()=>void)|null>(null);
   useEffect(()=>()=>stopDragScroll.current?.(),[]);
-  function beginDrag(event:React.DragEvent<HTMLButtonElement>,order:Row,scheduled=false){
+  function beginDrag(event:React.DragEvent<HTMLButtonElement>,order?:Row,scheduled=false){
     setBarTip(null);
-    stopDragScroll.current?.();stopDragScroll.current=startGanttDragScroll(event,timelineRef.current);
+    stopDragScroll.current?.();
+    stopDragScroll.current=timelineRef.current ? startGanttDragScroll(event,timelineRef.current) : null;
     grabOffsetRef.current=0;lastPlacementRef.current=null;
-    if(scheduled){const lane=event.currentTarget.closest('.planning-lane-track')?.getBoundingClientRect();if(lane)grabOffsetRef.current=dragTimelineStart(rangeStart,rangeEnd,event.clientX,lane.left,lane.width)-Date.parse(String(order.start_time));}
-    if(!nativeDragImage.current){nativeDragImage.current=document.createElement('canvas');nativeDragImage.current.width=1;nativeDragImage.current.height=1;}
-    event.dataTransfer.setDragImage(nativeDragImage.current,0,0);
+    if(scheduled && order){const lane=event.currentTarget.closest('.planning-lane-track')?.getBoundingClientRect();if(lane)grabOffsetRef.current=dragTimelineStart(rangeStart,rangeEnd,event.clientX,lane.left,lane.width)-Date.parse(String(order.start_time));}
+    if(typeof event.dataTransfer.setDragImage==='function'){
+      if(!nativeDragImage.current){nativeDragImage.current=document.createElement('canvas');nativeDragImage.current.width=1;nativeDragImage.current.height=1;}
+      event.dataTransfer.setDragImage(nativeDragImage.current,0,0);
+    }
   }
   const policyReview=useRef<PlanningProtection>({fingerprint:"",required:false,confirmed:false,ready:false});
   const policyAttempt=useRef<{intent:string;id:string}|null>(null);
@@ -237,10 +245,56 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
   const canDragItem = (order: Row) => editableItem(order) && maintenanceReady && !limited && canSeeResources &&
     !busy && !savingDropId && !dragReason(order);
   const maintenanceSchedules = maintenanceRead.data?.schedules || [];
-  const maintenanceForLine = (line: Row) => maintenanceSchedules.filter(schedule => (schedule.line_ids || []).includes(String(line.id)));
-  const independentSchedules = maintenanceSchedules.filter(schedule => !schedule.line_ids?.length);
-  const openMaintenance = (id:string) => {setMaintenanceId(id);setEditingId(null);};
-  const maintenanceRequest = maintenanceRead.data?.requests.find(request => request.id===maintenanceId);
+  const timelineSchedules = (maintenanceRead.displayData ?? maintenanceRead.data)?.schedules || [];
+  const maintenanceForLine = (line: Row) => timelineSchedules.filter(schedule => (schedule.line_ids || []).includes(String(line.id)));
+  const independentSchedules = timelineSchedules.filter(schedule => !schedule.line_ids?.length);
+  const unscheduledMaintenance = maintenanceRead.data?.requests.filter(request =>
+    ['OPEN','ASSIGNED'].includes(request.status) && !maintenanceSchedules.some(schedule =>
+      schedule.maintenance_request_id===request.id && schedule.state!=='UNSCHEDULED')) || [];
+  const maintenanceMachine = (request:MaintenanceRequest) => centers.find(center=>String(center.id)===request.work_center_id);
+  const draggedMaintenance = unscheduledMaintenance.find(request=>request.id===draggingId);
+  const openMaintenance = (id:string,start='') => {
+    setMaintenanceStart(start);setMaintenanceId(id);setEditingId(null);setError('');
+  };
+  function maintenanceDragBlocker(request:MaintenanceRequest) {
+    if (!can('orders','edit') || !can('orders','view') || !can('maintenance','view') || !can('factory','view')) return 'permissionError';
+    if (!maintenanceRead.data?.active) return 'mpActivationBlocked';
+    if (!maintenanceReady || busy || savingDropId) return 'mpAvailabilityUnknown';
+    if (!maintenanceKindCanBook(request) || !(Number(request.estimated_duration_minutes)>0)) {
+      return request.maintenance_kind==='CORRECTIVE' && !maintenanceKindCanBook(request) ? 'mpCorrectiveOnly' : 'mpDetailsNeeded';
+    }
+    const machine = maintenanceMachine(request);
+    if (!machine || machine.archived || !machine.category_id ||
+      (machine.line_id ? !lines.some(line=>line.id===machine.line_id && !line.archived) : machine.dependency_mode!=='independent')) return 'maintenanceConfigurationUnknown';
+    return '';
+  }
+  function maintenanceDrop(event:React.DragEvent<HTMLDivElement>,lineId:string,commit=false) {
+    const id = maintenanceDrag.current;
+    if (!id) return false;
+    event.preventDefault();
+    const request = unscheduledMaintenance.find(row=>row.id===id);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const raw = dragTimelineStart(rangeStart,rangeEnd,event.clientX,rect.left,rect.width);
+    const start = Math.max(Math.round(raw/snapIncrement)*snapIncrement,Math.ceil(Date.now()/snapIncrement)*snapIncrement);
+    const durationMs = Number(request?.estimated_duration_minutes)*60_000;
+    const finish = start+durationMs;
+    const fits = start>=rangeStart && start>Date.now() && finish<=rangeEnd;
+    const blocker = !request ? 'mpBoardChanged' : maintenanceDragBlocker(request) ||
+      (String(maintenanceMachine(request)?.line_id||'')!==lineId ? 'mpDropEquipmentLane' : !fits ? 'mpBoardOutside' : '');
+    event.dataTransfer.dropEffect=blocker ? 'none' : 'move';
+    lastHoverRef.current={itemId:id,error:blocker||undefined};
+    if (commit) {
+      maintenanceDrag.current=null;
+      finishDrag(id);
+      if (!blocker) openMaintenance(id,formatLocalInput(new Date(start).toISOString(),zone));
+    } else {
+      setHoverPreview(current=>current?.itemId===id && current.lineId===lineId && current.start===start && current.error===blocker
+        ? current : {itemId:id,lineId,start,finish,durationMs,error:blocker});
+    }
+    return true;
+  }
+  const detailBoard = maintenanceRead.data ?? maintenanceRead.displayData;
+  const maintenanceRequest = detailBoard?.requests.find(request => request.id===maintenanceId);
   const visibleLines = lines.filter((line) => !line.archived && (!lineFilter || String(line.id) === lineFilter));
   const lineSchedules = new Map(visibleLines.map((line) => [String(line.id),
     sortedLineSchedule(line, visualOrders, centers, capabilities, null, calendar, zone)]));
@@ -704,13 +758,42 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         onClick={() => findSlots(order)}>{t("planningFindSlot")}</button>}</div>;
   }
 
-  function compactTable(items: Row[], waiting: boolean) {
+  function compactTable(items: Row[], waiting: boolean, maintenanceItems:MaintenanceRequest[] = []) {
+    const maintenanceRows = maintenanceItems.map(request=>{
+        const blocker = maintenanceDragBlocker(request);
+        const equipment = localName(maintenanceMachine(request),lang) || (lang==='ar' && request.machine_name_ar) || request.machine_name;
+        return <tr key={request.id} data-work-type="maintenance" data-urgency={request.priority} data-selected={maintenanceId===request.id}>
+          <td data-label={t('mpWorkReference')}><button type="button" className="planning-product-card planning-table-select"
+            draggable={!blocker} onClick={()=>openMaintenance(request.id)}
+            onDragStart={event=>{
+              if(blocker){event.preventDefault();return;}
+              beginDrag(event);
+              maintenanceDrag.current=request.id;
+              setDraggingId(request.id);
+              lastHoverRef.current=null;
+              event.dataTransfer.effectAllowed='move';
+              event.dataTransfer.setData('text/plain',request.code);
+              setError('');
+            }}
+            onDragEnd={()=>{maintenanceDrag.current=null;finishDrag(request.id);}}>
+            <bdi>{request.code}</bdi>
+          </button></td>
+          <td data-label={t('mpWorkSubject')}><bdi>{equipment}</bdi><small dir="auto">{request.title}</small></td>
+          <td data-label={t('mpQuantityDuration')}>{request.estimated_duration_minutes ? formatDuration(request.estimated_duration_minutes,lang) : '—'}</td>
+          <td data-label={t('planningWorkType')}>{t('maintenance')}</td>
+          <td data-label={t('priority')}>{t('maintenancePriority_'+request.priority)}</td>
+          <td data-label={t('requiredBy')}>—</td>
+          <td data-label={t('planningEligibility')}>{t(blocker || 'planningReadyToSchedule')}</td>
+        </tr>;
+      });
     return <div className="planning-table-scroll" tabIndex={0} role="region" aria-label={t(waiting?'planningWaitingTitle':'planningProgressedTitle')}>
       <table className="planning-work-table"><thead><tr>
-        <th scope="col">{t('planningOrderReference')}</th><th scope="col">{t('product')}</th><th scope="col">{t('quantity')}</th><th scope="col">{t('planningWorkType')}</th>
+        <th scope="col">{t(waiting?'mpWorkReference':'planningOrderReference')}</th><th scope="col">{t(waiting?'mpWorkSubject':'product')}</th><th scope="col">{t(waiting?'mpQuantityDuration':'quantity')}</th><th scope="col">{t('planningWorkType')}</th>
         {waiting ? <><th scope="col">{t('priority')}</th><th scope="col">{t('requiredBy')}</th><th scope="col">{t('planningEligibility')}</th></> :
           <><th scope="col">{t('priority')}</th><th scope="col">{t('line')}</th><th scope="col">{t('executionPlannedStart')}</th><th scope="col">{t('executionPlannedFinish')}</th><th scope="col">{t('status')}</th></>}
-      </tr></thead><tbody>{items.map(order=>{
+      </tr></thead><tbody>
+      {queueSort==='priority' && maintenanceRows.filter(row=>row.props['data-urgency']==='URGENT')}
+      {items.map(order=>{
         const blocked=dragReason(order), timing=planningTiming(order,requestOf(order));
         const recovery=completionWork.find(w=>w.item_id===String(order.id));
         return <tr key={String(order.id)} data-item-id={String(order.id)} data-request-id={String(order.request_id)}
@@ -722,8 +805,10 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
               beginDrag(event,order);event.dataTransfer.setData('text/plain',String(order.id));event.dataTransfer.effectAllowed='move';
               draggingRef.current=String(order.id);lastHoverRef.current=null;setDraggingId(String(order.id));setError('');}}
             onDragEnd={()=>finishDrag(String(order.id))}><bdi dir="ltr">{String(order.code||requestOf(order)?.code)}</bdi></button></td>
-          <td data-label={t('product')}><DeliveryContext rows={fulfillment.data?.rows||[]} item={order.id} t={t} lang={lang} zone={zone}/><ProductIdentity productId={order.product_id} productItemId={order.id}>{localName(productOf(order),lang)}</ProductIdentity></td>
-          <td data-label={t('quantity')}>{amountOf(order)}</td><td data-label={t('planningWorkType')}>{t(planningWorkKind(order,requestOf(order),recovery).type)}</td>
+          <td data-label={t(waiting?'mpWorkSubject':'product')}><DeliveryContext rows={fulfillment.data?.rows||[]} item={order.id} t={t} lang={lang} zone={zone}/><ProductIdentity productId={order.product_id} productItemId={order.id}>{localName(productOf(order),lang)}</ProductIdentity></td>
+          <td data-label={t(waiting?'mpQuantityDuration':'quantity')}>{amountOf(order)}</td><td data-label={t('planningWorkType')}>
+            {waiting ? <>{t('production')}<small>{t(planningWorkKind(order,requestOf(order),recovery).type)}</small></> : t(planningWorkKind(order,requestOf(order),recovery).type)}
+          </td>
           {waiting?<><td data-label={t('priority')}>{requestOf(order)?.priority==='unspecified'?t('notSpecified'):priorityBadge(order)}</td><td data-label={t('requiredBy')}>{requestOf(order)?.required_by?formatTime(requestOf(order)?.required_by,lang,zone):'—'}</td>
             <td data-label={t('planningEligibility')}>{recovery?.held?<strong className="planning-warning">{t('planningQualityHold')}</strong>:blocked?<span className="planning-warning">{t(blocked)}</span>:t('planningReadyToSchedule')}
               {timing&&<small className="planning-warning">{t(timing)}</small>}</td></>:<>
@@ -733,7 +818,9 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
               {order.planning_locked_at&&<small>{t('planningLocked')}</small>}{recovery?.held&&<small className="planning-warning">{t('planningQualityHold')}</small>}
               {timing&&<small className="planning-warning">{t(timing)}</small>}</td></>}
         </tr>;
-      })}</tbody></table>
+      })}
+      {maintenanceRows.filter(row=>queueSort!=='priority' || row.props['data-urgency']!=='URGENT')}
+      </tbody></table>
     </div>;
   }
 
@@ -779,11 +866,16 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
     {error && !editing && <p className="planning-warning-banner" role="alert">{t(error)}</p>}
     <div className="planning-workspace">
     <section className="planning-section planning-requests-waiting" aria-labelledby="planning-needs-title">
-      <header><h3 id="planning-needs-title">{t("planningWaitingTitle")} <span>{planningItems.length}</span></h3>
+      <header><h3 id="planning-needs-title">{t("planningWaitingTitle")} <span>{(queueType==='maintenance'?0:planningItems.length)+(queueType==='production'?0:unscheduledMaintenance.length)}</span></h3>
         </header>
-      <div className="planning-queue-help"><p>{t('planningQueueHelp')}</p><label>{t('planningSort')} <select value={queueSort} onChange={e=>setQueueSort(e.target.value)}>
+      <div className="planning-queue-help"><p>{t('planningQueueHelp')}</p>
+        {can('maintenance','view') && can('factory','view') && <label>{t('planningWorkType')} <select value={queueType} onChange={event=>setQueueType(event.target.value)}>
+          <option value="all">{t('all')}</option><option value="production">{t('production')}</option><option value="maintenance">{t('maintenance')}</option>
+        </select></label>}
+        <label>{t('planningSort')} <select value={queueSort} onChange={e=>setQueueSort(e.target.value)}>
         <option value="priority">{t('priority')}</option><option value="required">{t('requiredBy')}</option><option value="reference">{t('planningOrderReference')}</option></select></label></div>
-      {planningItems.length ? compactTable(sortPlanningRows(planningItems,requests,queueSort),true) :
+      {(queueType!=='maintenance' && planningItems.length>0) || (queueType!=='production' && unscheduledMaintenance.length>0)
+        ? compactTable(queueType==='maintenance'?[]:sortPlanningRows(planningItems,requests,queueSort),true,queueType==='production'?[]:unscheduledMaintenance) :
         <p className="planning-empty">{t("planningQueueEmpty")}</p>}
     </section>
     <section className="planning-section planning-gantt" aria-labelledby="planning-scheduled-title">
@@ -903,10 +995,14 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
                   {dropState?.error || linePreview?.error ? t(planningMessage(dropState?.error || linePreview?.error || "",dragging,line,linePreview||undefined)) :
                     linePreview?.durationMs ? `${formatDuration(Math.ceil(linePreview.durationMs / 60_000), lang)} · ${linePreview.rate} ${unitOf(dragging)}/${t("planningHour")}` :
                     formatDuration(Math.ceil(dropState.totalMs / 60_000), lang)}</small>}
-                {linePreview && !linePreview.error && linePreview.requestedStart !== linePreview.start &&
+                {linePreview && draggedMaintenance && <small className={linePreview.error ? "planning-warning" : "planning-drop-hint"}>
+                  {linePreview.error ? t(linePreview.error) : formatTime(new Date(linePreview.start).toISOString(),lang,zone)}
+                </small>}
+                {linePreview && dragging && !linePreview.error && linePreview.requestedStart !== linePreview.start &&
                   <small className="planning-drop-hint">{t("planningSnappedStart")}: {formatTime(new Date(linePreview.start).toISOString(), lang, zone)}</small>}
                 {conflicts.size > 0 && <small className="planning-warning">{t("planningOverlap")}</small>}</strong>
               <div className="planning-lane-track" onDragOver={(event) => {
+                  if (maintenanceDrop(event,String(line.id))) return;
                   const draggedOrder = active.find((candidate) =>
                     String(candidate.id) === (draggingRef.current || draggingId));
                   if (!canEdit || !draggedOrder) return;
@@ -925,7 +1021,7 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
                     previous.error === next.error ? previous : next);
                 }}
                 onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setHoverPreview(null); }}
-                onDrop={(event) => { if (canEdit && !limited && canSeeResources && !savingDropId) void dropItem(event, line); }}
+                onDrop={(event) => { if (!maintenanceDrop(event,String(line.id),true) && canEdit && !limited && canSeeResources && !savingDropId) void dropItem(event, line); }}
                 style={{ height: Math.max(68, 12 + (layout.tracks + layout.unknown.length) * 60) }}>
                 {dayBoundaries.map(day=><i className="planning-day-boundary" key={'day-'+day} style={{left:position(day)+'%'}}/>)}
                 {closed.map((period) => <i className="planning-closed-time" key={period.start}
@@ -999,14 +1095,14 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
                 {layout.reservations.map((slot:any) => <MaintenanceTimelineBlock key={slot.reservation.id} schedule={slot.reservation} compact={slot.compact} captionEnd={slot.captionEnd}
                   from={rangeStart} until={rangeEnd} top={8+slot.track*60} t={t} lang={lang} zone={zone}
                   onOpen={() => openMaintenance(slot.reservation.maintenance_request_id)}/>)}
-                {linePreview && dragging && Number.isFinite(linePreview.start) && linePreview.durationMs &&
+                {linePreview && (dragging || draggedMaintenance) && Number.isFinite(linePreview.start) && linePreview.durationMs &&
                   <span data-preview-start={linePreview.start} data-preview-finish={linePreview.finish} className={"planning-drag-ghost planning-pointer-ghost" + (linePreview.error ? " planning-drag-ghost-invalid" : "")}
                     style={{ left: position(linePreview.start) + "%", width: widthOf(linePreview.finish - linePreview.start) + "%",
-                      ...productStyle(dragging) }}
+                      ...(dragging ? productStyle(dragging) : {}) }}
                     aria-hidden="true"><i className="planning-preview-interval"/>{linePreview.setupMs && <i className="planning-setup-segment"
                       style={{ width: Math.min(100, (finishAfterWorkingMs(linePreview.start, linePreview.setupMs,
                         calendar, zone) - linePreview.start) / (linePreview.finish - linePreview.start) * 100) + "%" }} />}
-                    <span className="planning-drag-caption" dir="auto"><bdi>{String(dragging.code)}</bdi> · {formatDuration(Math.ceil((linePreview.finish-linePreview.start)/60_000),lang)}</span></span>}
+                    <span className="planning-drag-caption" dir="auto"><bdi>{String(dragging?.code || draggedMaintenance?.code)}</bdi> · {formatDuration(Math.ceil((linePreview.finish-linePreview.start)/60_000),lang)}</span></span>}
                 {chosenSlot && slotOrder && chosenSlot.lineId === String(line.id) &&
                   chosenSlot.start < rangeEnd && chosenSlot.finish > rangeStart &&
                   <span className="planning-drag-ghost planning-slot-ghost"
@@ -1023,9 +1119,11 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
               </div>
             </div>;
           })}
-          {independentSchedules.length>0 && <div className="planning-lane">
+          {(independentSchedules.length>0 || (!lineFilter && unscheduledMaintenance.some(request=>
+            maintenanceMachine(request)?.dependency_mode==='independent' && !maintenanceMachine(request)?.line_id))) && <div className="planning-lane">
             <strong className="planning-line-label" dir={lang==='ar' ? 'rtl' : 'ltr'}>{t('mpIndependentMachines')}<small>{t('mpMachineImpact')}</small></strong>
-            <div className="planning-lane-track" style={{height:12+independentSchedules.length*60}}>
+            <div className="planning-lane-track" onDragOver={event=>maintenanceDrop(event,'')} onDrop={event=>maintenanceDrop(event,'',true)}
+              style={{height:Math.max(68,12+independentSchedules.length*60)}}>
               {ticks.slice(1,-1).map(tick => <i className="planning-gridline" key={tick} style={{left:position(tick)+'%'}}/>)}
               {independentSchedules.map((schedule,index) => <MaintenanceTimelineBlock key={schedule.id} schedule={schedule}
                 from={rangeStart} until={rangeEnd} top={8+index*60} t={t} lang={lang} zone={zone}
@@ -1187,9 +1285,10 @@ export default function ProductionPlanning({ snapshot: s, t, lang, can, command:
         </form>
       </div>
     </div>}
-    {maintenanceRequest && maintenanceRead.data && <MaintenancePlanningDrawer key={`${maintenanceRequest.id}:${maintenanceRequest.revision}`}
-      snapshot={s} t={t} lang={lang} can={can} command={command} request={maintenanceRequest} board={maintenanceRead.data}
-      schedule={maintenanceSchedules.find(schedule => schedule.maintenance_request_id===maintenanceRequest.id)}
+    {maintenanceRequest && detailBoard && <MaintenancePlanningDrawer key={`${maintenanceRequest.id}:${maintenanceRequest.revision}:${maintenanceStart}`}
+      snapshot={s} t={t} lang={lang} can={can} command={command} request={maintenanceRequest} board={detailBoard}
+      initialStart={maintenanceStart} onMaintenanceRepairOpen={onMaintenanceRepairOpen}
+      schedule={detailBoard.schedules.find(schedule => schedule.maintenance_request_id===maintenanceRequest.id)}
       onClose={() => setMaintenanceId('')} onChanged={maintenanceRead.reload}/>}
   </section>;
 }

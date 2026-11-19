@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Dialog, Field, formatTime } from '@/components/ui';
+import { Dialog, Field, formatTime, localName } from '@/components/ui';
 import { useHistoryData } from '@/hooks/useHistoryData';
 import { formatDuration } from '@/utils/production-flow.mjs';
 import { formatLocalInput, localDateTimeToUtc } from '@/utils/manufacturing.mjs';
@@ -7,8 +7,7 @@ import { maintenanceQueueView, maintenanceQueueViews } from '@/utils/maintenance
 import type { FeatureProps } from './types';
 import type { MaintenancePlanningBoard, MaintenanceSchedule, MaintenancePreview } from './maintenance-planning-types';
 import type { MaintenanceRequest } from './maintenance-types';
-import {maintenancePreviewCurrent} from '@/utils/maintenance-planning.mjs';
-import MaintenancePlanningReaders from './MaintenancePlanningReaders';
+import {maintenanceKindCanBook,maintenancePreviewCurrent} from '@/utils/maintenance-planning.mjs';
 import {useOperationalPlanningBoard} from './useOperationalPlanningBoard';
 
 export function useMaintenancePlanning(props: FeatureProps) {
@@ -21,103 +20,150 @@ export function useMaintenancePlanning(props: FeatureProps) {
     ? `/api/maintenance-planning?factory=${s.factory?.id}&view=board` : null,s.fetchedAt);
 }
 
-export function MaintenancePlanningDrawer({request:r,schedule,board,onClose,onChanged,...props}: FeatureProps & {
-  request:MaintenanceRequest; schedule?:MaintenanceSchedule; board:MaintenancePlanningBoard;
-  onClose:()=>void; onChanged:()=>void;
+export function MaintenancePlanningDrawer({
+  request, schedule, board, initialStart, onClose, onChanged, ...props
+}: FeatureProps & {
+  request: MaintenanceRequest;
+  schedule?: MaintenanceSchedule;
+  board: MaintenancePlanningBoard;
+  initialStart?: string;
+  onClose: () => void;
+  onChanged: () => void;
 }) {
-  const {snapshot:s,t,lang,can,command} = props;
-  const zone = String(s.factory?.timezone || 'UTC');
-  const [start,setStart] = useState(schedule ? formatLocalInput(schedule.planned_start,zone) : r.preferred_start ? formatLocalInput(r.preferred_start,zone) : '');
-  const [end,setEnd] = useState(schedule ? formatLocalInput(schedule.planned_end,zone) : '');
-  const [reason,setReason] = useState(''),[busy,setBusy] = useState(false),[error,setError] = useState('');
-  const [kind,setKind] = useState(r.maintenance_kind || ''),[duration,setDuration] = useState(String(r.estimated_duration_minutes || ''));
-  const [preferredStart,setPreferredStart] = useState(r.preferred_start ? formatLocalInput(r.preferred_start,zone) : '');
-  const [preferredEnd,setPreferredEnd] = useState(r.preferred_end ? formatLocalInput(r.preferred_end,zone) : '');
-  const [notes,setNotes] = useState(r.planning_notes || '');
-  const [safetyPreview,setSafetyPreview]=useState<MaintenancePreview|null>(null);
-  const retry = useRef<{key:string;id:string}|null>(null);
-  const authority = can('orders','edit') && can('maintenance','view');
-  const mutable = ['OPEN','ASSIGNED'].includes(r.status) && !schedule?.actual_hold;
-  const locked = ['CONFIRMED','INVALIDATED'].includes(schedule?.state || '');
-  const stamp = (value:string) => value ? localDateTimeToUtc(value,zone) : null;
-  function proofCurrent(requireActivation=false) {
-    try {return maintenancePreviewCurrent(safetyPreview,{factory:String(s.factory?.id),request:r.id,requestRevision:r.revision,
-      scheduleRevision:schedule?.revision||0,start:stamp(start),end:stamp(end),timezone:zone,requireActivation});}catch{return false;}
-  }
-  function confirmationReady() {
-    if (!authority || !can('factory','view') || !can('orders','view') || !mutable || board.active!==true ||
-      r.maintenance_kind!=='PLANNED' || !proofCurrent(true)) return false;
-    if (locked) return Boolean(reason.trim());
-    return schedule?.state==='PROPOSED' && Date.parse(safetyPreview!.start)===Date.parse(schedule.planned_start) &&
-      Date.parse(safetyPreview!.end || '')===Date.parse(schedule.planned_end);
-  }
-  async function run(operation:string,payload:Record<string,unknown>) {
+  const {snapshot, t, lang, can, command, onMaintenanceRepairOpen} = props;
+  const factory = String(snapshot.factory?.id || '');
+  const zone = String(snapshot.factory?.timezone || 'UTC');
+  const revision = schedule?.revision ?? request.planning_schedule_revision ?? 0;
+  const locked = schedule?.state === 'CONFIRMED' || schedule?.state === 'INVALIDATED';
+  const mutable = ['OPEN','ASSIGNED'].includes(request.status) && !schedule?.actual_hold;
+  const authority = can('factory','view') && can('maintenance','view') && can('orders','view') && can('orders','edit');
+  const bookable = maintenanceKindCanBook(request);
+  const configured = bookable && Number(request.estimated_duration_minutes) > 0;
+  const localInput = (value?:string|null) => value ? formatLocalInput(value,zone) : '';
+  const [start,setStart] = useState(initialStart || localInput(
+    schedule && schedule.state !== 'UNSCHEDULED' ? schedule.planned_start : null));
+  const [reason,setReason] = useState('');
+  const [busy,setBusy] = useState(false);
+  const [error,setError] = useState('');
+  const [removing,setRemoving] = useState(false);
+  const retry = useRef<{key:string;id:string;payload:Record<string,unknown>}|null>(null);
+
+  const stamp = (value: string) => value ? localDateTimeToUtc(value,zone) : null;
+  let plannedStart: string | null = null;
+  try {plannedStart = stamp(start);} catch { /* Invalid local time. */ }
+  const end = plannedStart && configured
+    ? new Date(Date.parse(plannedStart) + Number(request.estimated_duration_minutes) * 60_000).toISOString()
+    : null;
+  const outside = Boolean(plannedStart && end && (
+    request.preferred_start && Date.parse(plannedStart) < Date.parse(request.preferred_start) ||
+    request.preferred_end && Date.parse(end) > Date.parse(request.preferred_end)));
+  const reasonRequired = outside || locked;
+  const previewUrl = authority && mutable && plannedStart && end && Date.parse(plannedStart)>Date.now()
+    ? '/api/maintenance-planning?' + new URLSearchParams({
+      factory,request:request.id,mode:'preview',start:plannedStart,end,
+      request_revision:String(request.revision),schedule_revision:String(revision),
+    }) : null;
+  const preview = useHistoryData<MaintenancePreview>(previewUrl,snapshot.fetchedAt);
+  const proof = preview.data;
+  const proofCurrent = Boolean(!preview.loading && !preview.error && plannedStart && end &&
+    maintenancePreviewCurrent(proof,{
+      factory,request:request.id,requestRevision:request.revision,scheduleRevision:revision,
+      start:plannedStart,end,timezone:zone,requireActivation:true,
+    }));
+  const machine = snapshot.tables.work_centers?.find(row=>String(row.id)===request.work_center_id);
+  const line = snapshot.tables.production_lines?.find(row=>String(row.id)===String(machine?.line_id ?? request.line_id));
+  const equipment = localName(machine,lang) || (lang==='ar' && request.machine_name_ar) || request.machine_name;
+
+  async function run(operation:string,payload:Record<string,unknown>,intent=payload) {
     if (busy) return;
-    if (['confirm','reschedule'].includes(operation)) {
-      if (!confirmationReady()) {setError(board.active===true ? 'mpPreviewRequired' : 'mpActivationBlocked');return;}
-      payload={...payload,context_hash:safetyPreview!.context_hash,request_revision:safetyPreview!.request_revision};
+    const args = {
+      factory,maintenance_request:request.id,operation,
+      expected_revision:revision,
+    };
+    const key = JSON.stringify({...args,intent});
+    if (retry.current?.key!==key) retry.current={key,id:crypto.randomUUID(),payload};
+    setBusy(true);
+    setError('');
+    try {
+      await command('maintenance_planning_command',{...args,payload:retry.current.payload,request_id:retry.current.id});
+      retry.current=null;
+      onChanged();
+      onClose();
+    } catch(cause) {
+      const message = cause instanceof Error ? cause.message : 'error';
+      setError(message);
+      if(message==='mpPreviewStale'){
+        retry.current=null;
+        preview.reload();
+      }
+    } finally {
+      setBusy(false);
     }
-    const args = {factory:s.factory?.id,maintenance_request:r.id,operation,payload,
-      expected_revision:operation==='details' ? r.revision : schedule?.revision || 0};
-    const key = JSON.stringify(args);
-    if (retry.current?.key !== key) retry.current = {key,id:crypto.randomUUID()};
-    setBusy(true);setError('');
-    try { await command('maintenance_planning_command',{...args,request_id:retry.current.id}); retry.current=null;onChanged();onClose(); }
-    catch(cause) { setError(cause instanceof Error ? cause.message : 'error'); }
-    finally {setBusy(false);}
   }
-  function propose(event:React.FormEvent) {
+
+  function saveSchedule(event:React.FormEvent) {
     event.preventDefault();
-    try {void run(locked ? 'reschedule' : 'propose',{start:stamp(start),...(end ? {end:stamp(end)} : {}),reason});}
-    catch {setError('maintenanceUnknownWindow');}
+    if(!board.active || !authority || !mutable || !configured || !plannedStart || reasonRequired && !reason.trim()) return;
+    const intent = {start:plannedStart,reason:reason.trim(),request_revision:request.revision};
+    if(!proofCurrent || !proof) {
+      setError('mpPreviewStale');
+      preview.reload();
+      return;
+    }
+    void run('save',{...intent,context_hash:proof.context_hash},intent);
   }
-  const machine = s.tables.work_centers?.find(m => String(m.id)===r.work_center_id);
-  const lineImpact = schedule?.resources.some(resource => resource.line_id) || Boolean(machine?.line_id);
-  return <Dialog title={`${r.code} · ${t('mpScheduling')}`} t={t} busy={busy} onClose={onClose}>
-    <div className="mp-drawer" dir={lang==='ar' ? 'rtl' : 'ltr'}>
-      {board.active!==true && <p className="mr-warning" role="status">{t('mpActivationBlocked')}</p>}
-      {error && <p role="alert">{t(error)} <button disabled={busy} onClick={() => {onChanged();onClose();}}>{t('refresh')}</button></p>}
-      <h3 dir="auto">{r.title}</h3><p dir="auto">{r.description || '—'}</p>
-      <dl className="mr-facts">
-        <div><dt>{t('machine')}</dt><dd><bdi>{r.machine_code}</bdi> · {lang==='ar' ? r.machine_name_ar || r.machine_name : r.machine_name}</dd></div>
-        <div><dt>{t('line')}</dt><dd>{lang==='ar' ? r.line_name_ar || r.line_name || '—' : r.line_name || '—'}</dd></div>
-        <div><dt>{t('mpDuration')}</dt><dd>{r.estimated_duration_minutes ? formatDuration(r.estimated_duration_minutes,lang) : t('mpUnknown')}</dd></div>
-        <div><dt>{t('mpState')}</dt><dd>{schedule ? t(`mpState_${schedule.state}`) : t('mpView_needs')} · {t(`maintenanceState_${r.status}`)}</dd></div>
-        <div><dt>{t('mpPreferred')}</dt><dd>{formatTime(r.preferred_start,lang,zone)} — {formatTime(r.preferred_end,lang,zone)}</dd></div>
-        <div><dt>{t('mpImpact')}</dt><dd>{t(lineImpact ? 'mpLineImpact' : machine?.dependency_mode==='independent' ? 'mpMachineImpact' : 'mpUnknown')}</dd></div>
-      </dl>
-      {schedule && <p>{t('mpWindow')}: {formatTime(schedule.planned_start,lang,zone)} — {formatTime(schedule.planned_end,lang,zone)}
-        {schedule.actual_hold && <strong> · {t('mpHold')}</strong>}{schedule.overrun && <strong> · {t('mpOverrun')}</strong>}
-        {schedule.missed_window && <strong> · {t('mpMissed')}</strong>}</p>}
-      <MaintenancePlanningReaders {...props} request={r} schedule={schedule} start={start} end={end} onSelect={(a,b)=>{setStart(a);setEnd(b);}} onPreview={setSafetyPreview}/>
-      {proofCurrent()&&<p role="status">{t('mpPreviewReady')}</p>}
+
+  function openRepair() {
+    if(!onMaintenanceRepairOpen?.(request.id)) setError('mpRepairUnavailable');
+  }
+
+  return <Dialog title={t('mpScheduling')+' · '+request.code} t={t} busy={busy} onClose={onClose}
+    className="planning-drawer planning-maintenance-drawer">
+    <div dir={lang==='ar' ? 'rtl' : 'ltr'}>
+      <section className="planning-order-summary">
+        <strong dir="auto">{request.title}</strong>
+        {request.description && <p dir="auto">{request.description}</p>}
+        <dl className="planning-editor-facts">
+          <div><dt>{t('machine')}</dt><dd>{equipment || '—'}</dd></div>
+          <div><dt>{t('line')}</dt><dd>{localName(line,lang) || request.line_name || '—'}</dd></div>
+          <div><dt>{t('mpKind')}</dt><dd>{t(request.maintenance_kind ? 'mpKind_'+request.maintenance_kind : 'mpUnknown')}</dd></div>
+          <div><dt>{t('mpDuration')}</dt><dd>{request.estimated_duration_minutes ? formatDuration(request.estimated_duration_minutes,lang) : '—'}</dd></div>
+          <div><dt>{t('mpRequestedWindow')}</dt><dd>{formatTime(request.preferred_start,lang,zone)} — {formatTime(request.preferred_end,lang,zone)}</dd></div>
+          <div><dt>{t('mpUrgency')}</dt><dd>{t('maintenancePriority_'+request.priority)}</dd></div>
+          {schedule && <div><dt>{t('mpState')}</dt><dd>{t('mpState_'+schedule.state)}{schedule.actual_hold && ' · '+t('mpHold')}</dd></div>}
+        </dl>
+      </section>
+      {error && <p role="alert" className="mr-warning">{t(error)}
+        {error==='mpPreviewStale' && <button type="button" onClick={onChanged}>{t('refresh')}</button>}
+      </p>}
+      {can('maintenance','view') && <button type="button" disabled={busy} onClick={openRepair}>{t('mpRepairDetails')}</button>}
+      {!configured && <p role="status">{t(!bookable && request.maintenance_kind==='CORRECTIVE' ? 'mpCorrectiveOnly' : 'mpDetailsNeeded')}</p>}
+      {!mutable && <p role="status">{t('mpNotEligible')}</p>}
       {!authority && <p role="status">{t('permissionError')}</p>}
-      {can('maintenance','edit') && mutable && !locked && <details className="mr-filters"><summary>{t('mpDetails')}</summary>
-        <form className="mr-form" onSubmit={event => {event.preventDefault();try {void run('details',{
-          maintenance_kind:kind || null,estimated_duration_minutes:duration ? Number(duration) : null,
-          preferred_start:stamp(preferredStart),preferred_end:stamp(preferredEnd),planning_notes:notes,
-        });} catch {setError('maintenanceUnknownWindow');}}}>
-          <fieldset disabled={busy}><Field label={t('mpKind')}><select value={kind} onChange={event => setKind(event.target.value)}>
-            <option value="">{t('mpUnknown')}</option><option value="CORRECTIVE">{t('mpKind_CORRECTIVE')}</option>
-            {r.source!=='DOWNTIME' && <option value="PLANNED">{t('mpKind_PLANNED')}</option>}
-          </select></Field><Field label={t('mpDuration')}><input type="number" min="1" step="1" required={kind==='PLANNED'} value={duration} onChange={event => setDuration(event.target.value)}/></Field>
-          <div className="mp-window-fields"><Field label={`${t('mpPreferredStart')} · ${zone}`}><input type="datetime-local" value={preferredStart} onChange={event => setPreferredStart(event.target.value)}/></Field>
-            <Field label={`${t('mpPreferredEnd')} · ${zone}`}><input type="datetime-local" value={preferredEnd} onChange={event => setPreferredEnd(event.target.value)}/></Field></div>
-          <Field label={t('notes')}><textarea maxLength={4000} value={notes} onChange={event => setNotes(event.target.value)}/></Field></fieldset>
-          <button disabled={busy||!['PLANNED','CORRECTIVE'].includes(kind)}>{t('save')}</button>
-        </form></details>}
-      {authority && mutable && <form className="mr-form" onSubmit={propose}>
-        <fieldset disabled={busy}><div className="mp-window-fields">
-          <Field label={`${t('mpStart')} · ${zone}`}><input type="datetime-local" required value={start} onChange={event => setStart(event.target.value)}/></Field>
-          <Field label={`${t('mpEnd')} · ${zone}`}><input type="datetime-local" value={end} onChange={event => setEnd(event.target.value)}/></Field>
-        </div><p className="muted">{t('mpEndHelp')}</p>
-        <Field label={t('reason')}><textarea required={Boolean(schedule?.revision)} maxLength={4000} value={reason} onChange={event => setReason(event.target.value)}/></Field></fieldset>
-        <div className="mr-actions"><button className="primary" disabled={busy || !start || !r.estimated_duration_minutes || r.maintenance_kind!=='PLANNED' || locked || Boolean(schedule?.revision && !reason.trim())}>{t('mpPropose')}</button>
-          <button type="button" disabled={busy || !confirmationReady()} title={t(board.active===true ? 'mpPreviewRequired' : 'mpActivationBlocked')}
-            onClick={() => {try {void run(locked ? 'reschedule' : 'confirm',locked ? {start:stamp(start),...(end ? {end:stamp(end)} : {}),reason} : {reason});}catch {setError('maintenanceUnknownWindow');}}}>{t(locked ? 'mpReschedule' : 'mpConfirm')}</button>
-          {schedule && ['PROPOSED','CONFIRMED','INVALIDATED'].includes(schedule.state) && <button type="button" disabled={busy || !reason.trim()}
-            onClick={() => void run('unschedule',{reason})}>{t('mpUnschedule')}</button>}</div>
+      {board.active!==true && <p className="mr-warning" role="status">{t('mpActivationBlocked')}</p>}
+      {!removing && configured && mutable && authority && <form onSubmit={saveSchedule}>
+        <label className="planning-field"><span>{t('executionPlannedStart')+' · '+zone}</span>
+          <input type="datetime-local" required disabled={busy} value={start} onInput={event=>{setStart(event.currentTarget.value);setError('');}}/>
+        </label>
+        <p className="planning-time-basis">{t('executionPlannedFinish')} · {formatTime(end,lang,zone)}</p>
+        {outside && <p role="status" className="mr-warning">{t('mpOutsidePreferred')}</p>}
+        {reasonRequired && <Field label={t('reason')}><textarea required maxLength={4000} disabled={busy} value={reason} onChange={event=>setReason(event.target.value)}/></Field>}
+        {start && (!plannedStart || Date.parse(plannedStart)<=Date.now()) && <p role="status">{t('maintenanceUnknownWindow')}</p>}
+        {preview.loading && <p role="status">{t('loading')}</p>}
+        {preview.error && <p role="alert">{t(preview.error)} <button type="button" onClick={preview.reload}>{t('refresh')}</button></p>}
+        {!preview.loading && !preview.error && proof && proof.capacity!=='CLEAR' && <div role="status" className="mr-warning">
+          <p>{t('mpCapacity_'+proof.capacity)}</p>
+          {[...new Set(proof.conflicts.map(issue=>issue.code))].map(code=><p key={code}>{t(code)}</p>)}
+          {proof.conditions.open_transfer && <p>{t('maintenanceTransferUnresolved')}</p>}
+        </div>}
+        <div className="planning-actions"><button className="primary" disabled={busy || !board.active || !proofCurrent || reasonRequired && !reason.trim()}>{t('mpSaveSchedule')}</button></div>
       </form>}
+      {authority && mutable && schedule && ['PROPOSED','CONFIRMED','INVALIDATED'].includes(schedule.state) &&
+        (removing ? <form onSubmit={event=>{event.preventDefault();if(reason.trim())void run('unschedule',{reason:reason.trim()});}}>
+          <Field label={t('reason')}><textarea required maxLength={4000} disabled={busy} value={reason} onChange={event=>setReason(event.target.value)}/></Field>
+          <div className="planning-actions"><button type="button" onClick={()=>setRemoving(false)}>{t('cancel')}</button>
+            <button disabled={busy || !reason.trim()}>{t('mpUnschedule')}</button></div>
+        </form> : <button type="button" disabled={busy} onClick={()=>setRemoving(true)}>{t('mpUnschedule')}</button>)}
     </div>
   </Dialog>;
 }
@@ -128,6 +174,7 @@ export default function MaintenancePlanning(props:FeatureProps) {
   const [line,setLine]=useState('');
   const read = useOperationalPlanningBoard(props,windowStart,windowStart+7*86400000,line,'maintenance');
   const [view,setView] = useState('needs'),[page,setPage] = useState(1),[selected,setSelected] = useState('');
+  const [repairError,setRepairError] = useState(false);
   const board=read.data, zone=String(s.factory?.timezone || 'UTC');
   const scheduleFor = (id:string) => board?.schedules.find(schedule => schedule.maintenance_request_id===id);
   const rows = board?.requests.filter(r => maintenanceQueueView(r,scheduleFor(r.id))===view) || [];
@@ -146,6 +193,7 @@ export default function MaintenancePlanning(props:FeatureProps) {
     <nav className="mp-views" aria-label={t('mpScheduling')}>{maintenanceQueueViews.map((key:string) => <button key={key} aria-pressed={view===key}
       onClick={() => {setView(key);setPage(1);}}>{t(`mpView_${key}`)} <bdi>{board ? board.requests.filter(r => maintenanceQueueView(r,scheduleFor(r.id))===key).length : '—'}</bdi></button>)}</nav>
     {read.loading && <p role="status">{t('loading')}</p>}{read.error && <p role="alert">{t(read.error)} · {t('mpReaderUnavailable')}</p>}
+    {repairError && <p role="alert">{t('mpRepairUnavailable')}</p>}
     {board && !rows.length && <div className="empty"><p>{t('noResults')}</p></div>}
     <div className="mr-list">{rows.slice((page-1)*25,page*25).map(r => {const schedule=scheduleFor(r.id);return <article className="mr-row" data-status={r.status} key={r.id}>
       <header><button className="mr-open" disabled={read.loading} onClick={() => setSelected(r.id)}><bdi>{r.code}</bdi><strong dir="auto">{r.title}</strong></button>
@@ -159,7 +207,7 @@ export default function MaintenancePlanning(props:FeatureProps) {
       {schedule && <p className="mp-current-window">{t('mpWindow')}: {formatTime(schedule.planned_start,lang,zone)} — {formatTime(schedule.planned_end,lang,zone)}
         {schedule.overrun && <strong> · {t('mpOverrun')}</strong>}{schedule.actual_hold && <strong> · {t('mpHold')}</strong>}{schedule.missed_window && <strong> · {t('mpMissed')}</strong>}</p>}
       <div className="mr-actions"><button disabled={read.loading} onClick={() => setSelected(r.id)}>{t(can('orders','edit') ? 'mpReview' : 'details')}</button>
-        <button onClick={() => window.dispatchEvent(new CustomEvent('factory-maintenance-open',{detail:r.id}))}>{t('mpRepairDetails')}</button></div>
+        <button onClick={() => setRepairError(!props.onMaintenanceRepairOpen?.(r.id))}>{t('mpRepairDetails')}</button></div>
     </article>;})}</div>
     {board && <nav className="mr-pagination" aria-label={t('mpScheduling')}><button disabled={page===1} onClick={() => setPage(p => p-1)}>{t('previous')}</button>
       <span>{page} · {rows.length}</span><button disabled={page*25>=rows.length} onClick={() => setPage(p => p+1)}>{t('next')}</button></nav>}

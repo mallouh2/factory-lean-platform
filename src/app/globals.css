@@ -2433,6 +2433,17 @@ details.panel > summary {
 .planning-row > button { min-height: 40px; white-space: nowrap; }
 .planning-overlay { position: fixed; inset: 0; z-index: 70; display: flex; justify-content: flex-end; background: #132c3a80; }
 .planning-drawer { width: min(100%, 440px); height: 100%; overflow-y: auto; padding: 1.35rem; background: #fff; box-shadow: -8px 0 26px #142c3630; }
+.dialog.planning-maintenance-drawer {
+  inset-block: 0;
+  width: min(100%, 440px);
+  height: 100dvh;
+  max-height: 100dvh;
+  margin-block: 0;
+  margin-inline: auto 0;
+  border-radius: 0;
+}
+.planning-maintenance-drawer header h2 { font-size: 1.25rem; }
+.planning-maintenance-drawer .planning-order-summary p { overflow-wrap: anywhere; }
 .planning-drawer > header { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
 .planning-drawer h3 { margin: 0.25rem 0; font-size: 1.25rem; color: #1b3441; }
 .planning-drawer header p { margin: 0; color: var(--muted); }

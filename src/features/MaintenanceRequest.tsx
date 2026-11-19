@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog, Field, formatTime, localName } from '@/components/ui';
 import { useHistoryData } from '@/hooks/useHistoryData';
-import { maintenanceActions, maintenancePriorities } from '@/utils/maintenance.mjs';
+import { maintenanceActions } from '@/utils/maintenance.mjs';
 import { formatDuration } from '@/utils/production-flow.mjs';
 import type { Row } from '@/types';
 import type { FeatureProps } from './types';
 import type { MaintenancePage, MaintenanceRequest } from './maintenance-types';
 import { MaintenanceActualStops } from './MaintenanceActualStops';
+import { formatLocalInput, localDateTimeToUtc } from '@/utils/manufacturing.mjs';
+import { maintenanceKindCanBook } from '@/utils/maintenance-planning.mjs';
 
 export function MaintenanceBadge({ status, t }: { status: string; t: FeatureProps['t'] }) {
   return <span className="mr-status" data-status={status}>{t(`maintenanceState_${status}`)}</span>;
@@ -58,8 +60,8 @@ export function MaintenanceCreate({ machine, downtime, onClose, onCreated, ...pr
         </aside>}
         <Field label={t('maintenanceProblem')}><input required maxLength={200} value={title} onChange={event => setTitle(event.target.value)} /></Field>
         <Field label={t('description')}><textarea maxLength={4000} value={description} onChange={event => setDescription(event.target.value)} /></Field>
-        <Field label={t('priority')}><select value={priority} onChange={event => setPriority(event.target.value)}>
-          {maintenancePriorities.map((value: string) => <option key={value} value={value}>{t(`maintenancePriority_${value}`)}</option>)}
+        <Field label={t('mpUrgency')}><select value={priority} onChange={event => setPriority(event.target.value)}>
+          {['NORMAL','URGENT'].map(value => <option key={value} value={value}>{t(`maintenancePriority_${value}`)}</option>)}
         </select></Field>
         {can('maintenance','edit') && <Field label={t('maintenanceAssignedTo')}><select value={assignee} onChange={event => setAssignee(event.target.value)}>
           <option value="">{t('maintenanceUnassigned')}</option>{options.data?.options.people.map(row =>
@@ -84,6 +86,9 @@ export function MaintenanceDetailBody({ request: r, ...props }: FeatureProps & {
     <dl className="mr-facts">
       <div><dt>{t('machine')}</dt><dd><bdi>{r.machine_code}</bdi> · {name(r.machine_name,r.machine_name_ar)}</dd></div>
       <div><dt>{t('line')}</dt><dd>{name(r.line_name,r.line_name_ar)}</dd></div>
+      <div><dt>{t('mpKind')}</dt><dd>{t(r.maintenance_kind ? 'mpKind_'+r.maintenance_kind : 'mpUnknown')}</dd></div>
+      <div><dt>{t('mpDuration')}</dt><dd>{r.estimated_duration_minutes ? formatDuration(r.estimated_duration_minutes,lang) : '—'}</dd></div>
+      <div><dt>{t('mpRequestedWindow')}</dt><dd>{formatTime(r.preferred_start,lang,zone)} — {formatTime(r.preferred_end,lang,zone)}</dd></div>
       <div><dt>{t('maintenanceSource')}</dt><dd>{t(`maintenanceSource_${r.source}`)}</dd></div>
       <div><dt>{t('maintenanceRequestedBy')}</dt><dd dir="auto">{r.requested_by_name}</dd></div>
       <div><dt>{t('maintenanceRequestedAt')}</dt><dd>{formatTime(r.requested_at,lang,zone)}</dd></div>
@@ -115,8 +120,97 @@ export function MaintenanceDetailBody({ request: r, ...props }: FeatureProps & {
   </div>;
 }
 
+function MaintenanceRequestFields({request, machines, busy, onSave, ...props}:FeatureProps & {
+  request:MaintenanceRequest; machines:Row[]; busy:boolean;
+  onSave:(payload:Record<string,unknown>)=>Promise<void>;
+}) {
+  const {snapshot,t,lang}=props;
+  const zone=String(snapshot.factory?.timezone || 'UTC');
+  const [equipment,setEquipment]=useState(request.work_center_id);
+  const [title,setTitle]=useState(request.title);
+  const [description,setDescription]=useState(request.description);
+  const [kind,setKind]=useState(request.maintenance_kind || '');
+  const [duration,setDuration]=useState(String(request.estimated_duration_minutes || ''));
+  const originalFrom=request.preferred_start ? formatLocalInput(request.preferred_start,zone,true) : '';
+  const originalUntil=request.preferred_end ? formatLocalInput(request.preferred_end,zone,true) : '';
+  const [from,setFrom]=useState(originalFrom);
+  const [until,setUntil]=useState(originalUntil);
+  const [error,setError]=useState('');
+  const downtimeLinked=request.source==='DOWNTIME'||Boolean(request.downtime_id);
+  const changed=equipment!==request.work_center_id || title!==request.title || description!==request.description ||
+    kind!==(request.maintenance_kind||'') || duration!==String(request.estimated_duration_minutes||'') ||
+    from!==originalFrom || until!==originalUntil;
+  async function submit(event:React.FormEvent) {
+    event.preventDefault();
+    if (busy || !changed || !kind) return;
+    setError('');
+    let preferredStart,preferredEnd;
+    try {
+      preferredStart=from===originalFrom ? request.preferred_start || null : from ? localDateTimeToUtc(from,zone) : null;
+      preferredEnd=until===originalUntil ? request.preferred_end || null : until ? localDateTimeToUtc(until,zone) : null;
+    } catch {setError('maintenanceUnknownWindow');return;}
+    if(preferredStart && preferredEnd && Date.parse(preferredEnd)<=Date.parse(preferredStart)){
+      setError('mpPreferredOrder');return;
+    }
+    await onSave({
+      work_center_id:equipment,title,description,maintenance_kind:kind,
+      estimated_duration_minutes:duration ? Number(duration) : null,
+      preferred_start:preferredStart,preferred_end:preferredEnd,planning_notes:request.planning_notes || '',
+    });
+  }
+  return <details className="mr-filters">
+    <summary>{t('mpEditRequestDetails')}</summary>
+    <form className="mr-form" onSubmit={submit}>
+      {error && <p role="alert">{t(error)}</p>}
+      <fieldset disabled={busy}>
+        <Field label={t('machine')}><select required disabled={downtimeLinked} value={equipment} onChange={event=>setEquipment(event.target.value)}>
+          {!machines.some(machine=>machine.id===request.work_center_id) && <option value={request.work_center_id}>{request.machine_name}</option>}
+          {machines.map(machine=><option key={String(machine.id)} value={String(machine.id)}>{localName(machine,lang)}</option>)}
+        </select></Field>
+        <Field label={t('maintenanceProblem')}><input required maxLength={200} value={title} onChange={event=>setTitle(event.target.value)}/></Field>
+        <Field label={t('description')}><textarea maxLength={4000} value={description} onChange={event=>setDescription(event.target.value)}/></Field>
+        <Field label={t('mpKind')}><select required value={kind} onChange={event=>setKind(event.target.value as typeof kind)}>
+          <option value="">{t('select')}</option><option value="CORRECTIVE">{t('mpKind_CORRECTIVE')}</option>
+          {!downtimeLinked && <option value="PLANNED">{t('mpKind_PLANNED')}</option>}
+        </select></Field>
+        <Field label={t('mpDuration')+' · '+t('minutes')}><input type="number" min="1" step="1" required={kind==='PLANNED'}
+          value={duration} onChange={event=>setDuration(event.target.value)}/></Field>
+        <div className="mp-window-fields">
+          <Field label={t('mpPreferredStart')}><input type="datetime-local" step="1" value={from} onChange={event=>setFrom(event.target.value)}/></Field>
+          <Field label={t('mpPreferredEnd')}><input type="datetime-local" step="1" value={until} onChange={event=>setUntil(event.target.value)}/></Field>
+        </div>
+      </fieldset>
+      <button disabled={busy || !kind || !changed}>{t('mpSaveDetails')}</button>
+    </form>
+  </details>;
+}
+
+type MaintenanceStartContext = {
+  applies:boolean;
+  blocker:string|null;
+  planned_start:string|null;
+  planned_end:string|null;
+  estimated_end:string|null;
+  overrun_seconds:number|null;
+  actual_start:string|null;
+  actual_end:string|null;
+  affected:{kind:string;code:string|null;state:string;starts:string|null;ends:string|null}[];
+};
+
+const maintenanceStartMessages:Record<string,string> = {
+  maintenance_planning_inactive:'maintenancePlanningInactive',
+  maintenance_approval_required:'maintenanceApprovalRequired',
+  maintenance_early_start:'maintenanceEarlyStart',
+  maintenance_unknown_window:'maintenanceUnknownWindow',
+  maintenance_machine_not_ready:'maintenanceMachineNotReady',
+  maintenance_configuration_changed:'maintenanceConfigurationChanged',
+  maintenance_transfer_unresolved:'maintenanceTransferUnresolved',
+  maintenance_capacity_reserved:'maintenanceCapacityReserved',
+  maintenance_production_conflict:'maintenanceProductionConflict',
+};
+
 export function MaintenanceDetails({ id, onClose, ...props }: FeatureProps & { id: string; onClose: () => void }) {
-  const { snapshot: s, t, can, command } = props;
+  const { snapshot: s, t, lang, can, command } = props;
   const [historyPage, setHistoryPage] = useState(1), [busy, setBusy] = useState(false), [error,setError] = useState('');
   const [assignee,setAssignee] = useState(''), [priority,setPriority] = useState(''), [note,setNote] = useState('');
   const [verification,setVerification] = useState(''), [result,setResult] = useState('RESOLVED'), [cancel,setCancel] = useState(false);
@@ -126,22 +220,49 @@ export function MaintenanceDetails({ id, onClose, ...props }: FeatureProps & { i
   const read = useHistoryData<MaintenancePage>(`/api/maintenance?factory=${factory}&selected=${id}&history_page=${historyPage}`,s.fetchedAt);
   const r = read.data?.detail;
   const actions: string[] = maintenanceActions(r,s.user.id,can('maintenance','edit'));
+  const canStart=actions.includes('start');
+  const checkStart=Boolean(r && maintenanceKindCanBook(r));
+  const [checkTick,setCheckTick]=useState(0);
+  const startRead=useHistoryData<MaintenanceStartContext>(
+    checkStart ? '/api/maintenance?'+new URLSearchParams({factory,start_context:id}) : null,
+    [s.fetchedAt,r?.revision,checkTick].join(':'));
+  const startContext=startRead.data;
+  const startBlocked=checkStart && (!startContext || !!startRead.error || !!startContext.blocker);
+  const conflict=Boolean(startContext?.blocker && ['maintenance_capacity_reserved','maintenance_production_conflict'].includes(startContext.blocker));
+  const zone=String(s.factory?.timezone || 'UTC');
+  const time=(value:string|null)=>formatTime(value,lang,zone);
+  const deviation=(actual:string,plan:string)=>formatDuration((Date.parse(actual)-Date.parse(plan))/60_000,lang,true);
+  useEffect(()=>{
+    if (!canStart || !startContext?.applies) return;
+    const untilStart=Date.parse(startContext.planned_start || '')-Date.now();
+    const delay=untilStart>0 ? Math.min(untilStart+100,30_000) : 30_000;
+    const timer=setTimeout(()=>setCheckTick(tick=>tick+1),delay);
+    return ()=>clearTimeout(timer);
+  },[canStart,startContext,checkTick]);
   async function run(operation: string,payload: Record<string,unknown>) {
     if (!r) return;
     const args = { factory,maintenance_request:id,operation,payload,expected_revision:r.revision };
     const key = JSON.stringify(args);
     if (retry.current?.key !== key) retry.current = { key,id:crypto.randomUUID() };
     setBusy(true);setError('');
-    try { await command('change_maintenance_request',{...args,request_id:retry.current.id});
+    try { await command(operation==='details' ? 'maintenance_planning_command' : 'change_maintenance_request',{...args,request_id:retry.current.id});
       retry.current=null;setCancel(false);read.reload(); }
-    catch(cause) { setError(cause instanceof Error ? cause.message : 'error');read.reload(); }
+    catch(cause) {
+      setError(cause instanceof Error ? cause.message : 'error');
+      read.reload();
+      if(operation==='start') startRead.reload();
+    }
     finally { setBusy(false); }
   }
   return <Dialog title={r?.code || t('maintenanceRequest')} t={t} onClose={() => { if (!busy) onClose(); }}>
     {(error || read.error) && <p role="alert">{t(error || read.error)} <button onClick={read.reload}>{t('refresh')}</button></p>}
     {read.loading && <p role="status">{t('loading')}</p>}
+    {!read.loading && !read.error && !r && <p role="alert">{t('mpRepairNotFound')}</p>}
     {r && <><MaintenanceDetailBody {...props} request={r} />
-      {r.maintenance_kind==='PLANNED' && <MaintenanceActualStops key={r.id} {...props} id={r.id} />}
+      {can('maintenance','edit') && ['OPEN','ASSIGNED'].includes(r.status) &&
+        <MaintenanceRequestFields key={r.id+':'+r.revision} {...props} request={r} busy={busy}
+          machines={read.data?.options.machines || []} onSave={payload=>run('details',payload)}/>}
+      {maintenanceKindCanBook(r) && <MaintenanceActualStops key={r.id} {...props} id={r.id} />}
       <div className="mr-workflow">
         {actions.includes('assign') && <form onSubmit={event => {event.preventDefault();void run('assign',{assigned_to:assignee});}}>
           <Field label={t('maintenanceAssignedTo')}><select required value={assignee} onChange={event => setAssignee(event.target.value)}>
@@ -149,11 +270,42 @@ export function MaintenanceDetails({ id, onClose, ...props }: FeatureProps & { i
           </select></Field><button disabled={busy || !assignee}>{t('maintenanceAssign')}</button>
         </form>}
         {actions.includes('priority') && <form onSubmit={event => {event.preventDefault();void run('priority',{priority:priority || r.priority});}}>
-          <Field label={t('priority')}><select value={priority || r.priority} onChange={event => setPriority(event.target.value)}>
-            {maintenancePriorities.map((value: string) => <option key={value} value={value}>{t(`maintenancePriority_${value}`)}</option>)}
+          <Field label={t('mpUrgency')}><select value={priority || r.priority} onChange={event => setPriority(event.target.value)}>
+            {[...new Set([r.priority,'NORMAL','URGENT'])].map(value => <option key={value} value={value}>{t(`maintenancePriority_${value}`)}</option>)}
           </select></Field><button disabled={busy || !priority || priority === r.priority}>{t('save')}</button>
         </form>}
-        {actions.includes('start') && <button className="primary" disabled={busy} onClick={() => void run('start',{})}>{t('maintenanceStart')}</button>}
+        {canStart && <>
+          {checkStart && startRead.loading && !startContext && <p role="status">{t('mpCheckingStart')}</p>}
+          {checkStart && startRead.error && <p role="alert">{t(startRead.error)} <button onClick={startRead.reload}>{t('refresh')}</button></p>}
+          {startContext?.applies && <>
+            {startContext.planned_start && startContext.planned_end && <p>
+              {t('mpWindow')} · {time(startContext.planned_start)} — {time(startContext.planned_end)}
+            </p>}
+            {startContext.estimated_end && <p>{t('mpEstimatedFinish')} · {time(startContext.estimated_end)}</p>}
+            {Number(startContext.overrun_seconds)>0 && <p role="status" className="mr-warning">
+              {t('mpExpectedOverrun')} · {formatDuration(Math.ceil(Number(startContext.overrun_seconds)/60),lang)}
+            </p>}
+            {startContext.blocker && <div role="status" className="mr-warning">
+              <p>{t(maintenanceStartMessages[startContext.blocker] || 'maintenanceUnknownWindow')}</p>
+              {startContext.affected.length>0 && <ul aria-label={t('mpAffectedWork')}>
+                {startContext.affected.map((work,index)=><li key={index}>
+                  <bdi>{work.code || t(work.kind==='PRODUCTION'?'production':'maintenance')}</bdi>
+                  {work.state==='active' ? ' · '+t('planningInProduction') : work.starts ? ' · '+time(work.starts) : ''}
+                </li>)}
+              </ul>}
+              {conflict && <p>{t('mpResolveStartConflict')} {can('orders','view') && <a href="?view=planning">{t('planning')}</a>}</p>}
+              {startContext.blocker==='maintenance_approval_required' && can('orders','view') &&
+                <p><a href="?view=planning">{t('planning')}</a></p>}
+            </div>}
+          </>}
+          <button className="primary" disabled={busy || startBlocked} onClick={() => void run('start',{})}>{t('maintenanceStart')}</button>
+        </>}
+        {startContext?.actual_start && startContext.planned_start && <p>
+          {t('executionActualStart')} · {time(startContext.actual_start)} ({deviation(startContext.actual_start,startContext.planned_start)})
+        </p>}
+        {startContext?.actual_end && startContext.planned_end && <p>
+          {t('executionActualFinish')} · {time(startContext.actual_end)} ({deviation(startContext.actual_end,startContext.planned_end)})
+        </p>}
         {actions.includes('note') && <form onSubmit={event => {event.preventDefault();void run('note',{work_note:note || r.work_note});}}>
           <Field label={t('maintenanceWorkDone')}><textarea required maxLength={4000} value={note || r.work_note} onChange={event => setNote(event.target.value)} /></Field>
           <div className="mr-actions"><button disabled={busy || !(note || r.work_note).trim()}>{t('maintenanceSaveNote')}</button>

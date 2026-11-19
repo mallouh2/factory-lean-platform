@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Field, formatTime } from '@/components/ui';
 import { useHistoryData } from '@/hooks/useHistoryData';
 import { maintenanceStates, maintenancePriorities } from '@/utils/maintenance.mjs';
@@ -7,16 +7,12 @@ import type { MaintenancePage } from './maintenance-types';
 import type { FeatureProps } from './types';
 import MaintenancePlanning from './MaintenancePlanning';
 
-export default function Maintenance(props: FeatureProps) {
+export default function Maintenance(props: FeatureProps & {initialRequestId?:string;onRepairClose?:()=>void}) {
   const { snapshot:s,t,lang,can } = props;
   const [page,setPage] = useState(1), [filters,setFilters] = useState<Record<string,string>>({status:'ACTIVE'});
-  const [creating,setCreating] = useState(false), [selected,setSelected] = useState('');
+  const [creating,setCreating] = useState(false), [selected,setSelected] = useState(props.initialRequestId || '');
   const [scheduling,setScheduling] = useState(false);
-  useEffect(() => {
-    const open = (event: Event) => setSelected(String((event as CustomEvent).detail));
-    window.addEventListener('factory-maintenance-open',open);
-    return () => window.removeEventListener('factory-maintenance-open',open);
-  },[]);
+  function closeRepair() {setSelected('');props.onRepairClose?.();}
   const query = new URLSearchParams({factory:String(s.factory?.id || ''),page:String(page),...filters});
   const read = useHistoryData<MaintenancePage>(scheduling ? null : `/api/maintenance?${query}`,s.fetchedAt);
   const options = read.data?.options;
@@ -27,8 +23,8 @@ export default function Maintenance(props: FeatureProps) {
   const views = can('maintenance','view') && <nav className="mp-views" aria-label={t('maintenance')}>
     <button aria-pressed={!scheduling} onClick={() => setScheduling(false)}>{t('mpRepairs')}</button>
     <button aria-pressed={scheduling} onClick={() => setScheduling(true)}>{t('mpScheduling')}</button></nav>;
-  if (scheduling && can('maintenance','view')) return <section className="mr-page">{views}<MaintenancePlanning {...props}/>
-    {selected && <MaintenanceDetails key={selected} {...props} id={selected} onClose={() => setSelected('')}/>}</section>;
+  if (scheduling && can('maintenance','view')) return <section className="mr-page">{views}<MaintenancePlanning {...props}
+    onMaintenanceRepairOpen={id=>{setSelected(id);setScheduling(false);return true;}}/></section>;
   return <section className="mr-page" dir={lang==='ar' ? 'rtl' : 'ltr'}>{views}
     <header className="mr-tools"><p>{t(read.data?.wide ? 'maintenanceHelp' : 'maintenanceMyWorkHelp')}</p><div className="mr-actions">
       {can('maintenance','create') && <button className="primary" onClick={() => setCreating(true)}>{t('maintenanceCreate')}</button>}
@@ -75,6 +71,6 @@ export default function Maintenance(props: FeatureProps) {
     <nav className="mr-pagination" aria-label={t('maintenance')}><button disabled={page===1 || read.loading} onClick={() => setPage(value => value-1)}>{t('previous')}</button>
       <span>{page} · {read.data?.total || 0} {t('maintenanceRequests')}</span><button disabled={read.loading || page*25>=(read.data?.total || 0)} onClick={() => setPage(value => value+1)}>{t('next')}</button></nav>
     {creating && <MaintenanceCreate {...props} onClose={() => setCreating(false)} onCreated={id => {setCreating(false);setSelected(id);read.reload();}} />}
-    {selected && <MaintenanceDetails key={selected} {...props} id={selected} onClose={() => {setSelected('');read.reload();}} />}
+    {selected && <MaintenanceDetails key={selected} {...props} id={selected} onClose={() => {closeRepair();read.reload();}} />}
   </section>;
 }

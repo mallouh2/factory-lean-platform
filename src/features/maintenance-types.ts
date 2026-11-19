@@ -4,6 +4,7 @@ export type MaintenanceRequest = {
   title: string; description: string; priority: string; source: string; status: string; revision: number;
   maintenance_kind?: 'CORRECTIVE' | 'PLANNED' | null; estimated_duration_minutes?: number | null;
   preferred_start?: string | null; preferred_end?: string | null; planning_notes?: string;
+  planning_schedule_revision?: number;
   requested_by: string; requested_by_name: string; requested_at: string; assigned_to: string | null;
   assigned_at: string | null; started_at: string | null; completed_at: string | null; completed_by: string | null;
   verified_at: string | null; verified_by: string | null; checked_at: string | null; cancelled_at: string | null;

@@ -13,6 +13,7 @@ export type FeatureProps = {
   refreshSnapshot?: () => Promise<void | boolean>;
   onProductionHistoryOpen?: (mode?:'production'|'quality') => void;
   onOutputRelated?: (destination:OutputDestination) => void;
+  onMaintenanceRepairOpen?: (requestId:string) => boolean;
 };
 export type OutputDestination={factory:string;view:'production'|'quality'|'warehouse'|'planning'|'order';entry?:string;output?:string;work?:string;item?:string};
 export const stringId = (row: Row | null | undefined) => String(row?.id || "");

@@ -112,6 +112,8 @@ const commandErrors: Record<string, string> = {
   maintenance_preview_required: 'mpPreviewRequired',
   maintenance_preview_incomplete: 'mpIncomplete',
   maintenance_note: 'maintenanceNoteRequired',
+  maintenance_preferred_reason: 'mpOutsidePreferred',
+  maintenance_details_locked: 'mpReservationDetailsLocked',
   maintenance_missing: 'noResults',
   maintenance_existing: 'maintenanceExistingProblem',
   maintenance_independent_verifier: 'maintenanceIndependentVerifier',

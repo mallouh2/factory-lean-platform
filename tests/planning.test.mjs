@@ -70,13 +70,14 @@ const bundled = await build({ entryPoints: ["src/features/ProductionPlanning.tsx
     // These existing production interaction tests use a complete, empty protected-reader fixture.
     // Actual Maintenance hooks/drawers and unavailable/denied readers have separate browser coverage.
     b.onLoad({filter:/[\\/]useOperationalPlanningBoard\.ts$/},()=>({loader:'js',contents:
-      `export function useOperationalPlanningBoard({snapshot:s}){return {data:{completeness:'COMPLETE',active:false,schedules:[],requests:[],orders:s.tables.production_orders,production_requests:s.tables.production_requests,reservations:[],loaded:0,total:0},complete:!(s.truncatedTables||[]).includes('production_orders'),loading:false,error:'',reload(){}};}` }));
+      `export function useOperationalPlanningBoard({snapshot:s,can}){if(s.fixturePanDisplay)return {data:null,displayData:can('maintenance','view')?s.fixturePanDisplay:null,complete:false,loading:true,error:'',reload(){}};return {data:{completeness:'COMPLETE',active:s.fixtureMaintenanceActive===true,schedules:[],requests:can('maintenance','view')&&can('factory','view')?s.fixtureMaintenance||[]:[],orders:s.tables.production_orders,production_requests:s.tables.production_requests,reservations:[],loaded:0,total:0},complete:!(s.truncatedTables||[]).includes('production_orders'),loading:false,error:'',reload(){}};}` }));
     b.onLoad({filter:/[\\/]PlanningWarningPolicy\.tsx$/},()=>({loader:'js',contents:`export function PlanningWarningSetting(){return null} export function PlanningExceptionReview(){return null} export function planningPolicyCommand(name,args){return globalThis.__planningPolicyFixture(name,args)}`}));
     b.onLoad({filter:/[\\/]usePlanningWork\.ts$/},()=>({loader:'js',contents:
       `export function usePlanningWork({snapshot:s}){return {data:s.planningWork||[],complete:true,loading:false,error:'',reload(){}};}` }));
     b.onLoad({filter:/[\\/]MaintenancePlanning\.tsx$/},() => ({loader:'js',contents:
       `export function useMaintenancePlanning(){return {data:{active:false,schedules:[],requests:[]},loading:false,error:'',reload(){}};}
-       export function MaintenancePlanningDrawer(){return null;}` }));
+       export function MaintenancePlanningDrawer(){return null;}
+       export default function MaintenancePlanning(){return null;}` }));
   }}] });
 const planningModule = { exports: {} };
 new Function("require", "module", "exports", bundled.outputFiles[0].text)(require, planningModule, planningModule.exports);
@@ -385,6 +386,7 @@ function interactivePlanner(testSnapshot, initial = {}, command = async () => {}
     initial.hover ?? null, initial.optimistic ?? null, null, null, null, initial.panning ?? false,
     initial.pendingReason ?? null, initial.reasonCode ?? "", initial.reasonNote ?? "",
     initial.history ?? [], false, initial.slotSearch ?? null, initial.slotChoice ?? null];
+  if (initial.queueTypePosition!==undefined) state[initial.queueTypePosition] = initial.queueType;
   const updates = [];
   const fakeReact = { ...require("react"), useState: (() => { let index = 0;
     return (fallback) => { const position = index++; return [state[position] ?? fallback,
@@ -1470,4 +1472,79 @@ for(const lang of ['en','ar'])test(`actual open-ended occupancy cannot block fut
  const track=allNodes(tree,n=>n.props?.className==='planning-lane-track')[0],event={preventDefault(){},dataTransfer:{getData:()=> 'O1'},clientX:500,currentTarget:{getBoundingClientRect:()=>({left:0,width:1000})}};
  assert.doesNotThrow(()=>track.props.onDragOver(event));assert.equal(event.dataTransfer.dropEffect,'move');await track.props.onDrop(event);
  assert.equal(writes.length,1);assert.equal(writes[0][0],'plan_product_item');assert.deepEqual(visual,before);
+});
+
+
+test('one Planning queue filters work types and drops maintenance only on its equipment lane',()=>{
+ const request={id:'MR',code:'MR-0000104',work_center_id:'C',status:'OPEN',priority:'NORMAL',
+   title:'Oil extruder',source:'MANUAL',maintenance_kind:'CORRECTIVE',estimated_duration_minutes:90};
+ const data={...snapshot,fixtureMaintenanceActive:true,fixtureMaintenance:[request],tables:{
+   ...snapshot.tables,work_centers:centers.map(center=>({...center,category_id:'EXTRUDER'})),
+ }};
+ const writes=[],before=structuredClone(data);
+ const track=n=>n.props?.className==='planning-lane-track';
+ for(const lang of ['en','ar']){
+   const {tree,updates}=interactivePlanner(data,{lang},async(...args)=>writes.push(args));
+   const queue=allNodes(tree,n=>n.props?.className==='planning-section planning-requests-waiting')[0];
+   assert.equal(allNodes(queue,n=>n.type==='table').length,1);
+   assert.equal(allNodes(queue,n=>n.props?.['data-item-id']==='O1').length,1);
+   const row=allNodes(queue,n=>n.props?.['data-work-type']==='maintenance')[0];
+   const source=allNodes(row,n=>n.type==='button')[0];
+   assert.equal(source.props.draggable,true);
+   const event={preventDefault(){},dataTransfer:{setData(){}},clientX:521,
+     currentTarget:{getBoundingClientRect:()=>({left:0,width:1000})}};
+   const [equipment,wrong]=allNodes(tree,track);
+   source.props.onDragStart(event);wrong.props.onDragOver(event);
+   assert.equal(event.dataTransfer.dropEffect,'none');wrong.props.onDrop(event);
+   assert.ok(updates.some(change=>change.value==='mpDropEquipmentLane'));
+   source.props.onDragStart(event);equipment.props.onDragOver(event);
+   assert.equal(event.dataTransfer.dropEffect,'move');
+   const hover=updates.filter(change=>typeof change.value==='function').at(-1).value(null);
+   assert.equal(hover.finish-hover.start,90*60_000);
+   equipment.props.onDrop(event);
+   assert.ok(updates.some(change=>change.value===request.id));
+   assert.ok(updates.some(change=>change.value==='2026-10-09T13:00'));
+ }
+ const filterRun=interactivePlanner(data);
+ const filter=allNodes(filterRun.tree,n=>n.type==='select'&&n.props.value==='all'&&allNodes(n,o=>o.type==='option'&&o.props.value==='maintenance').length)[0];
+ filter.props.onChange({target:{value:'maintenance'}});
+ const queueTypePosition=filterRun.updates.find(update=>update.value==='maintenance').position;
+ const only=(type)=>allNodes(interactivePlanner(data,{queueType:type,queueTypePosition}).tree,n=>n.props?.className==='planning-section planning-requests-waiting')[0];
+ assert.equal(allNodes(only('production'),n=>n.props?.['data-work-type']==='maintenance').length,0);
+ assert.equal(allNodes(only('maintenance'),n=>n.props?.['data-item-id']==='O1').length,0);
+ const urgent=interactivePlanner({...data,fixtureMaintenance:[{...request,priority:'URGENT'}]}).tree;
+ const urgentQueue=allNodes(urgent,n=>n.props?.className==='planning-section planning-requests-waiting')[0];
+ const queueRows=allNodes(urgentQueue,n=>n.type==='tr'&&(n.props?.['data-item-id']||n.props?.['data-work-type']));
+ assert.equal(queueRows[0].props['data-work-type'],'maintenance');
+ const linked=interactivePlanner({...data,fixtureMaintenance:[{...request,source:'DOWNTIME',downtime_id:'event'}]}).tree;
+ assert.equal(allNodes(linked,n=>n.props?.['data-work-type']==='maintenance')[0].props.children[0].props.children.props.draggable,false);
+ const denied=interactivePlanner(data,{can:module=>module!=='maintenance'}).tree;
+ assert.equal(allNodes(denied,n=>n.props?.['data-work-type']==='maintenance').length,0);
+ assert.equal(allNodes(interactivePlanner({...data,fixtureMaintenanceActive:false}).tree,n=>n.props?.['data-work-type']==='maintenance')[0].props.children[0].props.children.props.draggable,false);
+ assert.deepEqual(writes,[]);assert.deepEqual(data,before);
+});
+
+test('maintenance bars keep their schedule and remain selectable during a range read in EN and AR',()=>{
+ const reservation={id:'RES',maintenance_request_id:'MR',code:'MR-0000104',machine_code:'EX2',
+   line_ids:['L'],planned_start:'2026-10-09T08:00:00Z',planned_end:'2026-10-09T09:30:00Z',
+   state:'CONFIRMED',resources:[],actual_stops:[]};
+ const production={...orders[1],start_time:'2026-10-09T11:00:00Z',expected_finish:'2026-10-09T13:00:00Z'};
+ const data={...snapshot,fixturePanDisplay:{active:true,schedules:[reservation],requests:[]},
+   tables:{...snapshot.tables,production_orders:[production]}};
+ const before=structuredClone(data),writes=[];
+ for(const lang of ['en','ar']){
+  const {tree,updates}=interactivePlanner(data,{lang,anchor:'2026-10-09T00:00:00Z'},async(...args)=>writes.push(args));
+  const html=renderToStaticMarkup(tree);
+  assert.match(html,/data-reservation="RES"[^>]*width:6.25%/);
+  assert.match(html,/data-board-completeness="INCOMPLETE"/);
+  assert.match(html,/data-item-id="O2"/);
+  const block=allNodes(tree,node=>node.type?.name==='MaintenanceTimelineBlock')[0];
+  assert.ok(block);
+  block.props.onOpen();
+  assert.ok(updates.some(change=>change.value==='MR'));
+  const denied=interactivePlanner(data,{lang,can:module=>module!=='maintenance'}).tree;
+  assert.doesNotMatch(renderToStaticMarkup(denied),/data-reservation="RES"/);
+ }
+ assert.deepEqual(data,before);
+ assert.deepEqual(writes,[]);
 });

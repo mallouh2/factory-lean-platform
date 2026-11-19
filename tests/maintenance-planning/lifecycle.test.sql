@@ -47,8 +47,8 @@ do $$declare x jsonb;f uuid;r uuid;sid uuid;missed uuid;missed_schedule uuid;sta
 
  x:=mp_test.fixture('late');f:=(x->>'factory')::uuid;r:=(x->>'request')::uuid;
  start_at:=clock_timestamp()+interval '1 second';sid:=mp_test.plan(x,start_at);perform mp_test.command(f,r,'confirm','{}',1,gen_random_uuid());perform pg_sleep(1.1);
- perform pg_temp.fails(format('select public.change_maintenance_request(%L,%L,''start'',''{}'',2,gen_random_uuid())',f,r),'maintenance_late_start');
- perform pg_temp.ok((select hold_started_at is null from public.maintenance_schedules where id=sid),'late failure rolls back');
+ perform public.change_maintenance_request(f,r,'start','{}',2,gen_random_uuid());
+ perform pg_temp.ok((select hold_started_at is not null from public.maintenance_schedules where id=sid),'late start uses the existing hold');
  -- Legacy/corrective repair never needs Scheduling activation or approval.
  update private.maintenance_planning_activation set enabled=false;
  r:=public.create_maintenance_request(f,jsonb_build_object('work_center_id',x->>'machine','title','Emergency correction','priority','URGENT','assigned_to',x->>'worker','maintenance_kind','CORRECTIVE','separate_problem',true),gen_random_uuid());

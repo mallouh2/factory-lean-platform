@@ -82,6 +82,7 @@ export default function FactoryApp() {
   const [outputDestination,setOutputDestination]=useState<OutputDestination|null>(null);
   useEffect(()=>setOutputDestination(null),[snapshot?.factory?.id]);
   const [planningItemId, setPlanningItemId] = useState<string | null>(null);
+  const [maintenanceRequestId,setMaintenanceRequestId] = useState('');
   const [loadNotice, setLoadNotice] = useState("");
   const [languageLoaded, setLanguageLoaded] = useState(false);
   const [downtimeEventId,setDowntimeEventId] = useState<string | null>(null);
@@ -241,9 +242,15 @@ export default function FactoryApp() {
     if(warehouseWorkspace)setWarehouseSection(warehouseWorkspace);
     setView(x);
     if (x !== "planning") setPlanningItemId(null);
+    if (x !== 'maintenance') setMaintenanceRequestId('');
     setLineManagement(false);
     setMobile(false);
     setNotice("");
+    return true;
+  };
+  const openMaintenanceRepair = (id:string) => {
+    if (!can('maintenance','view') || !navigate('maintenance')) return false;
+    setMaintenanceRequestId(id);
     return true;
   };
   useEffect(() => {
@@ -497,7 +504,7 @@ export default function FactoryApp() {
               {historyOpen&&props&&<ProductionRecording {...props} surface="history" historyMode={historyMode} onHistoryBack={()=>window.history.back()}/>}
               <div hidden={historyOpen}>{props &&
                 (can(view) ? (
-                  view === 'quality' ? <Quality key={String(snapshot.factory.id)} {...props}/> : view === 'lean' ? <><div className="module-navigation">{can('downtime')&&<button onClick={()=>navigate('downtime')}><SidebarIcon name="downtime"/>{t('downtime')}</button>}</div><LeanAnalysis key={String(snapshot.factory.id)} {...props}/></> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} initialWorkspace={warehouseSection} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'quality' ? <Quality key={String(snapshot.factory.id)} {...props}/> : view === 'lean' ? <><div className="module-navigation">{can('downtime')&&<button onClick={()=>navigate('downtime')}><SidebarIcon name="downtime"/>{t('downtime')}</button>}</div><LeanAnalysis key={String(snapshot.factory.id)} {...props}/></> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} initialRequestId={maintenanceRequestId} onRepairClose={()=>setMaintenanceRequestId('')} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} initialWorkspace={warehouseSection} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}
@@ -547,7 +554,7 @@ export default function FactoryApp() {
                   ) : view === "productionHistory" ? (
                     <ProductionRecording {...props} surface="history" onHistoryBack={()=>navigate('lines')}/>
                   ) : view === "planning" ? (
-                    <ProductionPlanning key={planningItemId || "planning"} {...props} initialItemId={planningItemId} />
+                    <ProductionPlanning key={planningItemId || "planning"} {...props} initialItemId={planningItemId} onMaintenanceRepairOpen={openMaintenanceRepair} />
                   ) : primary.includes(view) ? (
                     <Configuration key={view} {...props} view={view} />
                   ) : (
