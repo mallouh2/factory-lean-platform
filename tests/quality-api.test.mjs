@@ -5,7 +5,7 @@ import {build} from 'esbuild';
 import {NextRequest} from 'next/server.js';
 const require=createRequire(import.meta.url),id='12345678-1234-1234-1234-123456789abc';
 const bundles={};
-for(const name of ['quality','data'])bundles[name]=(await build({entryPoints:[`src/app/api/${name}/route.ts`],bundle:true,platform:'node',format:'cjs',packages:'external',write:false,logLevel:'silent',plugins:[{name:'local-auth-fixture',setup(b){b.onResolve({filter:/services\/authorization$/},()=>({path:'fixture:auth',external:true}));}}]})).outputFiles[0].text;
+for(const name of ['quality','data','manufactured-output'])bundles[name]=(await build({entryPoints:[`src/app/api/${name}/route.ts`],bundle:true,platform:'node',format:'cjs',packages:'external',write:false,logLevel:'silent',plugins:[{name:'local-auth-fixture',setup(b){b.onResolve({filter:/services\/authorization$/},()=>({path:'fixture:auth',external:true}));}}]})).outputFiles[0].text;
 function route(name,{error=null,denied=false,expired=false}={}){
  const calls=[],auth=[],mod={exports:{}};const db={rpc:async(n,args)=>{calls.push({n,args});return {data:{rows:[]},error};}};
  new Function('require','module','exports',bundles[name])(n=>n==='fixture:auth'?{authenticatedClient:async()=>{if(expired)throw Error('unauthorized');return{db,user:{id}};},verifyOrigin(){},safeError:()=>({error:'error'}),authorize:async(factory,module,action)=>{auth.push({factory,module,action});if(typeof denied==='function'?denied(module,action):denied)throw Error('permission_denied');return{db,user:{id}};}}:require(n),mod,mod.exports);
@@ -35,4 +35,21 @@ test('Quality reader failures distinguish permission, missing context and transi
 test('Quality POST denies missing per-person create permission before RPC',async()=>{
  const r=route('data',{denied:(module,action)=>module==='quality'&&action==='create'});const response=await r.POST(new NextRequest('http://localhost/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:'quality_command',args:{factory:id,request_id:id,operation:'reject',payload:{source:id,reason:id,quantity:'2',disposition:'SCRAP',actual_scrap_kg:'.7',physically_identified:true}}})}));
  assert.ok(response.status>=400);assert.equal(r.calls.length,0);
+});
+
+test('manufactured Quality approval and edit retain the protected command and exact revision',async()=>{
+ for(const [revision,quantity,rejected,actual_rejected_kg] of [[1,'2','0','0'],[2,'1.75','0.25','0.5']]){
+  const args={factory:id,target:id,request_id:id,operation:'QUALITY',expected_revision:revision,
+   payload:{groups:[{id,quantity,released:quantity,missing_operations:[]}],total:'2',rejected,actual_rejected_kg,reason:'Measured output confirmed'}};
+  const post=()=>new NextRequest('http://localhost/api/manufactured-output',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({command:'manufactured_output_command',args})});
+  const allowed=route('manufactured-output');
+  assert.equal((await allowed.POST(post())).status,200);
+  assert.deepEqual(allowed.calls,[{n:'manufactured_output_command',args}]);
+
+  const denied=route('manufactured-output',{error:{code:'42501',message:'permission_denied'}});
+  const response=await denied.POST(post());
+  assert.equal(response.status,403);
+  assert.deepEqual(await response.json(),{error:'permissionError'});
+ }
 });

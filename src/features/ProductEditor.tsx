@@ -56,7 +56,7 @@ export default function ProductEditor({props,product,onClose,onSaved}:{props:Fea
     <section><h3>{t('f45Basics')}</h3><div className="form-grid">
      <Field label={t('name')}><input required minLength={2} maxLength={120} value={draft.name||''} onChange={e=>set('name',e.target.value)}/></Field>
      <Field label={t('name_ar')}><input maxLength={120} dir="rtl" value={draft.name_ar||''} onChange={e=>set('name_ar',e.target.value)}/></Field>
-     <Field label={t('code')}><input maxLength={40} placeholder={t(id?'f45KeepCode':'f45AutoCode')} value={draft.code||''} onChange={e=>set('code',e.target.value)}/></Field>
+     <Field label={t('code')}><input autoComplete="off" maxLength={40} placeholder={t(id?'f45KeepCode':'f45AutoCode')} value={draft.code||''} onChange={e=>set('code',e.target.value)}/></Field>
      <Field label={t('category')+' · '+t('f45Optional')}><input value={draft.category||''} onChange={e=>set('category',e.target.value)}/></Field>
     </div><details><summary>{t('f45Advanced')}</summary><Field label={t('inventoryType')}><select disabled={!!id} value={kind} onChange={e=>{const intermediate=e.target.value==='MANUFACTURED_INTERMEDIATE';setDraft(v=>({...v,product_kind:e.target.value,unit:intermediate?'kg':'meter',stock_unit:intermediate?'kg':'meter',weight:intermediate?'1':'',weight_basis:'STOCK_UNIT'}));setWeightTouched(true);setLineTouched(false);setMode('DRAFT');setInputMode('');}}>{['FINISHED_PRODUCT','MANUFACTURED_INTERMEDIATE'].map(v=><option key={v} value={v}>{t(v)}</option>)}</select></Field></details></section>
     <section><h3>{t('f45Dimensions')}</h3><div className="form-grid">

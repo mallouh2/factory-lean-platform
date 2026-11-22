@@ -399,7 +399,7 @@ export default function Configuration({
           title={t(activeEditing.id ? "edit" : "create")}
           onClose={() => standalone ? standalone.onCancel() : setEditing(null)}
         >
-          <form onSubmit={save}>
+          <form onSubmit={save} autoComplete={view === "centers" ? "off" : undefined}>
             {groupedFields.map(({group,fields}) => {
               const secondary = ["groupRates", "groupNotes"].includes(group);
               const Group = secondary ? "details" : "section";
@@ -512,6 +512,8 @@ export default function Configuration({
                   ) : (
                     <input
                       name={field}
+                      autoComplete={field === "code" || (view === "centers" && (field === "name" || field === "name_ar")) ? "off" : undefined}
+                      dir={view === "centers" && (field === "name" || field === "name_ar") ? "auto" : undefined}
                       type={
                         numbers.includes(field)
                           ? "number"
