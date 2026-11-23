@@ -25,13 +25,6 @@
 .valueWithUnit > span { display: grid; place-items: center; min-width: 2.5rem; }
 .actualParts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
 .actualError { margin: 0; color: #9d2e23; font-weight: 600; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: .75rem; }
-.event { border: 1px solid #cfdee0; border-radius: .65rem; background: #f8fbfb; padding: .8rem; min-width: 0; }
-.event p { margin: .45rem 0; }
-.event small { display: block; color: #526574; margin-bottom: .6rem; }
-.eventHead { display: flex; justify-content: space-between; gap: .5rem; align-items: baseline; }
-.eventHead span { font-weight: 700; color: #ad4b31; white-space: nowrap; }
-.review { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: .8rem; }
 .reviewList { display: grid; align-content: start; gap: .35rem; max-height: 28rem; overflow: auto; }
 .reviewList button { text-align: start; display: grid; gap: .2rem; padding: .6rem; border: 1px solid #cedde0; border-radius: .5rem; background: #fff; color: inherit; }
 .reviewList button:nth-child(even) { background: var(--table-row-alternate, #f0f4f8); }
@@ -40,10 +33,49 @@
 .reviewList span { font-size: .8rem; color: #526574; }
 .reviewDetail { display: grid; align-content: start; gap: .75rem; min-width: 0; }
 .reviewDetail h4, .reviewDetail p { margin: 0; }
+.reviewDetail > button { justify-self: start; }
 .reviewDetail dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: .6rem; margin: 0; }
 .reviewDetail dt { color: #526574; font-size: .78rem; }
 .reviewDetail dd { margin: .15rem 0 0; font-weight: 600; overflow-wrap: anywhere; }
 .page button { min-height: 2.6rem; }
 .page button:focus-visible, .page summary:focus-visible, .page select:focus-visible, .page input:focus-visible, .page textarea:focus-visible { outline: 3px solid #4b88c8; outline-offset: 2px; }
-@media (max-width: 750px) { .review { grid-template-columns: minmax(0, 1fr); } .reviewList { max-height: 13rem; } .row > button { width: 100%; } }
 @media (max-width: 420px) { .actualParts { grid-template-columns: minmax(0, 1fr); } }
+.register { display: grid; grid-template-columns: minmax(16rem, .8fr) minmax(0, 1.7fr); align-items: start; gap: 1rem; }
+.register > section { min-width: 0; }
+.queue { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.queue button[aria-pressed="true"] { background: #e2f1fc; border-color: #3975a6; color: #184d78; }
+.filter { display: grid; gap: .25rem; font-size: .86rem; font-weight: 650; margin-block: .55rem; }
+.filter input, .filter select { min-width: 0; width: 100%; min-height: 2.65rem; padding: .45rem .6rem; border: 1px solid #afc4d0; border-radius: .45rem; color: inherit; background: white; }
+.filters { margin-block: .65rem; }
+.filters summary, .disclosure summary { color: #184d78; }
+.eventLine { display: flex; justify-content: space-between; align-items: center; gap: .45rem; flex-wrap: wrap; }
+.reviewList button { min-width: 0; overflow-wrap: anywhere; }
+.reviewList button .status, .status { font-size: .75rem; font-weight: 700; border-radius: 1rem; background: #eff1f5; color: #405269; padding: .21rem .55rem; }
+.reviewList button .status[data-state="pending"], .status[data-state="pending"] { background: #fff2d7; color: #704308; }
+.reviewList button .status[data-state="open"], .status[data-state="open"] { background: #fae7e5; color: #872a28; }
+.reviewList button .status[data-state="reviewed"], .status[data-state="reviewed"] { background: #dff3eb; color: #155f4a; }
+.reviewList button .status[data-state="corrected"], .status[data-state="corrected"] { background: #e6edf9; color: #254a83; }
+.selectedHeader { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; }
+.selectedHeader h4 { font-size: 1.15rem; }
+.selectedHeader p { color: #526574; overflow-wrap: anywhere; }
+.outcome { background: #f0f9fb; border: 1px solid #bedde6; border-inline-start: 4px solid #26768a; border-radius: .65rem; padding: .85rem; display: grid; gap: .65rem; }
+.outcome dl { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); }
+.outcome dd { font-size: 1.05rem; }
+.outcome small, .observation > p, .audit small { color: #3a5565; display: block; }
+.observation { border-block-start: 1px solid #bedde6; padding-block-start: .65rem; }
+.observation h5 { margin: 0 0 .25rem; font-size: .9rem; }
+.disclosure { border-block-start: 1px solid #d3dfe2; padding-block: .6rem; }
+.disclosure[open] > summary { margin-block-end: .65rem; }
+.moreActions { justify-self: start; }
+.moreActions > summary { cursor: pointer; color: #184d78; font-weight: 650; padding-block: .35rem; }
+.moreActions > div { margin-block-start: .35rem; }
+.disclosure > p { margin-block: .55rem; }
+.audit { margin: .4rem 0; padding-inline-start: 1.35rem; }
+.audit li + li { margin-block-start: .7rem; }
+.actualForm .attestation { display: flex; align-items: flex-start; min-width: 0; gap: .5rem; }
+.attestation input { accent-color: #26768a; width: 1.15rem; height: 1.15rem; margin: .1rem 0 0; flex: 0 0 auto; }
+@media (max-width: 850px) {
+  .register { grid-template-columns: minmax(0, 1fr); }
+  .reviewList { max-height: 15rem; }
+  .register h3 { scroll-margin-block-start: 4.5rem; }
+}

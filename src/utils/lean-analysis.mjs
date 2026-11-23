@@ -1,5 +1,5 @@
 // Analysis helpers consume persisted measurements; they never calculate Production Loss.
-import { evaluateFlow } from './production-flow.mjs';
+import { evaluateFlow, operatingLineMembers } from './production-flow.mjs';
 import { formatLocalInput, localDateTimeToUtc } from './manufacturing.mjs';
 const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const nonnegative = value => finite(value) && Number(value) >= 0;
@@ -118,7 +118,7 @@ export function operatingRuntime(checkpoints, until) {
     if (to <= from) continue;
     const { centers = [], stops = [], transfers = [], orders = [], lines = [] } = sample.context;
     const points = new Set([from, to]);
-    for (const value of [...orders.flatMap(o => [o.actual_start, o.actual_finish]), ...lines.map(l => l.paused_at)]) {
+    for (const value of [...orders.flatMap(o => [o.actual_start, o.execution_started_at, o.actual_finish]), ...lines.map(l => l.paused_at)]) {
       const at = moment(value);
       if (at > from && at < to) points.add(at);
     }
@@ -131,22 +131,14 @@ export function operatingRuntime(checkpoints, until) {
     const boundaries = [...points].sort((a, b) => a - b);
     for (let segment = 0; segment < boundaries.length - 1; segment++) {
       const start = boundaries[segment], finish = boundaries[segment + 1], flow = evaluateFlow(centers, stops, transfers, start + 1);
-      for (const job of orders.filter(o => o.status === 'active' && o.actual_start && moment(o.actual_start) <= start && (!o.actual_finish || moment(o.actual_finish) > start))) {
+      for (const job of orders.filter(o => o.status === 'active' && o.actual_start && moment(o.actual_start) <= start &&
+        (!o.execution_started_at || moment(o.execution_started_at) <= start) && (!o.actual_finish || moment(o.actual_finish) > start))) {
         for (const center of centers.filter(c=>c.dependency_mode==='independent' && !c.archived && c.order_id===job.id && c.status==='running' && flow[c.id]?.state!=='blocked' && !transfers.some(t=>t.alternative_id===c.id&&!t.ended_at))) {
           intervals.push({product_id:job.product_id,item_id:job.id,subject_id:center.id,started_at:new Date(start).toISOString(),ended_at:new Date(finish).toISOString()});
         }
-        const line = lines.find(l => l.id === job.line_id);
-        if (!line || line.archived || line.paused_at && moment(line.paused_at) <= start) continue;
-        const members = centers.filter(c => c.line_id === line.id && !c.archived && c.dependency_mode !== 'independent');
-        if (!members.length || members.some(c => (flow[c.id]?.homeState || flow[c.id]?.state) === 'blocked')) continue;
-        const operating = members.filter(c => {
-          if (['running'].includes(c.status) && !transfers.some(t => t.alternative_id === c.id && t.original_id !== c.id && !t.ended_at && centers.find(x => x.id === t.original_id)?.line_id !== line.id)) return true;
-          const transfer = transfers.find(t => t.original_id === c.id && !t.ended_at);
-          return transfer && centers.find(a => a.id === transfer.alternative_id)?.status === 'running' && flow[c.id]?.state !== 'blocked';
-        });
+        const line = lines.find(l => l.id === (job.actual_line_id || job.line_id));
+        const operating = operatingLineMembers(line, job, centers, transfers, flow, start);
         if (!operating.length) continue;
-        if (members.some(c => ['blocking', 'buffer'].includes(c.dependency_mode) && c.impact_scope !== 'none' &&
-          !operating.includes(c) && (flow[c.id]?.homeState || flow[c.id]?.state) !== 'bufferActive')) continue;
         const interval = { product_id: job.product_id, item_id: job.id, started_at: new Date(start).toISOString(), ended_at: new Date(finish).toISOString() };
         intervals.push({ ...interval, subject_id: line.id });
         for (const center of operating) intervals.push({ ...interval, subject_id: center.id });

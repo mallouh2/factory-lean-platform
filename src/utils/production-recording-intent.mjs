@@ -1,5 +1,6 @@
 // Exact client intent/recovery only. SQL remains posting and admission truth.
 import {decimalCompare,decimalSubtract} from './quality-quantities.mjs';
+import {formatLocalInput,localDateTimeToUtc} from './manufacturing.mjs';
 import {validCompletion} from './production-completion.mjs';
 const quantities=new Set(['good','scrap_kg','discarded_quantity','unfinished','input_quantity','startup_kg']);
 const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -8,6 +9,40 @@ export function recordingNumber(value){
  const result=decimalSubtract(text,'0');
  if(result===null||decimalCompare(result,'0')===-1)throw Error('prv3InvalidQuantity');
  return result;
+}
+/** @returns {{error:string}|{totalKg:string,startupKg:string,regularKg:string|null}} */
+export function recordingScrap(total, startup){
+ let totalKg, startupKg;
+ try{totalKg=recordingNumber(total);}catch{return {error:'prv3InvalidScrap'};}
+ try{startupKg=recordingNumber(startup);}catch{return {error:'prv3InvalidStartupScrap'};}
+ if(decimalCompare(startupKg,totalKg)===1)return {error:'prv3InvalidStartupScrap'};
+ return {totalKg,startupKg,regularKg:decimalSubtract(totalKg,startupKg)};
+}
+
+// Whole-minute input is resolved against verified run windows in factory time.
+export function startupMinuteRanges(windows,zone,now){
+ return windows.flatMap(window=>{
+  const first=Math.ceil(Date.parse(window.from)/60000)*60000;
+  const last=Math.floor(Math.min(Date.parse(window.to)-1,now)/60000)*60000;
+  if(!(first<=last))return [];
+  return [{first,last,from:formatLocalInput(new Date(first).toISOString(),zone),to:formatLocalInput(new Date(last).toISOString(),zone)}];
+ });
+}
+export function resolveStartupMinute(value,ranges,zone,date=''){
+ if(!/^\d{2}:\d{2}$/.test(value))return {matches:[],at:''};
+ const matches=new Set();
+ for(const range of ranges){
+  const last=Date.parse(range.to.slice(0,10)+'T00:00Z');
+  for(let day=Date.parse(range.from.slice(0,10)+'T00:00Z');day<=last;day+=86400000){
+   const localDate=new Date(day).toISOString().slice(0,10);
+   try{
+    const at=localDateTimeToUtc(localDate+'T'+value,zone);
+    if(Date.parse(at)>=range.first&&Date.parse(at)<=range.last)matches.add(localDate);
+   }catch{/* Nonexistent factory wall time. */}
+  }
+ }
+ const dates=[...matches].sort(),selected=dates.length===1?dates[0]:dates.includes(date)?date:'';
+ return {matches:dates,at:selected?localDateTimeToUtc(selected+'T'+value,zone):''};
 }
 export function recordingBody(factory,request,payload){
  if(!uuid(factory)||!uuid(request)||!payload||typeof payload!=='object')throw Error('prv3InvalidQuantity');

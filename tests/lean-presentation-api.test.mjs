@@ -14,6 +14,22 @@ async function call({params='',rows=[],events=[],entries=[],tables={},denied=fal
 const rows=Array.from({length:50},(_,i)=>({mechanism:'downtime',machine_id:'M'+i,cause_id:'C'+i,products:[],frequency:i+1,loss_minutes:50-i,scrap_kg:0,missing_scrap:0}));
 test('Lean API attention uses complete eligible population on later pages, before sort/page slicing',async()=>{
  const r=await call({rows,params:'&sort=frequency&direction=asc&page=2'});assert.equal(r.status,200);assert.equal(r.body.total,50);assert.equal(r.body.rows.length,25);assert.equal(r.body.rows.filter(x=>x.attention.frequency).length,10);assert.equal(r.body.rows.filter(x=>x.attention.loss).length,0);assert.deepEqual(r.authCalls,[[factory,'lean','view']]);assert.equal(r.tableCalls.length,0);
+ assert.equal(r.body.loss_ranking[0].id,'C0');
+ assert.equal(r.body.loss_ranking[0].cumulative,50/1275);
+});
+test('loss ranking combines reviewed reasons across machines without turning missing evidence into loss',async()=>{
+ const r=await call({rows:[{...rows[0],cause_id:'same',loss_minutes:12},{...rows[1],cause_id:'same',loss_minutes:8},{...rows[2],loss_minutes:5},{...rows[3],loss_minutes:null},{...rows[4],mechanism:'scrap',loss_minutes:99}]});
+ assert.equal(r.status,200);
+ assert.deepEqual(r.body.loss_ranking.map(x=>[x.id,x.minutes,x.cumulative]),[['same',20,.8],['C2',5,1]]);
+});
+test('actual loss time does not identify the source of a matching output estimate',async()=>{
+ const event={event_id:'D',mechanism:'downtime',machine_id:rows[0].machine_id,cause_id:rows[0].cause_id,
+  product_id:'P',occurred_at:'2026-10-02',lost_output:8,output_unit:'meter',loss_source:'ACTUAL',
+  loss_details:{estimated_lost_output_quantity:8,unit:'meter'}};
+ const same=await call({rows:[rows[0]],events:[event]});
+ const different=await call({rows:[rows[0]],events:[{...event,lost_output:5}]});
+ assert.equal(same.body.rows[0].output_measured,false);
+ assert.equal(different.body.rows[0].output_measured,true);
 });
 test('initiative filtering precedes relative attention and leaves unknown loss unknown',async()=>{
  const r=await call({rows:rows.map((x,i)=>({...x,loss_minutes:null,initiative:i>44?{verified_at:'2026-10-03'}:null})),params:'&initiative_status=VERIFIED'});

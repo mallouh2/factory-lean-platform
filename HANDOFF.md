@@ -1,3 +1,21 @@
+# 23 November 2026 — Approved Group 6A design checkpoint
+
+The owner accepted the Lean Analysis, Downtime and simplified Startup recording designs, including the Group 6A corrections. Standards & Libraries visibly identifies the active tab and supports keyboard switching in English and Arabic. This checkpoint includes alternative-line loss recovery, trusted local loss-estimate saving, the confirmed-startup recording migration, and the approved Downtime review and background-refresh improvements. The local migration contract and the Startup, Quality and Warehouse rollback checks were verified. The five preview stops remain in the existing local database. APS and F37 remain on hold.
+
+---
+
+# 23 November 2026 — Group 6 final Downtime usability
+
+Local, uncommitted and pending owner visual acceptance. The approved register and selected-event layout is unchanged. Related Maintenance uses a contextual link. More actions contains evidence, history, and authorized exceptional workflows. The 30-second snapshot poll had triggered visible history reloads. Downtime now refreshes in place and ignores superseded reads, preserving interaction state. Browser verification covered multiple poll intervals, delayed reads and English desktop and Arabic RTL mobile. Five live records, Lean logic and operational records remain intact. Preview at http://127.0.0.1:29721/?view=downtime.
+
+---
+
+# 23 November 2026 — Group 6 detailed Downtime review
+
+Local implementation pending owner visual acceptance. Downtime now presents one selected record with source timestamps, existing-engine calculations, reviewed linked scrap, distinct cause and correction actions, and on-demand audit evidence. The separate Lean overview and all five local stops were preserved. TypeScript, 73 focused tests, rollback fixtures and canonical English desktop and Arabic RTL mobile checks passed. The legacy observation contract has no supporting-evidence or correction-reason input. The preview remains on port 29721. No migration, commit, push or deployment was made.
+
+---
+
 # 19 November 2026 — Group 4 hotfix F53 and F54
 
 The owner accepted Group 4, including the unified work queue, maintenance drag/drop, compact scheduling, role separation, repair navigation, late starts and stable Gantt rendering. This checkpoint records the approved implementation on development. Earlier acceptance statements below are historical.

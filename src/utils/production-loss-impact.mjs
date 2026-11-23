@@ -1,4 +1,4 @@
-import { evaluateFlow } from "./production-flow.mjs";
+import { evaluateFlow, machineSequence, operatingLineMembers } from "./production-flow.mjs";
 
 export const LOSS_MODEL_VERSION = 1;
 export const MAINTENANCE_LOSS_POLICY_VERSION = 1;
@@ -9,6 +9,33 @@ const time = (value) => value ? Date.parse(value) : NaN;
 const same = (left, right) => String(left) === String(right);
 const rows = (context, key) => Array.isArray(context?.[key]) ? context[key] : [];
 const round = (value) => Math.round(value * 1000) / 1000;
+
+function alternativeLineEvidence(context, order, sourceLine, flow, from, to, unit) {
+  const id = order.actual_line_id;
+  if (!id || id === sourceLine || order.status !== "active" ||
+    !(time(order.execution_started_at || order.actual_start) <= from) ||
+    (order.actual_finish && !(time(order.actual_finish) >= to))) return null;
+  const centers = rows(context, "centers");
+  const line = rows(context, "lines").find(x => x.id === id);
+  const operating = operatingLineMembers(line, order, centers, rows(context, "transfers"), flow, from);
+  if (!operating.some(c => c.order_id === order.id || !Object.hasOwn(c, "order_id"))) return null;
+  // Recovery must use available capacity. A different active item or unfinished
+  // planned work on the destination can displace production elsewhere.
+  const displaced = rows(context, "orders").some(x => x.id !== order.id &&
+    (x.status === "active" && (x.actual_line_id || x.line_id) === id ||
+      x.line_id === id && x.status !== "cancelled" &&
+      !(x.status === "completed" && time(x.actual_finish) <= from) &&
+      time(x.start_time) < to && time(x.expected_finish) > from));
+  if (displaced) return { id, displaced, rate: null };
+  const members = new Set(centers.filter(c => c.line_id === id && !c.archived &&
+    c.dependency_mode !== "independent").map(c => c.id));
+  const capabilities = rows(context, "capabilities").filter(c =>
+    members.has(c.work_center_id) && c.product_id === order.product_id);
+  const rates = capabilities.map(c => c.rate_unit === unit ? number(c.rate) : null);
+  const rate = rates.length && rates.every(x => x !== null && x > 0)
+    ? Math.min(...rates) : null;
+  return { id, displaced, rate };
+}
 
 /** Immutable event-context samples are captured by database transition triggers.
  * @param {Record<string, any>} event
@@ -55,6 +82,7 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
     impact_level: 0,
     flow_scope: "none",
     estimated_lost_output_quantity: 0,
+    estimated_alternative_recovered_quantity: /** @type {number|null} */ (null),
     unit: null,
     estimated_shutdown_scrap: null,
     estimated_restart_scrap: null,
@@ -92,10 +120,15 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
     const at = time(sample.captured_at);
     if (at > started && at < ended) boundaries.add(at);
     for (const order of rows(sample.context, "orders")) {
-      for (const value of [order.start_time, order.expected_finish]) {
+      for (const value of [order.start_time, order.expected_finish,
+        order.actual_start, order.execution_started_at, order.actual_finish]) {
         const t = time(value);
         if (t > started && t < ended) boundaries.add(t);
       }
+    }
+    for (const line of rows(sample.context, "lines")) {
+      const paused = time(line.paused_at);
+      if (paused > started && paused < ended) boundaries.add(paused);
     }
     for (const stop of rows(sample.context, "stops")) {
       const center = rows(sample.context, "centers")
@@ -113,6 +146,9 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
   /** @type {Array<Record<string, any>>} */
   const assumptions = [];
   let output = 0;
+  let recoveredOnAlternative = 0;
+  const sourceOrders = new Set();
+  let sampleIndex = -1;
   let deferred = 0;
   let recovery = 0;
   let recoveryUnknown = false;
@@ -132,7 +168,16 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
     const from = points[index];
     const to = points[index + 1];
     const duration = (to - from) / minute;
-    const sample = [...history].reverse().find((x) => time(x.captured_at) <= from);
+    while (sampleIndex + 1 < history.length && time(history[sampleIndex + 1].captured_at) <= from) {
+      const observed = history[++sampleIndex].context;
+      const home = event.line_id || rows(observed, "centers").find(c => same(c.id, event.work_center_id))?.line_id;
+      if (!home) continue;
+      for (const item of rows(observed, "orders")) {
+        if (item.line_id === home && (item.actual_line_id || item.line_id) === home &&
+          ["planned", "active"].includes(item.status)) sourceOrders.add(item.id);
+      }
+    }
+    const sample = history[sampleIndex];
     if (!sample) {
       missing.add("Historical event context snapshot");
       lossTimeUnknown = true; outputUnknown = true;
@@ -229,7 +274,7 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
       flow[String(candidate.id)]?.state === "blocked" &&
       rows(context, "stops").some((stop) =>
         same(stop.work_center_id, candidate.id) && !stop.ended_at))
-      .sort((a, b) => Number(a.position) - Number(b.position))[0];
+      .sort(machineSequence)[0];
     const scope = center.impact_scope || "none";
     const segmentAssumptions = {
       from: new Date(from).toISOString(), to: new Date(to).toISOString(),
@@ -327,14 +372,39 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
       lossTimeUnknown = true; outputUnknown = true;
       continue;
     }
-    base.effective_loss_minutes += duration;
-    impact = Math.max(impact, 4);
+    const alternativeLine = sourceOrders.has(order.id)
+      ? alternativeLineEvidence(context, order, lineId, flow, from, to, unit) : null;
+    if (alternativeLine) Object.assign(segmentAssumptions, {
+      alternative_line_id: alternativeLine.id,
+      alternative_line_recovery: alternativeLine.displaced ? "DESTINATION_DEMAND" : "ESTIMATED",
+    });
     if (rate === null || rate <= 0 || !unit || !same(unit, product?.unit)) {
       missing.add(`Production rate for ${center.name || center.code} + ${product?.name || productId}`);
+      if (alternativeLine && !alternativeLine.displaced) lossTimeUnknown = true;
+      else base.effective_loss_minutes += duration;
+      impact = Math.max(impact, 4);
       outputUnknown = true;
       continue;
     }
-    output += rate * duration / 60;
+    let recoveredRate = 0;
+    if (alternativeLine && !alternativeLine.displaced) {
+      if (alternativeLine.rate === null) {
+        missing.add("Comparable alternative line rate");
+        lossTimeUnknown = true; outputUnknown = true;
+        continue;
+      }
+      recoveredRate = Math.min(rate, alternativeLine.rate);
+      const estimated = recoveredRate * duration / 60;
+      recoveredOnAlternative += estimated;
+      Object.assign(segmentAssumptions, {
+        available_rate: alternativeLine.rate, estimated_recovered_quantity: round(estimated),
+      });
+      mitigation.add("alternative_line");
+    }
+    const lostRate = rate - recoveredRate;
+    base.effective_loss_minutes += duration * lostRate / rate;
+    output += lostRate * duration / 60;
+    impact = Math.max(impact, lostRate === rate ? 4 : lostRate > 0 ? 3 : 1);
     base.unit = unit;
     base.flow_scope = scope;
   }
@@ -364,6 +434,8 @@ export function calculateProductionLoss(event, samples, actual = null, now = Dat
   base.estimated_lost_output_quantity = outputUnknown ||
     missing.has("Multiple planned output units in one event")
     ? null : round(output);
+  if (mitigation.has("alternative_line") && base.estimated_lost_output_quantity !== null)
+    base.estimated_alternative_recovered_quantity = round(recoveredOnAlternative);
   base.deferred_quantity = missing.has("Multiple deferred output units in one event")
     ? null : round(deferred);
   if (base.deferred_quantity === null) base.deferred_unit = null;

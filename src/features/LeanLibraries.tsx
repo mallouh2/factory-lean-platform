@@ -1,12 +1,16 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Field, localName, formatTime } from '@/components/ui';
 import { useHistoryData } from '@/hooks/useHistoryData';
 import HistoryQueryState from '@/components/HistoryQueryState';
 import type { FeatureProps } from './types';
 import type { LeanRow } from './LeanAnalysis';
+const libraryTabs = ['standards', 'causes', 'templates', 'review'] as const;
+type LibraryTab = typeof libraryTabs[number];
+
 export default function LeanLibraries({onBack,...props}:FeatureProps & {onBack:()=>void}){
  const {snapshot:s,t,lang,can,command}=props,factory=String(s.factory?.id||'');
- const [tab,setTab]=useState('standards'),[page,setPage]=useState(1),[revision,setRevision]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [tab,setTab]=useState<LibraryTab>('standards'),[page,setPage]=useState(1),[revision,setRevision]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const tabsId = useId();
  const [cause,setCause]=useState<LeanRow>({id:crypto.randomUUID(),name:'',name_ar:''});
  const [standard,setStandard]=useState<LeanRow>({id:crypto.randomUUID(),line_id:'',product_id:'',running_percent:'',startup_kg:'',expected_revision:0});
  const [template,setTemplate]=useState<LeanRow>({id:crypto.randomUUID(),cause_id:'',title:'',name_ar:'',description:'',action_type:'PROCESS',due_days:'7',archived:false,expected_revision:0});
@@ -16,7 +20,29 @@ export default function LeanLibraries({onBack,...props}:FeatureProps & {onBack:(
  const name=(table:string,id:string)=>localName(s.tables[table]?.find(x=>x.id===id),lang)||t('notAvailable');
  async function save(op:string,payload:LeanRow){setBusy(true);setError('');try{await command('lean_command',{factory,request_id:request.current,operation:op,payload});request.current=crypto.randomUUID();setRevision(x=>x+1);return true;}catch(e){setError(e instanceof Error?e.message:'error');return false;}finally{setBusy(false);}}
  const q=(v:unknown)=>v==null?'—':Number(v).toLocaleString(lang,{maximumFractionDigits:2});
- return <section className="lean-page" dir={lang==='ar'?'rtl':'ltr'}><header className="lean-header"><div><button onClick={onBack}>← {t('lean')}</button><h2>{t('leanLibraries')}</h2></div></header><div className="lean-controls">{['standards','causes','templates','review'].map(k=><button key={k} aria-pressed={tab===k} onClick={()=>{setTab(k);setPage(1);request.current=crypto.randomUUID();}}>{t('leanTab_'+k)}</button>)}</div>
+ function selectTab(next: LibraryTab) {
+  setTab(next); setPage(1); request.current = crypto.randomUUID();
+ }
+ function navigateTabs(event: KeyboardEvent<HTMLDivElement>) {
+  const current = libraryTabs.indexOf(tab);
+  const direction = lang === 'ar' ? -1 : 1;
+  const offsets: Record<string, number> = { ArrowRight: direction, ArrowLeft: -direction };
+  const index = event.key === 'Home' ? 0 : event.key === 'End' ? libraryTabs.length - 1
+   : (current + (offsets[event.key] ?? 0) + libraryTabs.length) % libraryTabs.length;
+  if (event.key !== 'Home' && event.key !== 'End' && !offsets[event.key]) return;
+  event.preventDefault();
+  selectTab(libraryTabs[index]);
+  event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus();
+ }
+ return <section className="lean-page" dir={lang==='ar'?'rtl':'ltr'}><header className="lean-header"><div><button onClick={onBack}>← {t('lean')}</button><h2>{t('leanLibraries')}</h2></div></header>
+  <div className="lean-controls lean-library-tabs" role="tablist" aria-label={t('leanLibraries')} onKeyDown={navigateTabs}>
+   {libraryTabs.map(key => <button key={key} type="button" role="tab" id={tabsId+'-tab-'+key}
+    aria-controls={tabsId+'-panel-'+key} aria-selected={tab===key} tabIndex={tab===key?0:-1}
+    onClick={()=>selectTab(key)}>{t('leanTab_'+key)}</button>)}
+  </div>
+  {libraryTabs.filter(key=>key!==tab).map(key=><div key={key} role="tabpanel" id={tabsId+'-panel-'+key}
+   aria-labelledby={tabsId+'-tab-'+key} hidden />)}
+  <div role="tabpanel" id={tabsId+'-panel-'+tab} aria-labelledby={tabsId+'-tab-'+tab} tabIndex={0}>
   <HistoryQueryState {...data} t={t}/>{error&&<p role="alert">{t(error)}</p>}
   {tab==='standards'&&<><p>{t('leanStandardsHelp')}</p>{can('lean_standards','edit')&&<form className="recording-form" onSubmit={async e=>{e.preventDefault();if(await save('standard',{...standard,running_percent:standard.running_percent===''?null:Number(standard.running_percent),startup_kg:standard.startup_kg===''?null:Number(standard.startup_kg)}))setStandard({id:crypto.randomUUID(),line_id:'',product_id:'',running_percent:'',startup_kg:'',expected_revision:0});}}><div className="form-grid">
    <Field label={t('line')}><select required value={standard.line_id} onChange={e=>setStandard({...standard,line_id:e.target.value})}><option value="">{t('choose')}</option>{(s.tables.production_lines||[]).filter(x=>!x.archived).map(x=><option key={String(x.id)} value={String(x.id)}>{localName(x,lang)}</option>)}</select></Field><Field label={t('product')}><select required value={standard.product_id} onChange={e=>setStandard({...standard,product_id:e.target.value})}><option value="">{t('choose')}</option>{(s.tables.products||[]).filter(x=>!x.archived).map(x=><option key={String(x.id)} value={String(x.id)}>{localName(x,lang)}</option>)}</select></Field>
@@ -32,6 +58,7 @@ export default function LeanLibraries({onBack,...props}:FeatureProps & {onBack:(
   </>}
   {tab==='review'&&<><HistoryQueryState {...pending} t={t}/><p>{t('leanEngineerReviewHelp')}</p>{pending.data?.rows.map(x=><ScrapApproval key={x.id} {...props} event={x} causes={data.data?.causes||[]} onSave={async payload=>{await save('scrap_review',payload);}}/>)}{!pending.data?.rows.length&&<p>{t('noResults')}</p>}</>}
   <nav className="history-pagination"><button disabled={page<=1||busy} onClick={()=>setPage(p=>p-1)}>{t('previous')}</button><span>{page}</span><button disabled={busy||![data.data?.causes,data.data?.templates,data.data?.standards,data.data?.observed_startup,pending.data?.rows].some(x=>x?.length===100)} onClick={()=>setPage(p=>p+1)}>{t('next')}</button></nav>
+  </div>
  </section>;
 }
 function ScrapApproval({event:e,causes,onSave,...props}:FeatureProps & {event:LeanRow;causes:LeanRow[];onSave:(payload:LeanRow)=>Promise<void>}){

@@ -26,11 +26,12 @@ new Function("require", "module", "exports", bundled.outputFiles[0].text)(
   name => name === "test-history" ? { useHistoryData: url => {
     if (["loading", "error"].includes(historyState)) return { data: null, loading: historyState === "loading",
       error: historyState === "error" ? "dataWarning" : "", reload: () => {} };
-    const rows = historyState === "empty" ? [] : snapshot.tables.downtime_events.filter(row => row.ended_at);
-    const event = rows[0];
+    const rows = historyState === "empty" ? [] : snapshot.tables.downtime_events;
+    const event = rows.find(row => url?.endsWith("event=" + row.id));
     return { loading: false, error: "", reload: () => {}, data: url?.includes("event=") ? {
       event, actual: null, saved: null, correction: null,
       calculation: calculateProductionLoss(event, []), suggestions: [],
+      scrap: historyState === "linked" ? { state: "recorded", kg: 7, startup: 3 } : undefined,
     } : { rows, total: rows.length, pages: 1 } };
   } } : require(name), featureModule, featureModule.exports);
 const DowntimeCapture = featureModule.exports.default;
@@ -73,23 +74,23 @@ function render(lang, permissions, state = "loaded") {
   }));
 }
 
-test("downtime page retains review, retroactive entry and fixed configuration in EN/AR", () => {
+test("downtime retains cause choices and missed-stop entry without the configuration accordion in EN/AR", () => {
   for (const lang of ["en", "ar"]) {
     const dictionary = lang === "ar" ? ar : en;
     const html = render(lang, ["machine_status:edit", "downtime:edit", "downtime:create"]);
     assert.doesNotMatch(html, /Start downtime|بدء التوقف|End downtime \/ resume/);
     assert.match(html, new RegExp(dictionary.downtimeUnclassified));
-    assert.match(html, new RegExp(dictionary.downtimeAddReason));
+    assert.match(html, new RegExp(dictionary.downtimeActive));
     assert.match(html, new RegExp(dictionary.downtimeNeedsReview));
     assert.match(html, new RegExp(dictionary.downtimeApprovedCause));
     assert.match(html, new RegExp(dictionary.downtimeRetroactive));
     assert.match(html, new RegExp(dictionary.lossImpact));
     assert.match(html, new RegExp(dictionary.lossLegacyUnknown));
-    assert.match(html, new RegExp(dictionary.lossGapHistorical));
+    assert.match(html, new RegExp(dictionary.downtimeLossEvidenceMissing));
     assert.match(html, /ITEM-101/);
-    assert.match(html, /Belt slipped/);
-    assert.match(html, /Operator/);
+    assert.doesNotMatch(html, /Belt slipped/);
     assert.match(html, /datetime-local/);
+    assert.ok(!html.includes(`<summary>${dictionary.configuration}</summary>`));
     for (const key of ["downtimeMechanical", "downtimeElectrical", "downtimeMaterial",
       "downtimeQuality", "downtimeSetup", "downtimeUtilities", "downtimeOther"]) {
       assert.match(html, new RegExp(dictionary[key]));
@@ -109,7 +110,7 @@ test("loss loading/error stay local and do not invent an empty result or hide cu
     assert.ok(error.includes(words.refresh));
     assert.ok(error.includes("ITEM-101"));
     const empty = render(lang, [], "empty");
-    assert.ok(empty.includes(words.downtimeReviewEmpty));
+    assert.ok(empty.includes(words.noResults));
     assert.ok(!empty.includes(words.historyLoading));
     assert.ok(!empty.includes(words.lossGapHistorical));
   }
@@ -124,19 +125,26 @@ test("per-person view hides stop and approval controls without edit grants", () 
   assert.doesNotMatch(reviewer, /Start downtime/);
 });
 
-test("actual result uses clear bilingual helpers, shared scrap unit and visible Save", () => {
+test("exceptional observation and corrections are available on demand only", () => {
   for (const lang of ["en", "ar"]) {
     const dictionary = lang === "ar" ? ar : en;
     const html = render(lang, ["downtime:edit"]);
-    for (const key of ["lossActualLossTime", "lossActualLossTimeHelp",
-      "lossActualLostQuantity", "lossActualLostQuantityHelp", "lossActualScrapHelp",
-      "lossActualShutdownHelp", "lossActualRestartHelp", "lossScrapSharedUnitHelp"]) {
-      assert.ok(html.includes(dictionary[key].replaceAll("'", "&#x27;")), key);
-    }
-    assert.ok(html.includes(`aria-label="${dictionary.lossScrapUnit}">kg</span>`));
-    assert.ok(html.includes(`value="piece"`));
-    assert.ok(html.includes(dictionary.lossOptional));
-    assert.ok(!html.includes(dictionary.lossActualRecoveryHelp));
-    assert.match(html, /<button class="primary">/);
+    assert.ok(html.includes('<details class="moreActions"><summary>' + dictionary.downtimeMoreActions));
+    assert.ok(html.includes(dictionary.downtimeExceptionalObservation));
+    assert.ok(html.includes(dictionary.downtimeCorrectData));
+    assert.ok(!html.includes(dictionary.downtimeConfirmObservationSource));
+    assert.ok(!html.includes(dictionary.lossActualScrapHelp));
+    assert.ok(!html.includes(dictionary.downtimeSourceReview));
+  }
+});
+
+test("reviewed production scrap is visible without extra inputs or startup details", () => {
+  for (const lang of ["en", "ar"]) {
+    const words = lang === "en" ? en : ar;
+    const html = render(lang, ["downtime:edit"], "linked");
+    assert.ok(html.includes(words.downtimeLinkedScrap));
+    assert.ok(!html.includes(words.downtimeLinkedStartup));
+    assert.ok(!html.includes(words.lossActualScrapHelp));
+    assert.ok(!html.includes(words.lossActualLostQuantityHelp.replaceAll("'", "&#x27;")));
   }
 });

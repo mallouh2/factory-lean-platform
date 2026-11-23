@@ -38,6 +38,7 @@ export function recordingFailure(error) {
   if (code === '42501' || message === 'permission_denied') return {status:403,error:'permissionError'};
   if (message === 'output_paused' || message === 'output_enrollment_required') return {status:409,error:message==='output_paused'?'outputPaused':'outputEnrollmentRequired',reason:message,outcome:'REJECTED'};
   if (message === 'output_carryover_unsupported') return {status:422,error:'outputCarryoverUnsupported',reason:message,outcome:'REJECTED'};
+  if (message === 'lean_startup_execution') return {status:422,error:'prv3StartupTimeInvalid',reason:message,outcome:'REJECTED'};
   if (['production_stock_shortage','production_stock_legacy_review','production_stock_recipe_review'].includes(message)) return {status:422,error:message,reason:message,outcome:'REJECTED'};
   if (code === '40001') return {status:409,error:message === 'request_conflict' ? 'recordingRequestConflict' : 'recordingContextChanged',outcome:'REJECTED'};
   if (code === '55000') return {status:503,error:message==='recording_disabled'?'prv3LateDisabled':'recordingUnavailable',outcome:'REJECTED'};

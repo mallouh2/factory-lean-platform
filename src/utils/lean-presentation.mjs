@@ -16,6 +16,25 @@ export function leanDisplayStatus(row) {
   return 'IN_PROGRESS';
 }
 
+// Rank available loss evidence across the entire filtered result, before paging.
+export function leanLossRanking(rows, limit = 6) {
+  const causes = new Map();
+  for (const row of rows) {
+    const minutes = Number(row.loss_minutes);
+    if (row.mechanism !== 'downtime' || !row.cause_id || !Number.isFinite(minutes) || minutes <= 0) continue;
+    const cause = causes.get(row.cause_id) || { id: row.cause_id, name: row.cause, name_ar: row.cause_ar, minutes: 0 };
+    cause.minutes += minutes;
+    causes.set(cause.id, cause);
+  }
+  const ranked = [...causes.values()].sort((a, b) => b.minutes - a.minutes || String(a.id).localeCompare(String(b.id)));
+  const total = ranked.reduce((sum, cause) => sum + cause.minutes, 0);
+  let cumulative = 0;
+  return ranked.slice(0, limit).map(cause => ({
+    ...cause,
+    cumulative: (cumulative += cause.minutes) / total,
+  }));
+}
+
 // Reuse approved recording snapshots and the existing abnormal-Scrap calculation.
 // Earlier declarations consume allowance even when outside the visible analysis period.
 export function recordingScrapAttention(entries, startups) {

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateProductionLoss, suggestScrapCalibration } from
   "../src/utils/production-loss-impact.mjs";
+import { operatingRuntime } from "../src/utils/lean-analysis.mjs";
 
 const at = (minute) => new Date(Date.UTC(2026, 8, 29, 10, minute)).toISOString();
 const center = (overrides = {}) => ({
@@ -33,6 +34,67 @@ const sample = (when, state, id = 1) => ({
   id, event_id: "event", captured_at: when, context: state,
 });
 const calculate = (e, samples) => calculateProductionLoss(e, samples);
+
+const sourceRun = context({
+  orders: [order(at(0), at(60), { status: "active", actual_start: at(-5) })],
+  lines: [{ id: "line" }, { id: "destination" }],
+  capabilities: ["machine", "spare"].map(work_center_id =>
+    ({ work_center_id, product_id: "product", rate: 120, rate_unit: "meter" })),
+});
+const movedRun = {
+  ...sourceRun,
+  centers: [...sourceRun.centers, center({ id: "spare", line_id: "destination", status: "running", order_id: "order" })],
+  orders: [{ ...sourceRun.orders[0], actual_line_id: "destination", execution_started_at: at(10) }],
+};
+
+test("eligible alternative-line execution credits the same demand and uses actual-line exposure", () => {
+  const evidence = [sample(at(0), sourceRun), sample(at(10), movedRun, 2),
+    sample(at(16), movedRun, 3), sample(at(16), movedRun, 4)];
+  const result = calculate(event(at(30)), evidence);
+  assert.equal(result.raw_stop_minutes, 30);
+  assert.equal(result.effective_loss_minutes, 10);
+  assert.equal(result.estimated_lost_output_quantity, 20);
+  assert.equal(result.estimated_alternative_recovered_quantity, 40);
+  assert.equal(result.readiness, "READY");
+  const intervals = operatingRuntime(evidence, at(30));
+  const duration = id => intervals.filter(x => x.subject_id === id)
+    .reduce((sum, x) => sum + (Date.parse(x.ended_at) - Date.parse(x.started_at)) / 60000, 0);
+  assert.equal(duration("destination"), 20);
+  assert.equal(duration("line"), 0);
+});
+
+test("alternative-line recovery credits eligible intervals only across interruptions and resumptions", () => {
+  const interrupted = { ...movedRun, orders: [{ ...movedRun.orders[0], status: "planned" }] };
+  const resumed = { ...movedRun, orders: [{ ...movedRun.orders[0], execution_started_at: at(23) }] };
+  const slower = { ...resumed, capabilities: resumed.capabilities.map(x =>
+    x.work_center_id === "spare" ? { ...x, rate: 60 } : x) };
+  const result = calculate(event(at(30)), [sample(at(0), sourceRun), sample(at(10), movedRun, 2),
+    sample(at(15), interrupted, 3), sample(at(20), slower, 4)]);
+  assert.equal(result.estimated_alternative_recovered_quantity, 17);
+  assert.equal(result.estimated_lost_output_quantity, 43);
+  assert.equal(result.effective_loss_minutes, 21.5);
+});
+
+test("destination planned demand disqualifies overlapping recovery credit", () => {
+  const other = order(at(15), at(25), { id: "other", line_id: "destination" });
+  const moved = { ...movedRun, orders: [...movedRun.orders, other] };
+  const result = calculate(event(at(30)), [sample(at(0), sourceRun), sample(at(10), moved, 2)]);
+  assert.equal(result.estimated_alternative_recovered_quantity, 20);
+  assert.equal(result.estimated_lost_output_quantity, 40);
+  assert.ok(result.assumptions.some(x => x.alternative_line_recovery === "DESTINATION_DEMAND"));
+});
+
+test("pre-existing moves and destination activity for another item earn no recovery credit", () => {
+  const alreadyMoved = { ...movedRun, orders: [{ ...movedRun.orders[0], execution_started_at: at(-2) }] };
+  const mismatched = { ...movedRun, centers: movedRun.centers.map(x =>
+    x.id === "spare" ? { ...x, order_id: "other" } : x) };
+  for (const evidence of [[sample(at(0), alreadyMoved)],
+    [sample(at(0), sourceRun), sample(at(10), mismatched, 2)]]) {
+    const result = calculate(event(at(30)), evidence);
+    assert.equal(result.estimated_alternative_recovered_quantity, null);
+    assert.equal(result.estimated_lost_output_quantity, 60);
+  }
+});
 
 test("planned cleaning between orders has physical stop but no production loss", () => {
   const e = event(at(25), { stop_nature: "planned" });

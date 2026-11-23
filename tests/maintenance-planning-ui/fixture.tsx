@@ -36,7 +36,7 @@ function Fixture() {
       <button onClick={()=>setLang(lang==='en'?'ar':'en')}>English / العربية</button><button onClick={()=>setAuthority(!authority)}>Edit authority: {authority?'on':'off'}</button>
       <button onClick={()=>setVisible(!visible)}>Maintenance view: {visible?'on':'off'}</button></div></header>
     <nav className="mp-views" aria-label="Fixture view"><button onClick={()=>setView('queue')}>Queue</button><button onClick={()=>setView('gantt')}>Gantt</button></nav>
-    {view==='loss'?<LossImpactReview {...props}/>:view==='readiness'?<><h3>{props.t('productionQueueReady')}</h3><ProductionStartReadiness {...props} item={id(8)} busy={false}
+    {view==='loss'?<LossImpactReview {...props} eventId={id(9)}/>:view==='readiness'?<><h3>{props.t('productionQueueReady')}</h3><ProductionStartReadiness {...props} item={id(8)} busy={false}
       onStart={async()=>{try{await props.command('start_product_item',{factory:id(1),item:id(8)});}catch{ /* Fixture rejects every write. */ }}} /></>
       :view==='stops'?<><MaintenanceStopChoice {...props} machine={id(3)} choice={choice} onChange={setChoice}/>
       <output>{choice?.code || 'Ordinary'}</output><MaintenanceActualStops {...props} id={id(100)}/></>

@@ -1,21 +1,21 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { formatDuration } from "@/utils/production-flow.mjs";
 import { calculateProductionLoss, suggestScrapCalibration } from
   "@/utils/production-loss-impact.mjs";
-import { downtimeReasonChoices } from "@/utils/downtime-reasons";
 import { hasDeferredWork, validateActualScrap } from "@/utils/production-loss-actuals.mjs";
-import { formatTime, localName } from "@/components/ui";
+import { Dialog, formatTime, localName } from "@/components/ui";
 import type { Row } from "@/types";
 import type { FeatureProps } from "./types";
 import styles from "./DowntimeCapture.module.css";
 import { useHistoryData } from "@/hooks/useHistoryData";
 import HistoryQueryState from "@/components/HistoryQueryState";
+import { MaintenanceCreate } from "./MaintenanceRequest";
 
 function lossDuration(value: number, lang: FeatureProps["lang"],
   t: FeatureProps["t"]) {
-  if (value > 0 && value < 10 && !Number.isInteger(value))
+  if (value > 0 && !Number.isInteger(value))
     return `${new Intl.NumberFormat(lang === "ar" ? "ar-u-nu-arab" : "en", {
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 3,
     }).format(value)} ${t("minutesShort")}`;
   return formatDuration(value, lang);
 }
@@ -43,20 +43,24 @@ function lossGapText(item: string, t: FeatureProps["t"]) {
     "Historical production demand and routing evidence": "lossGapMaintenanceDemand",
     "Approved maintenance conflicts with intended production": "lossGapMaintenanceConflict",
     "Active alternative ownership evidence": "lossGapMaintenanceOwner",
+    "Comparable alternative line rate": "lossGapAlternativeLineRate",
   };
   return simple[item] ? t(simple[item]) : item;
 }
 
 type ReviewData = { event: Row; actual: Row | null; saved: Row | null;
-  correction: Row | null; calculation: ReturnType<typeof calculateProductionLoss>;
+  correction: Row | null; corrections?: Row[]; relatedRequest?: Row | null;
+  scrap?: { state: string; kg?: number; startup?: number | null; entries?: number };
+  current_calculation?: ReturnType<typeof calculateProductionLoss> | null;
+  calculation: ReturnType<typeof calculateProductionLoss>;
   maintenance?: { evidence: Row; review_state: string };
   suggestions: Array<NonNullable<ReturnType<typeof suggestScrapCalibration>>> };
-function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
+function EventImpactDetail(props: FeatureProps & { data: ReviewData; children?: ReactNode; history?: ReactNode }) {
   const { snapshot: s, t, lang, command, can, data } = props;
-  const { event, actual, correction, saved, calculation, suggestions } = data;
+  const { event, actual, correction, saved, calculation, suggestions, scrap: linked } = data;
   const effectiveEvent = { ...event,
     stop_nature: correction?.stop_nature || event.stop_nature,
-    planned_activity: correction?.planned_activity || event.planned_activity };
+    planned_activity: correction ? correction.planned_activity : event.planned_activity };
   const estimate = saved?.result && typeof saved.result === "object"
     ? saved.result as typeof calculation : calculation;
   const productId = estimate.assumptions[0]?.product_id;
@@ -72,8 +76,11 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
   const [lossMinutes, setLossMinutes] = useState(String(actual?.actual_loss_minutes ?? ""));
   const [lostQuantity, setLostQuantity] = useState(String(actual?.actual_lost_output_quantity ?? ""));
   const [lostUnit, setLostUnit] = useState(String(actual?.actual_lost_output_unit || estimate.unit || "meter"));
+  const [action, setAction] = useState("");
+  const [sourceConfirmed, setSourceConfirmed] = useState(false);
+  const [observationSaved, setObservationSaved] = useState(false);
   const [actualFormError, setActualFormError] = useState("");
-  const [nature, setNature] = useState(String(correction?.stop_nature || event.stop_nature || "unplanned"));
+  const [nature, setNature] = useState(effectiveEvent.stop_nature === "planned" ? "planned" : "unplanned");
   const [reason, setReason] = useState(String(correction?.reason_id || event.reason_id || ""));
   const [activity, setActivity] = useState(String(correction?.planned_activity || event.planned_activity || ""));
   const [correctionNote, setCorrectionNote] = useState("");
@@ -81,20 +88,27 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const scrapValidation = validateActualScrap(scrap, shutdown, restart);
+  const canObserveScrap = !linked || linked.state === "unlinked";
+  const current = data.current_calculation || estimate;
+  const zone = String(s.factory?.timezone || "UTC");
+  const fmt = new Intl.NumberFormat(lang === "ar" ? "ar-u-nu-arab" : "en", { maximumFractionDigits: 3 });
+  const time = (value: number | null) => value == null
+    ? t("downtimeSourceUnknown") : lossDuration(value, lang, t);
+  const quantity = (value: number | null, unit: string | null) => value == null
+    ? t("downtimeSourceUnknown") : [fmt.format(value), unit === "meter" ? t("meterShort")
+      : unit === "piece" ? t("pieceShort") : unit === "kg" ? t("kg") : unit].filter(Boolean).join(" ");
   const deferredRelevant = hasDeferredWork(estimate, actual);
   const reasonName = (id: unknown) => localName((s.tables.downtime_reasons || [])
     .find((x) => x.id === id), lang);
-  const activityKey = String(correction?.planned_activity || event.planned_activity || "");
-  const stopDescription = effectiveEvent.stop_nature === "planned"
-    ? `${t("lossPlanned")} — ${t(`lossActivity_${activityKey}`)}`
-    : effectiveEvent.stop_nature === "legacy_unknown"
-      ? `${t("lossLegacyUnknown")} — ${reasonName(event.reason_id)}`
-      : `${t("lossUnplanned")} — ${reasonName(correction?.reason_id || event.reason_id)}`;
-  const variance = estimate.estimated_total_scrap !== null &&
-    actual?.scrap_quantity !== null && actual?.scrap_quantity !== undefined &&
-    String(actual.scrap_unit) === String(estimate.scrap_unit)
-      ? Number(actual.scrap_quantity) - Number(estimate.estimated_total_scrap) : null;
-
+  const classification = (source: Row) => source.stop_nature === "planned"
+    ? `${t("lossPlanned")} · ${t(`lossActivity_${source.planned_activity}`)}`
+    : `${t(source.stop_nature === "unplanned" ? "lossUnplanned" : "lossLegacyUnknown")} · ${source.reason_id
+      ? reasonName(source.reason_id) : t("downtimeUnclassified")}`;
+  const canObserve = canEngineer && !actual && !observationSaved && event.ended_at;
+  const machine = s.tables.work_centers?.find(row => row.id === event.work_center_id);
+  const related = data.relatedRequest;
+  const canCreateMaintenance = !related && machine && can("maintenance", "create");
+  const closeAction = () => setAction("");
   async function run(name: string, args: Record<string, unknown>) {
     setBusy(true); setError("");
     try { await command(name, { factory: s.factory?.id, ...args }); return true; }
@@ -106,66 +120,97 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
     }
     finally { setBusy(false); }
   }
+  const saveEstimate = !saved && canEngineer && event.ended_at && calculation.readiness === "READY"
+    ? <button type="button" disabled={busy} onClick={() =>
+      void run("save_production_loss_estimate", { event: event.id })}>{t("lossSaveEstimate")}</button>
+    : null;
+  const calibration = canCalibrate && profile?.scrap_unit==='kg' && !dismissed && suggestions.map((suggestion) =>
+      suggestion && <section key={suggestion.parameter}>
+        <h5>{t("lossCalibration")}</h5>
+        <p>{suggestion.samples} {t("lossComparableEvents")} · {suggestion.parameter === "shutdown"
+          ? t("lossShutdownScrap") : t("lossRestartScrap")}: {suggestion.suggested_value}
+          {" "}{String(profile.scrap_unit || "")}</p>
+        <div className={styles.actions}>
+          <button type="button" disabled={busy} onClick={() => setDismissed(true)}>{t("lossKeepCurrent")}</button>
+          <button type="button" disabled={busy} onClick={() => {
+            void run("configure_production_loss_profile", {
+              work_center: event.work_center_id, product: productId,
+              can_defer: profile.can_defer, scrap_expected: true,
+              shutdown_scrap: suggestion.parameter === "shutdown"
+                ? suggestion.suggested_value : profile.shutdown_scrap_quantity,
+              restart_scrap: suggestion.parameter === "restart"
+                ? suggestion.suggested_value : profile.restart_scrap_quantity,
+              scrap_unit: 'kg',
+            });
+          }}>{t("lossApproveSuggestion")}</button>
+        </div>
+      </section>);
   return <div className={styles.reviewDetail}>
-    <h4>{stopDescription}</h4>
-    {correction && <p>{t("lossCorrectionRecorded")}: {String(correction.note)}</p>}
+    <section className={styles.outcome} aria-label={t("lossImpact")}>
+      <h4>{t("lossImpact")}</h4>
+      {data.current_calculation && <p>{t("downtimeCurrentRecalculation")}</p>}
+      <dl>
+        <div><dt>{t("lossEffective")}</dt><dd>{time(current.effective_loss_minutes)}</dd></div>
+        {current.estimated_lost_output_quantity != null && <div>
+          <dt>{t("lossLostOutput")}</dt><dd>{quantity(current.estimated_lost_output_quantity, current.unit)}</dd>
+        </div>}
+        {linked?.state === "recorded" && <div><dt>{t("downtimeLinkedScrap")}</dt>
+          <dd>{quantity(linked.kg ?? null, "kg")}</dd></div>}
+      </dl>
+      <p>{t(current.effective_loss_minutes == null ? "downtimeLossEvidenceMissing"
+        : current.effective_loss_minutes === 0
+          ? event.blocking_at_start === false ? "downtimeNonblockingResult" : "downtimeZeroImpact"
+          : "downtimeLossSource")}</p>
+    </section>
+    {props.children}
+    {event.approved_at && saveEstimate}
+    {related?.id && props.onMaintenanceRepairOpen && can("maintenance", "view") &&
+      <button type="button" onClick={() => props.onMaintenanceRepairOpen?.(String(related.id))}>
+        {t("downtimeRelatedMaintenance")} <bdi>{String(related.code || "")}</bdi>
+      </button>}
+    <details className={styles.moreActions}>
+      <summary>{t("downtimeMoreActions")}</summary>
+      <div className={styles.actions}>
+        <button type="button" onClick={() => setAction("evidence")}>{t("downtimeCalculationDetails")}</button>
+        {canEngineer && <button type="button" onClick={() => setAction("correct")}>{t("downtimeCorrectData")}</button>}
+        {canObserve && <button type="button" onClick={() => setAction("observe")}>{t("downtimeExceptionalObservation")}</button>}
+        {(props.history || data.corrections?.length || correction || actual) &&
+          <button type="button" onClick={() => setAction("history")}>{t("downtimeViewHistory")}</button>}
+        {canCreateMaintenance && <button type="button" onClick={() => setAction("maintenance")}>{t("maintenanceRequestAction")}</button>}
+      </div>
+    </details>
+    {action === "evidence" && <Dialog title={t(saved ? "downtimeSavedCalculation" : "downtimeCalculationDetails")}
+      t={t} onClose={closeAction} busy={busy}><div className={styles.reviewDetail}>
+    {linked?.state === "recorded" && <p>{t("downtimeLinkedStartup")} {quantity(linked.startup ?? null, "kg")}</p>}
+    {linked?.state !== "recorded" && <p>{t(linked?.state === "unverified" ? "downtimeScrapUnverified"
+      : linked?.state === "unavailable" ? "downtimeScrapUnavailable" : "downtimeScrapUnlinked")}</p>}
     {saved && data.maintenance?.review_state !== "CURRENT" && <p role="status">
       <strong>{t(data.maintenance?.review_state === "EVIDENCE_CHANGED_AFTER_REVIEW"
         ? "lossMaintenanceEvidenceChanged" : "lossMaintenanceEvidenceUnknown")}</strong>
       {" "}{t("lossMaintenanceHistoryRetained")}
     </p>}
     <dl>
-      <div><dt>{t("lossRawStop")}</dt><dd>{lossDuration(estimate.raw_stop_minutes, lang, t)}</dd></div>
-      {estimate.maintenance_policy_version === 1 && estimate.maintenance_context?.operation === "LINK" && <>
-        <div><dt>{t("lossMaintenanceApproved")}</dt><dd>{estimate.approved_maintenance_minutes == null
-          ? "—" : lossDuration(estimate.approved_maintenance_minutes, lang, t)}</dd></div>
-        <div><dt>{t("lossMaintenanceOutside")}</dt><dd>{estimate.outside_window_minutes == null
-          ? "—" : lossDuration(estimate.outside_window_minutes, lang, t)}</dd></div>
-        <div><dt>{t("lossMaintenanceNonProduction")}</dt><dd>{estimate.scheduled_non_production_minutes == null
-          ? "—" : lossDuration(estimate.scheduled_non_production_minutes, lang, t)}</dd></div>
-      </>}
-      <div><dt>{t("lossNonProduction")}</dt><dd>{lossDuration(estimate.non_production_minutes, lang, t)}</dd></div>
-      <div><dt>{t("lossEffective")}</dt><dd>{estimate.effective_loss_minutes === null
-        ? "—" : lossDuration(estimate.effective_loss_minutes, lang, t)}</dd></div>
-      <div><dt>{t("lossImpact")}</dt><dd>{estimate.impact_level === null
-        ? "—" : t(`lossLevel_${estimate.impact_level}`)}</dd></div>
-      <div><dt>{t("lossLostOutput")}</dt><dd>{estimate.estimated_lost_output_quantity === null
-        ? "—" : `${estimate.estimated_lost_output_quantity} ${estimate.unit || ""}`}</dd></div>
-      <div><dt>{t("lossDeferred")}</dt><dd>{estimate.deferred_quantity ?? "—"}
-        {" "}{estimate.deferred_unit || ""}</dd></div>
-      <div><dt>{t("lossRecovery")}</dt><dd>{estimate.estimated_recovery_minutes === null
-        ? "—" : formatDuration(estimate.estimated_recovery_minutes, lang)}</dd></div>
-      <div><dt>{t("lossEstimatedScrap")}</dt><dd>{estimate.estimated_total_scrap === null
-        ? "—" : `${estimate.estimated_total_scrap} ${estimate.scrap_unit || ""}`}</dd></div>
-      <div><dt>{t("lossShutdownScrap")}</dt><dd>{estimate.estimated_shutdown_scrap ?? "—"}
-        {" "}{estimate.scrap_unit || ""}</dd></div>
-      <div><dt>{t("lossRestartScrap")}</dt><dd>{estimate.estimated_restart_scrap ?? "—"}
-        {" "}{estimate.scrap_unit || ""}</dd></div>
-      <div><dt>{t("lossMitigation")}</dt><dd>{estimate.mitigation.length
-        ? estimate.mitigation.map((item: string) => t(`lossMitigation_${item}`)).join(", ")
-        : t("lossMitigation_none")}</dd></div>
-      <div><dt>{t("lossActualScrap")}</dt><dd>{actual?.scrap_quantity ?? "—"} {actual?.scrap_unit || ""}</dd></div>
-      <div><dt>{t("lossActualLossTime")}</dt><dd>{actual?.actual_loss_minutes == null
-        ? "—" : lossDuration(Number(actual.actual_loss_minutes), lang, t)}</dd></div>
-      <div><dt>{t("lossActualLostQuantity")}</dt><dd>{actual?.actual_lost_output_quantity ?? "—"}
-        {" "}{actual?.actual_lost_output_unit || ""}</dd></div>
-      {deferredRelevant && <div><dt>{t("lossActualRecovery")}</dt><dd>{actual?.recovery_minutes === null ||
-        actual?.recovery_minutes === undefined ? "—"
-        : formatDuration(Number(actual.recovery_minutes), lang)}</dd></div>}
-      <div><dt>{t("lossConfidence")}</dt><dd>{t(`lossConfidence_${estimate.confidence}`)}</dd></div>
-      <div><dt>{t("lossModel")}</dt><dd>V{estimate.model_version}</dd></div>
-      <div><dt>{t("lossCalculatedAt")}</dt><dd>{formatTime(estimate.calculated_at,
-        lang, String(s.factory?.timezone || "UTC"))}</dd></div>
+      {([
+        ["lossRawStop", estimate.raw_stop_minutes],
+        ["lossEffective", estimate.effective_loss_minutes],
+        ["lossNonProduction", estimate.non_production_minutes],
+        ["lossMaintenanceApproved", estimate.approved_maintenance_minutes],
+        ["lossMaintenanceOutside", estimate.outside_window_minutes],
+        ["lossRecovery", estimate.estimated_recovery_minutes],
+      ] as const).map(([label, value]) => value != null && value > 0 && <div key={label}>
+        <dt>{t(label)}</dt><dd>{time(value)}</dd>
+      </div>)}
+      {([
+        ["lossLostOutput", estimate.estimated_lost_output_quantity, estimate.unit],
+        ["lossEstimatedAlternativeRecovery", estimate.estimated_alternative_recovered_quantity, estimate.unit],
+        ["lossDeferred", estimate.deferred_quantity, estimate.deferred_unit],
+        ["lossEstimatedScrap", estimate.estimated_total_scrap, estimate.scrap_unit],
+      ] as const).map(([label, value, unit]) => value != null && value > 0 && <div key={label}>
+        <dt>{t(label)}</dt><dd>{quantity(value, unit)}</dd>
+      </div>)}
     </dl>
-    {variance !== null && <p>{t("lossScrapVariance")}: {variance > 0 ? "+" : ""}{variance}
-      {" "}{estimate.scrap_unit} {estimate.estimated_total_scrap
-        ? `(${variance > 0 ? "+" : ""}${(variance /
-          Number(estimate.estimated_total_scrap) * 100).toFixed(1)}%)` : ""}</p>}
-    {actual?.recovery_minutes !== null && actual?.recovery_minutes !== undefined &&
-      estimate.estimated_recovery_minutes !== null &&
-      <p>{t("lossRecoveryVariance")}: {formatDuration(
-        Number(actual.recovery_minutes) - Number(estimate.estimated_recovery_minutes),
-        lang, true)}</p>}
+    {estimate.assumptions.some(segment => segment.alternative_line_recovery === "DESTINATION_DEMAND") &&
+      <p>{t("lossAlternativeDestinationDemand")}</p>}
     {estimate.readiness === "INCOMPLETE" ? <div role="status">
       <strong>{t("lossMissing")}</strong>
       <ul>{estimate.missing.map((item: string) =>
@@ -173,14 +218,14 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
       <p>{t(estimate.missing.includes("Historical event context snapshot")
         ? "lossHistoricalGapHelp" : "lossConfigureHint")}</p>
     </div> : <p>{t(estimate.readiness === "READY" ? "lossReady" : "lossNotApplicable")}</p>}
-    {saved ? <p>{t("lossEstimateSaved")}</p> : canEngineer && event.ended_at &&
-      calculation.readiness === "READY" &&
-      <button type="button" disabled={busy} onClick={() =>
-        void run("save_production_loss_estimate", {
-          event: event.id,
-        })}>{t("lossSaveEstimate")}</button>}
-    {canEngineer && event.ended_at && <form className={styles.actualForm}
+    {saved ? <p>{t("lossEstimateSaved")} · {formatTime(estimate.calculated_at, lang, zone)}</p>
+      : !event.approved_at && saveEstimate}
+    {calibration}
+    </div></Dialog>}
+    {action === "observe" && canObserve && <Dialog title={t("downtimeExceptionalObservation")} t={t} onClose={closeAction} busy={busy}>
+      <form className={styles.actualForm}
       noValidate onSubmit={(e) => { e.preventDefault();
+        if (!sourceConfirmed) return;
         if (scrapValidation.error) { setActualFormError(scrapValidation.error); return; }
         if ([lossMinutes, lostQuantity, recovery].some((value) =>
           value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0))) {
@@ -201,10 +246,9 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
           actual_lost_output_unit: lostQuantity === "" ? null : lostUnit,
           recovery_minutes: !deferredRelevant || recovery === "" ? null : Number(recovery),
         }).then((saved) => {
-          if (saved && scrap === "" && scrapValidation.total !== null)
-            setScrap(String(scrapValidation.total));
+          if (saved) { setObservationSaved(true); closeAction(); }
         }); }}>
-      <h5>{t("lossRecordActual")}</h5>
+      <p>{t("downtimeExceptionalHelp")}</p>
       <section className={styles.actualGroup}>
         <h6>{t("lossActualImpactGroup")}</h6>
         <label>{t("lossActualLossTime")} <small>{t("lossOptional")}</small>
@@ -221,7 +265,7 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
             </select></span>
           <small>{t("lossActualLostQuantityHelp")}</small></label>
       </section>
-      <section className={styles.actualGroup}>
+      {canObserveScrap && <section className={styles.actualGroup}>
         <h6>{t("lossActualScrapGroup")}</h6>
         <label>{t("lossActualScrap")} <small>{t("lossOptional")}</small>
           <span className={styles.valueWithUnit} dir="ltr"><input type="number" min="0" step="any"
@@ -239,9 +283,7 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
             <small>{t("lossActualRestartHelp")}</small></label>
         </div>
         <small>{t("lossScrapSharedUnitHelp")} {t(scrapUnit === "piece" ? "lossPiece" : "lossKg")}</small>
-        {(scrapValidation.error || actualFormError) && <p className={styles.actualError}
-          role="alert">{t(scrapValidation.error || actualFormError)}</p>}
-      </section>
+      </section>}
       {deferredRelevant && <section className={styles.actualGroup}>
         <h6>{t("lossActualDeferredGroup")}</h6>
         <label>{t("lossActualRecovery")} <small>{t("lossOptional")}</small>
@@ -250,15 +292,24 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
             <span>{t("minutesShort")}</span></span>
           <small>{t("lossActualRecoveryHelp")}</small></label>
       </section>}
-      <button className="primary" disabled={busy}>{t("save")}</button>
-    </form>}
-    {canEngineer && <details>
-      <summary>{t("lossCorrectClassification")}</summary>
+      {(scrapValidation.error || actualFormError) && <p className={styles.actualError}
+        role="alert">{t(scrapValidation.error || actualFormError)}</p>}
+      <label className={styles.attestation}><input type="checkbox" checked={sourceConfirmed}
+        onChange={e => setSourceConfirmed(e.target.checked)} /> {t("downtimeConfirmObservationSource")}</label>
+      <button className="primary" disabled={busy || !sourceConfirmed}>{t("save")}</button>
+    </form></Dialog>}
+    {observationSaved && !actual && <p role="status">{t("downtimeObservationSaved")}</p>}
+    {action === "correct" && canEngineer && <Dialog title={t("downtimeCorrectData")} t={t} onClose={closeAction} busy={busy}>
+      <div className={styles.reviewDetail}>
       <p>{t("lossCorrectionHelp")}</p>
+      <dl>
+        <div><dt>{t("downtimeOriginalClassification")}</dt><dd>{classification(event)}</dd></div>
+        {correction && <div><dt>{t("downtimeCurrentClassification")}</dt><dd>{classification(correction)}</dd></div>}
+      </dl>
       <form className={styles.form} onSubmit={(e) => { e.preventDefault();
         void run("correct_downtime_classification", { event: event.id,
           nature, reason: nature === "unplanned" ? reason : null,
-          activity: nature === "planned" ? activity : null, note: correctionNote });
+          activity: nature === "planned" ? activity : null, note: correctionNote }).then(ok => { if (ok) { setCorrectionNote(""); closeAction(); } });
       }}>
         <label>{t("lossStopType")}<select value={nature}
           onChange={(e) => setNature(e.target.value)}>
@@ -281,68 +332,52 @@ function EventImpactDetail(props: FeatureProps & { data: ReviewData }) {
             onChange={(e) => setCorrectionNote(e.target.value)} /></label>
         <button disabled={busy || correctionNote.trim().length < 3}>{t("save")}</button>
       </form>
-    </details>}
-    {canCalibrate && profile?.scrap_unit==='kg' && !dismissed && suggestions.map((suggestion) =>
-      suggestion && <section key={suggestion.parameter}>
-        <h5>{t("lossCalibration")}</h5>
-        <p>{suggestion.samples} {t("lossComparableEvents")} · {suggestion.parameter === "shutdown"
-          ? t("lossShutdownScrap") : t("lossRestartScrap")}: {suggestion.suggested_value}
-          {" "}{String(profile.scrap_unit || "")}</p>
-        <div className={styles.actions}>
-          <button type="button" disabled={busy} onClick={() => setDismissed(true)}>{t("lossKeepCurrent")}</button>
-          <button type="button" disabled={busy} onClick={() => {
-            void run("configure_production_loss_profile", {
-              work_center: event.work_center_id, product: productId,
-              can_defer: profile.can_defer, scrap_expected: true,
-              shutdown_scrap: suggestion.parameter === "shutdown"
-                ? suggestion.suggested_value : profile.shutdown_scrap_quantity,
-              restart_scrap: suggestion.parameter === "restart"
-                ? suggestion.suggested_value : profile.restart_scrap_quantity,
-              scrap_unit: 'kg',
-            });
-          }}>{t("lossApproveSuggestion")}</button>
-        </div>
-      </section>)}
+    </div></Dialog>}
+    {action === "history" && <Dialog title={t("downtimeViewHistory")} t={t} onClose={closeAction}>
+      <div className={styles.reviewDetail}>
+      {props.history}
+      {actual && <div className={styles.observation}>
+        <h5>{t("downtimeStoredObservation")}</h5>
+        <p>{t("downtimeObservationSource")} {String((s.tables.memberships || [])
+          .find(person => person.user_id === actual.recorded_by)?.display_name || t("requestCreatorNotRecorded"))}
+          {" · "}{formatTime(actual.recorded_at, lang, zone)}</p>
+        <dl>
+          {actual.actual_loss_minutes != null && <div><dt>{t("lossActualLossTime")}</dt><dd>{time(Number(actual.actual_loss_minutes))}</dd></div>}
+          {actual.actual_lost_output_quantity != null && <div><dt>{t("lossActualLostQuantity")}</dt>
+            <dd>{quantity(Number(actual.actual_lost_output_quantity), String(actual.actual_lost_output_unit || ""))}</dd></div>}
+          {actual.scrap_quantity != null && <div><dt>{t("lossActualScrap")}</dt>
+            <dd>{quantity(Number(actual.scrap_quantity), String(actual.scrap_unit || ""))}</dd></div>}
+          {actual.shutdown_scrap_quantity != null && <div><dt>{t("lossActualShutdown")}</dt>
+            <dd>{quantity(Number(actual.shutdown_scrap_quantity), String(actual.scrap_unit || ""))}</dd></div>}
+          {actual.restart_scrap_quantity != null && <div><dt>{t("lossActualRestart")}</dt>
+            <dd>{quantity(Number(actual.restart_scrap_quantity), String(actual.scrap_unit || ""))}</dd></div>}
+        </dl>
+      </div>}
+
+      {actual && canEngineer && <p>{t("downtimeObservationCorrectionUnavailable")}</p>}
+      {Boolean(data.corrections?.length || correction) && <><h4>{t("downtimeCorrectionHistory")}</h4>
+      <ol className={styles.audit}>
+        {(data.corrections || (correction ? [correction] : [])).map(entry => <li key={String(entry.id)}>
+          <strong>{classification(entry)}</strong>
+          <p dir="auto">{String(entry.note)}</p>
+          <small>{formatTime(entry.corrected_at, lang, zone)} · {String((s.tables.memberships || [])
+            .find(person => person.user_id === entry.corrected_by)?.display_name || t("requestCreatorNotRecorded"))}</small>
+        </li>)}
+      </ol>
+    </>}
+    </div></Dialog>}
+    {action === "maintenance" && canCreateMaintenance && <MaintenanceCreate {...props} machine={machine}
+      downtime={event} onClose={closeAction} onCreated={id => { closeAction(); props.onMaintenanceRepairOpen?.(id); }} />}
     {error && <p role="alert">{t(error)}</p>}
   </div>;
 }
 
-export default function LossImpactReview(props: FeatureProps) {
-  const { snapshot: s, t, lang } = props;
-  const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState("");
-  const factory = String(s.factory!.id);
-  const list = useHistoryData<{ rows: Row[]; total: number; pages: number }>(
-    `/api/loss-review?${new URLSearchParams({ factory, page: String(page) })}`, s.fetchedAt);
-  const selected = list.data?.rows.find(row => String(row.id) === selectedId) || list.data?.rows[0];
-  const detail = useHistoryData<ReviewData>(selected
-    ? `/api/loss-review?${new URLSearchParams({ factory, event: String(selected.id) })}` : null, s.fetchedAt);
-  const machines = s.tables.work_centers || [];
-  return <section className={styles.card}>
-    <h3>{t("lossImpact")}</h3>
-    <HistoryQueryState {...list} t={t} />
-    {list.data && (!list.data.rows.length ? <p>{t("downtimeReviewEmpty")}</p> : <>
-      <div className={styles.review}>
-        <div className={styles.reviewList}>
-          {list.data.rows.map(item => <button key={String(item.id)} type="button"
-            aria-pressed={item.id === selected?.id}
-            onClick={() => setSelectedId(String(item.id))}>
-            <strong>{localName(machines.find(row => row.id === item.work_center_id), lang)}</strong>
-            <span>{String(item.started_at).slice(0, 16)}</span>
-          </button>)}
-        </div>
-        <div><HistoryQueryState {...detail} t={t} />
-          {detail.data && <EventImpactDetail key={String(detail.data.event.id)}
-            {...props} data={detail.data} />}
-        </div>
-      </div>
-      <nav className="history-pagination" aria-label={t("lossReviewPages")}>
-        <button disabled={list.loading || page <= 1}
-          onClick={() => { setPage(value => value - 1); setSelectedId(""); }}>{t("previous")}</button>
-        <span>{page.toLocaleString(lang)} / {list.data.pages.toLocaleString(lang)}</span>
-        <button disabled={list.loading || page >= list.data.pages}
-          onClick={() => { setPage(value => value + 1); setSelectedId(""); }}>{t("next")}</button>
-      </nav>
-    </>)}
-  </section>;
+export default function LossImpactReview(props: FeatureProps & { eventId: string; children?: ReactNode; history?: ReactNode }) {
+  const { snapshot: s, t, eventId } = props;
+  const url = "/api/loss-review?" + new URLSearchParams({ factory: String(s.factory?.id), event: eventId });
+  const detail = useHistoryData<ReviewData>(url, s.fetchedAt, url, true);
+  return <>
+    <HistoryQueryState {...detail} t={t} />
+    {detail.data ? <EventImpactDetail key={eventId} {...props} data={detail.data} /> : props.children}
+  </>;
 }

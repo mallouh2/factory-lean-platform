@@ -29,6 +29,19 @@
 .prv3-dialog input::placeholder,.prv3-dialog textarea::placeholder{color:var(--fl-text-secondary)}
 .prv3-dialog fieldset{border:0;padding:0;margin:0;min-width:0}.prv3-fields{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-block:24px}
 .prv3-dialog small{font-size:14px;line-height:22px;color:var(--fl-text-secondary);font-weight:400}
+.prv3-scrap-breakdown{margin-block-start:-4px;row-gap:12px}
+.prv3-startup{border-block-start:1px solid var(--fl-border-default);margin-block:12px 20px}
+.prv3-startup .prv3-check{margin-block:8px;align-items:center}
+.prv3-startup .prv3-check input{margin:0}
+.prv3-dialog .prv3-startup-time{margin-block:12px;color:var(--fl-text-secondary)}
+.prv3-startup-help{grid-column:1/-1;display:grid;gap:4px}
+.prv3-startup-confirmation{align-items:start;margin-block:8px 16px;row-gap:8px}
+.prv3-startup-confirmation input[aria-invalid=true]{border-color:var(--fl-semantic-error-foreground)}
+.prv3-startup-confirmation input[aria-invalid=true]~small,.prv3-startup-help small[role=status]{color:var(--fl-semantic-error-foreground)}
+.prv3-regular-scrap{display:flex;flex-direction:column;gap:8px;min-width:0;color:var(--fl-text-secondary);font-size:14px;line-height:22px}
+.prv3-regular-scrap output{display:block;padding:12px 16px;border-radius:12px;background:var(--fl-semantic-info-background);color:var(--fl-semantic-info-foreground);font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.prv3-scrap-breakdown input[aria-invalid=true]{border-color:var(--fl-semantic-error-foreground)}
+.prv3-scrap-breakdown input[aria-invalid=true]+small{color:var(--fl-semantic-error-foreground)}
 .prv3-work{margin-block:16px;padding:16px 20px;border:1px solid var(--fl-border-default);background:var(--fl-surface-canvas);border-radius:12px}
 .prv3-work h3{font-size:16px;line-height:24px}.prv3-work p{font-size:14px;color:var(--fl-text-secondary)}
 .prv3-quantity-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0 20px;text-align:start}

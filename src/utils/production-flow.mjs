@@ -117,6 +117,24 @@ export function evaluateFlow(centers, stops, transfers, now = Date.now()) {
   }
   return result;
 }
+
+/** Operating members of the actual production line at a captured instant. */
+export function operatingLineMembers(line, job, centers, transfers, flow, at) {
+  if (!line || line.archived || line.paused_at && Date.parse(line.paused_at) <= at) return [];
+  const members = centers.filter(c => c.line_id === line.id && !c.archived && c.dependency_mode !== 'independent');
+  const state = c => flow[c.id]?.homeState || flow[c.id]?.state;
+  if (members.some(c => state(c) === 'blocked')) return [];
+  const operating = members.filter(c => {
+    const away = transfers.some(t => !t.ended_at && t.alternative_id === c.id &&
+      t.original_id !== c.id && centers.find(original => original.id === t.original_id)?.line_id !== line.id);
+    if (c.status === 'running' && !away && (!c.order_id || c.order_id === job.id)) return true;
+    const loan = transfers.find(t => !t.ended_at && t.original_id === c.id && (!t.order_id || t.order_id === job.id));
+    return loan && centers.find(a => a.id === loan.alternative_id)?.status === 'running';
+  });
+  if (members.some(c => ['blocking', 'buffer'].includes(c.dependency_mode) && c.impact_scope !== 'none' &&
+    !operating.includes(c) && state(c) !== 'bufferActive')) return [];
+  return operating;
+}
 /** Configurable, dimensionless priority proxy; estimates are not measured lost output. */
 export function rankDowntime(
   events,

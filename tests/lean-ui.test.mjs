@@ -27,8 +27,8 @@ function harness(name,{lang='en',can=()=>true,detail={},listData=list}={}){
  function html(){cursor=0;return renderToStaticMarkup(react.createElement(m.exports.default,props));}
  return{draw,nodes,field,html,queries,writes,words,expand(node){return node.type(node.props);}};
 }
-test('Lean main table and mobile cards retain typed measures, unknown runtime, EN/AR and RTL',()=>{
- for(const lang of ['en','ar']){const h=harness('LeanAnalysis',{lang}),html=h.html();assert.match(html,/lean-mobile-problem/);assert.match(html,/lean-table/);assert.ok(html.includes(h.words.leanRecurring));assert.ok(html.includes('30 piece · 12 meter'));assert.ok(html.includes(h.words.leanRuntimeMissing));assert.match(html,lang==='ar'?/dir="rtl"/:/dir="ltr"/);assert.ok(!html.includes('leanMetric_'));}
+test('Lean overview retains typed measures, explains source limits, and supports EN/AR',()=>{
+ for(const lang of ['en','ar']){const h=harness('LeanAnalysis',{lang,listData:{...list,rows:[{...row,mechanism:'downtime'}]}}),html=h.html();assert.match(html,/lean-mobile-problem/);assert.match(html,/lean-table/);assert.ok(html.includes(h.words.leanRecurring));assert.ok(html.includes('30 piece · 12 meter'));assert.ok(html.includes(h.words.leanOutputBasisUnknown));assert.ok(html.includes(h.words.leanInsufficientExposure));assert.match(html,lang==='ar'?/dir="rtl"/:/dir="ltr"/);}
 });
 test('Lean global filters, independent sorting and pagination remain in bounded reader queries',()=>{
  const h=harness('LeanAnalysis');h.draw();h.field(en.product).props.onChange({target:{value:'P'}});h.draw();h.field(en.historySort).props.onChange({target:{value:'frequency'}});h.draw();h.nodes().find(n=>n.type==='button'&&n.props.children===en.historyDescending).props.onClick();h.draw();
@@ -80,14 +80,16 @@ test('Lean maintenance context localizes every request status in EN and AR',()=>
 test('one filter area contains every capability and table headers contain no filter controls',()=>{
  const h=harness('LeanAnalysis');h.draw();
  const filters=h.nodes().find(n=>n.props?.className==='lean-filter-area');assert.ok(filters);
- const headers=h.nodes().filter(n=>n.type==='th');assert.equal(headers.length,14);
+ const headers=h.nodes().filter(n=>n.type==='th');assert.equal(headers.length,6);
  assert.ok(headers.every(n=>!h.nodes(n).some(c=>['input','select','details','button'].includes(c.type))));
  for(const label of [en.line,en.machine,en.product,en.productionShift,en.leanApprovedCause,en.status,en.historySort])assert.equal(h.nodes(filters).filter(n=>n.props?.label===label).length,1,label);
  assert.equal(h.nodes().filter(n=>n.type==='input'&&n.props.type==='number').length,2);
  h.field(en.status).props.onChange({target:{value:'VERIFIED'}});h.draw();assert.equal(new URL(h.queries.filter(x=>!x.includes('mode=library')).at(-1),'http://test').searchParams.get('initiative_status'),'VERIFIED');
 });
-test('independent attention is restricted to metric cells and also visible in mobile cards',()=>{
- const h=harness('LeanAnalysis',{listData:{...list,rows:[{...row,attention:{frequency:true,loss:true,scrap:true}}]}}),html=h.html();
- assert.ok(html.includes('td class="lean-attention-frequency"'));assert.ok(html.includes('td class="lean-attention-loss"'));assert.ok(html.includes('td class="lean-attention-scrap"'));
- assert.ok(!/<tr[^>]*lean-attention/.test(html));assert.ok(html.includes(en.leanAttentionScrap));
+test('specialized evidence stays in details and review-only users can open without creating',async()=>{
+ const detail=harness('LeanProblem',{detail:{}}).html();assert.ok(detail.includes(en.leanSpecializedMetrics));
+ const h=harness('LeanAnalysis',{can:(m,a)=>m==='lean'&&a==='view',listData:{...list,rows:[{...row,problem_id:null}]}});
+ h.draw();await h.nodes().find(n=>n.props.className==='lean-problem-link').props.onClick();
+ assert.equal(h.writes.length,0);
+ assert.equal(h.draw().props.row.cause_id,row.cause_id);
 });

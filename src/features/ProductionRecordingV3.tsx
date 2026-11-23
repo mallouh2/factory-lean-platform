@@ -7,21 +7,25 @@ import {recordingWorkMessage} from '@/utils/recording-work-state.mjs';
 import QualityUpdateButton from './ProductionQualityActions';
 import {useEffect,useRef,useState} from 'react';
 import {Dialog,formatTime} from '@/components/ui';
-import {acknowledgeIntent,canRecordWork,prepareIntent,readIntent,recordingNumber,recordingScope,sameMeasurement} from '@/utils/production-recording-intent.mjs';
+import {useHistoryData} from '@/hooks/useHistoryData';
+import {acknowledgeIntent,canRecordWork,prepareIntent,readIntent,recordingNumber,recordingScrap,recordingScope,resolveStartupMinute,sameMeasurement,startupMinuteRanges} from '@/utils/production-recording-intent.mjs';
 import {postRecording,recoverRecording,type RecordingIntent,type RecordingResult,type CompletionTarget} from '@/services/production-recording-client';
 import {readCompletion,finishRecordedExecution,type CompletionSummary} from '@/services/production-completion-client';
 import {sameExecutionStart} from '@/utils/production-completion.mjs';
 import {planningWorkKind} from '@/utils/planning-workspace.mjs';
+import {formatLocalInput} from '@/utils/manufacturing.mjs';
 import ProductionRecording from './ProductionRecording';
 import type {FeatureProps} from './types';
 import ManufacturedOutput,{OutputGroupsEditor,type OutputGroup,type OutputOperation} from './ManufacturedOutput';
 import {outputGroups,outputTotal} from '@/utils/manufactured-output.mjs';
 
-type Work={item_id:string;item_code:string;request_code:string;product_name:string;product_name_ar:string;line_name:string;line_name_ar:string;line_id:string;unit:string;status:string;actual_start:string;actual_finish:string|null;execution_key:string;context_hash:string;can_record:boolean;blocked_reason?:string;same_shift_recording_available?:boolean};
+type Work={item_id:string;item_code:string;request_code:string;product_id:string;product_name:string;product_name_ar:string;line_name:string;line_name_ar:string;line_id:string;unit:string;status:string;actual_start:string;actual_finish:string|null;execution_key:string;context_hash:string;can_record:boolean;blocked_reason?:string;same_shift_recording_available?:boolean};
 type Occurrence={occurrence_key:string;name:string;name_ar:string;business_date:string;starts_at:string;ends_at:string;timezone:string};
 type WorkPage={reason?:string;contract_version:number;factory_id:string;available:boolean;can_edit:boolean;late_recording_available:boolean;rows:Work[];occurrence:Occurrence|null;server_as_of:string;expires_at:string;next_cursor:string|null;complete:boolean};
 type Entry={id:string;item_id:string;request_code:string;line_name:string;line_name_ar:string;good:string;scrap_kg:string;unit:string;recorded_at:string;recorded_by:string;factory_id:string};
-const initial={input:'',discarded:'0',good:'',scrap:'0',unfinished:'0',remaining:'',notes:'',declared:false,confirmed:false};
+type Startup={id:string;item_id:string;line_id:string;product_id:string;occurred_at:string};
+type StartupWindow={from:string;to:string};
+const initial={input:'',discarded:'0',good:'',scrap:'0',startup:'0',startupId:'',startupTime:'',startupDate:'',startupAtRunStart:false,startupIncluded:false,unfinished:'0',remaining:'',notes:'',declared:false,confirmed:false};
 function Check(){return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>}
 export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?:string|null;completionItem?:string|null;onCompletionClose?:()=>void}){
  const {snapshot:s,t,lang,can}=props,factory=String(s.factory?.id||''),actor=s.user.id;
@@ -47,6 +51,34 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
  const name=(row:Work,key:'product'|'line')=>String(row[`${key}_name${lang==='ar'?'_ar':''}` as keyof Work]||row[`${key}_name` as keyof Work]||'');
  const unit=(value:string)=>t(value==='meter'?'meterShort':value==='piece'?'pieceShort':value==='kg'?'kg':'notAvailable');
  const row=workPage?.rows.find(x=>x.item_id===selected),occ=workPage?.occurrence;
+ const startupContext=useHistoryData<{startups:Startup[];startup_windows?:StartupWindow[]}>(open&&period==='current'&&mode==='current'&&row&&occ
+  ?'/api/lean?'+new URLSearchParams({factory,mode:'recording_context',item_id:row.item_id}):null,
+  String(s.fetchedAt)+':'+retry);
+ const eligibleStartups=row&&occ&&!startupContext.error&&workPage
+  ? (startupContext.data?.startups||[]).filter(event=>{
+   const at=Date.parse(event.occurred_at);
+   return event.item_id===row.item_id&&event.line_id===row.line_id&&event.product_id===row.product_id&&
+    at>=Math.max(Date.parse(row.actual_start),Date.parse(occ.starts_at))&&
+    at<Date.parse(occ.ends_at)&&at<=Date.parse(row.actual_finish||workPage.server_as_of);
+  }) : [];
+ const startup=eligibleStartups.find(event=>event.id===draft.startupId);
+ const startupWindows=startupContext.data?.startup_windows||[];
+ const factoryZone=occ?.timezone||'UTC';
+ const ranges=startupMinuteRanges(startupWindows,factoryZone,Date.now());
+ const runStart=startupWindows.length===1&&occ&&Date.parse(startupWindows[0].from)>Date.parse(occ.starts_at)&&
+  Date.parse(startupWindows[0].from)<=Date.now()&&Date.parse(startupWindows[0].from)%60000!==0?startupWindows[0].from:'';
+ const canConfirmStartup=!startupContext.error&&(ranges.length>0||!!runStart)&&canRecordWork(workPage,row);
+ const enteringStartup=draft.startupIncluded&&draft.startupId==='new';
+ const startupMinute=resolveStartupMinute(enteringStartup?draft.startupTime:'',ranges,factoryZone,draft.startupDate);
+ const confirmedStartupAt=draft.startupAtRunStart?runStart:startupMinute.at;
+ const sameMinute=confirmedStartupAt&&eligibleStartups.some(event=>formatLocalInput(event.occurred_at,factoryZone)===formatLocalInput(confirmedStartupAt,factoryZone));
+ const minuteFormat=new Intl.DateTimeFormat(lang,{timeZone:factoryZone,hour:'numeric',minute:'2-digit'});
+ const dateMinuteFormat=new Intl.DateTimeFormat(lang,{timeZone:factoryZone,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+ const displayRange=(range:(typeof ranges)[number])=>{
+  const format=range.from.slice(0,10)===range.to.slice(0,10)?minuteFormat:dateMinuteFormat;
+  return format.format(range.first)+' – '+format.format(range.last);
+ };
+ const scrapBreakdown=recordingScrap(draft.scrap,draft.startupIncluded?draft.startup:'0');
  const currentSummary=summary?.item_id===selected?summary:null;
  const ending=!!endItem&&selected===endItem&&currentSummary?.status==='active';
  const outputMode=outputOptions?.item===selected&&outputOptions.available;
@@ -181,9 +213,15 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
    if(currentSummary.makeup_committed)throw Error('prv3MakeupCommitted');
    if(outputPaused)throw Error('outputPaused');
    if(outputError||outputOptions?.item!==selected)throw Error('recordingUnavailable');
-   let good:string,scrap:string;
+   let good:string;
    try{good=recordingNumber(draft.good);if(row.unit==='piece'&&good.includes('.'))throw Error();}catch{throw Error('prv3InvalidGood');}
-   try{scrap=recordingNumber(draft.scrap);}catch{throw Error('prv3InvalidScrap');}
+   if('error' in scrapBreakdown)throw Error(scrapBreakdown.error);
+   const {totalKg:scrap,startupKg}=scrapBreakdown;
+   if(enteringStartup&&(!canConfirmStartup||!confirmedStartupAt))throw Error('prv3StartupTimeInvalid');
+   if(enteringStartup&&sameMinute)throw Error('prv3StartupAlreadyRecorded');
+   if(draft.startupIncluded&&!enteringStartup&&!startup)throw Error('prv3StartupSelect');
+   const startupEvidence=enteringStartup?{startup_id:crypto.randomUUID(),startup_at:confirmedStartupAt}:
+    draft.startupIncluded&&startup?{startup_id:startup.id,startup_at:startup.occurred_at}:{};
    const newGroups=outputMode?outputGroups(good,hasWip?unfinishedGroups:[],outputOptions!.operations,row.unit,crypto.randomUUID(),recovery?{lot_id:recovery.lot_id,input_quantity:draft.input,discarded_quantity:draft.discarded,scrap_kg:scrap}:null):null;
    if(outputMode&&hasWip&&!unfinishedGroups.length)throw Error('prv3WipRequired');
    const unfinished=hasWip?(outputMode?outputTotal(unfinishedGroups):recordingNumber(draft.unfinished)):'0';
@@ -191,7 +229,8 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
    if(hasWip&&(unfinished==='0'||(!outputMode&&draft.remaining.trim().length<3)))throw Error('prv3WipRequired');
    if(!technician)throw Error('prv3Technician');
    const completion=ending?{item:row.item_id,actual_start:row.actual_start}:undefined;
-   const receipt=await submitPayload({unit_kind:'line',production_unit:row.line_id,item:row.item_id,technician,good,scrap_kg:scrap,discarded_quantity:recovery?recordingNumber(draft.discarded):'0',startup_kg:'0',
+   const receipt=await submitPayload({unit_kind:'line',production_unit:row.line_id,item:row.item_id,technician,good,scrap_kg:scrap,discarded_quantity:recovery?recordingNumber(draft.discarded):'0',startup_kg:startupKg,
+    ...startupEvidence,
     unfinished,remaining_work:hasWip?(outputMode?'Complete selected operations':draft.remaining.trim()):'',notes:draft.notes,confirm_overproduction:draft.confirmed,input_lot:recovery?.lot_id||null,input_quantity:recovery?recordingNumber(draft.input):'0',...(newGroups?{output_groups:newGroups}:{}),
     recording_context:{version:3,execution_key:row.execution_key,occurrence_key:occ.occurrence_key,context_hash:row.context_hash,current_shift_quantity_confirmed:true}},completion);
    const pending=readPending();if(completion&&pending&&typeof pending==='object'&&pending.request===receipt.request_id)await completeExecution(completion);
@@ -254,7 +293,55 @@ export default function ProductionRecordingV3(props:FeatureProps&{recordingItem?
 
         {!technicians.some(x=>x.user_id===actor)&&<label>{t('recordingTechnician')}<select value={technician} onChange={e=>setTechnician(e.target.value)}><option value="">{t('recordingChooseTechnician')}</option>{technicians.map(x=><option key={String(x.id)} value={String(x.id)}>{String(x.display_name)}</option>)}</select></label>}
         <div className="prv3-fields"><label>{t('recordingGood')} · {unit(row.unit)}<input aria-invalid={error==='prv3InvalidGood'} aria-describedby={error?'prv3-form-feedback':undefined} inputMode="decimal" autoComplete="off" value={draft.good} onChange={e=>field('good',e.target.value)} placeholder="0" maxLength={2048}/></label>
-        <label>{t('recordingScrap')} · {t('kg')}<input aria-invalid={error==='prv3InvalidScrap'} aria-describedby={error?'prv3-form-feedback':undefined} inputMode="decimal" autoComplete="off" value={draft.scrap} onChange={e=>field('scrap',e.target.value)} maxLength={2048}/><small>{t('prv3ZeroScrap')}</small></label></div>
+        <label>{t('prv3TotalScrap')} ({t('kg')})<input aria-invalid={error==='prv3InvalidScrap'} aria-describedby={error==='prv3InvalidScrap'?'prv3-form-feedback':undefined} inputMode="decimal" autoComplete="off" value={draft.scrap} onChange={e=>field('scrap',e.target.value)} maxLength={2048}/><small>{t('prv3ZeroScrap')}</small></label></div>
+
+        <section className="prv3-startup">
+         <label className="prv3-check"><input type="checkbox" checked={draft.startupIncluded}
+          aria-describedby={!draft.startupIncluded&&!canConfirmStartup&&!eligibleStartups.length?'prv3-startup-context':undefined}
+          disabled={!draft.startupIncluded&&!canConfirmStartup&&!eligibleStartups.length}
+          onChange={e=>setDraft(d=>({...d,startupIncluded:e.target.checked,startupId:e.target.checked
+           ?eligibleStartups.length===1?eligibleStartups[0].id:eligibleStartups.length?'':'new':'',
+           startup:'0',startupTime:'',startupDate:'',startupAtRunStart:false}))}/>{t('prv3StartupQuestion')}</label>
+         {!draft.startupIncluded&&!canConfirmStartup&&!eligibleStartups.length&&
+          <small id="prv3-startup-context">{t(startupContext.loading?'loading':'prv3StartupUnavailable')}</small>}
+         {draft.startupIncluded&&<>
+          {!!eligibleStartups.length&&<label>{t('leanStartupEvent')}<select value={draft.startupId}
+           onChange={e=>setDraft(d=>({...d,startupId:e.target.value,startupTime:'',startupDate:'',startupAtRunStart:false}))}>
+           <option value="">{t('prv3StartupSelect')}</option>
+           {eligibleStartups.map(event=><option key={event.id} value={event.id}>{dateMinuteFormat.format(Date.parse(event.occurred_at))}</option>)}
+           {canConfirmStartup&&<option value="new">{t('prv3StartupNewTime')}</option>}
+          </select></label>}
+          {startup&&<p className="prv3-startup-time">{t('prv3ActualStartupTime')} · <bdi>{dateMinuteFormat.format(Date.parse(startup.occurred_at))}</bdi></p>}
+          {enteringStartup&&<div className="prv3-fields prv3-startup-confirmation">
+           <label>{t('prv3ActualStartupTime')}<input type="time" step="60" lang={lang} value={draft.startupTime}
+            aria-invalid={!!draft.startupTime&&(!confirmedStartupAt||!!sameMinute)} aria-describedby="prv3-startup-time-help"
+            onChange={e=>setDraft(d=>({...d,startupTime:e.target.value,startupDate:'',startupAtRunStart:false}))}/></label>
+           {runStart&&<div><button type="button" aria-pressed={draft.startupAtRunStart}
+            onClick={()=>setDraft(d=>({...d,startupAtRunStart:true,startupTime:formatLocalInput(runStart,factoryZone).slice(11),startupDate:''}))}>
+            {t('prv3StartupUseRunStart')} · <bdi>{minuteFormat.format(Date.parse(runStart))}</bdi></button></div>}
+           {!draft.startupAtRunStart&&startupMinute.matches.length>1&&<label>{t('prv3StartupDate')}<select value={draft.startupDate}
+            onChange={e=>setDraft(d=>({...d,startupDate:e.target.value}))}><option value="">{t('choose')}</option>
+            {startupMinute.matches.map(day=><option key={day} value={day}>{day}</option>)}
+           </select></label>}
+           <div className="prv3-startup-help" id="prv3-startup-time-help">
+            {ranges.length>0&&<small>{t('prv3StartupAllowed')} · <bdi>{ranges.map(displayRange).join(' / ')}</bdi></small>}
+            <small role={draft.startupTime&&(!confirmedStartupAt||sameMinute)?'status':undefined}>
+             {t(sameMinute?'prv3StartupAlreadyRecorded':draft.startupTime&&!confirmedStartupAt
+              ?startupMinute.matches.length>1?'prv3StartupChooseDate':'prv3StartupTimeInvalid':'prv3StartupTimeHelp')}
+            </small>
+           </div>
+          </div>}
+          <div className="prv3-fields prv3-scrap-breakdown">
+           <label>{t('prv3StartupScrap')} ({t('kg')})<input inputMode="decimal" autoComplete="off" maxLength={2048}
+            aria-describedby="prv3-startup-help" aria-invalid={'error' in scrapBreakdown&&scrapBreakdown.error==='prv3InvalidStartupScrap'}
+            value={draft.startup} onChange={e=>setDraft(d=>({...d,startup:e.target.value}))}/>
+            <small id="prv3-startup-help">{t('error' in scrapBreakdown&&scrapBreakdown.error==='prv3InvalidStartupScrap'?'prv3InvalidStartupScrap':'prv3StartupIncluded')}</small></label>
+           <div className="prv3-regular-scrap"><span id="prv3-regular-title">{t('prv3RegularScrap')} ({t('kg')})</span>
+            <output aria-labelledby="prv3-regular-title"><bdi>{'regularKg' in scrapBreakdown?scrapBreakdown.regularKg??'—':'—'}</bdi></output>
+            <small>{t('prv3ScrapFormula')}</small></div>
+          </div>
+         </>}
+        </section>
         {similar&&message('prv3Similar','warning')}
         {Number(outputOptions?.replacement_allowance)>0&&<p role="status">{lang==='ar'?'السماح التعويضي المتبقي':'Replacement allowance remaining'}: {outputOptions?.replacement_allowance} {unit(row.unit)}. {lang==='ar'?'يُربط الإنتاج الإضافي تلقائياً بالسماح المعتمد دون زيادة الطلب الأصلي.':'Additional output is attributed to the authorized allowance; original demand stays unchanged.'}</p>}
         {recovery&&<fieldset className="prv3-fields"><legend>{lang==='ar'?'معالجة المواد المصروفة':'Process issued material'}</legend><p>{lang==='ar'?'المتبقي من المدخل المخصص':'Allocated input remaining'}: {recovery.remaining} {unit(row.unit)} · {recovery.material_status}</p><label>{lang==='ar'?'المدخل المستخدم فعلياً':'Input actually processed'} · {unit(row.unit)}<input required inputMode="decimal" value={draft.input} onChange={e=>field('input',e.target.value)}/></label><label>{lang==='ar'?'الكمية المستبعدة من المدخل':'Discarded input quantity'} · {unit(row.unit)}<input required inputMode="decimal" value={draft.discarded} onChange={e=>field('discarded',e.target.value)}/></label><p>{lang==='ar'?'المدخل = المكتمل + غير المكتمل + المستبعد. سجل وزن الخردة بالكيلوغرام بشكل منفصل.':'Input = Finished + Unfinished + Discarded. Record Scrap weight separately in KG.'}</p></fieldset>}

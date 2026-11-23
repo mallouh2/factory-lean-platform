@@ -73,10 +73,30 @@ export default function LeanProblem({row,from,to,refreshIdentity,onBack,...props
  const events:LeanRow[]=detail?.rows||[],shiftEvents=shift===null?events:events.filter(x=>(x.shift_id||'unknown')===shift);
  const previous=initiatives.find(i=>i.verified_at);
  const recurred=detail?.recurrence_watch,metrics=detail?.metrics||row;
+ const insufficient=t('leanDataInsufficient');
+ const measure=(values:Record<string,number|null>|undefined)=>values&&Object.values(values).some(value=>value!=null)?typedMetric(values,lang):insufficient;
  return <section className="lean-page lean-detail" dir={lang==='ar'?'rtl':'ltr'}><header className="lean-header"><div><button onClick={onBack}>← {t('leanProblems')}</button><h2>{lang==='ar'?row.cause_ar||row.cause:row.cause}</h2><p>{row.machine_id?name('work_centers',row.machine_id):name('production_lines',row.line_id)} · {(row.products||[row.product_id]).map((id:string)=>name('products',id)).join(' · ')}</p></div>
   <div><strong>{t((detail?.problem?.monitor_only??row.monitor_only)?'leanMonitorOnly':current?'lean'+initiativeStatus(actions.filter(a=>a.initiative_id===current.id),current):previous?'leanVERIFIED':'leanOccurrence')}</strong>{recurred?.recurred&&<p role="status">{t('leanRecurred')}</p>}</div></header>
-  <div className="lean-summary">{[['leanFrequency',q(metrics.frequency)],['leanEffectiveLoss',metrics.loss_minutes==null?'—':formatDuration(Number(metrics.loss_minutes),lang)],['recordingScrap',q(metrics.scrap_kg)+' kg'],['leanScrapRate',q(metrics.scrap_rate)+'%'],['leanLostOutput',typedMetric(metrics.lost_output_by_unit,lang)],['unfinishedQuantity',typedMetric(metrics.wip_by_unit,lang)]].map(([label,value])=><div key={label}><span>{t(label)}</span><strong>{value}</strong></div>)}</div>
+  <div className="lean-summary">{[['leanFrequency',metrics.frequency==null?insufficient:q(metrics.frequency)],['leanEffectiveLoss',metrics.loss_minutes==null?insufficient:formatDuration(Number(metrics.loss_minutes),lang)],['recordingScrap',metrics.scrap_kg==null?insufficient:q(metrics.scrap_kg)+' kg'],['leanScrapRate',metrics.scrap_rate==null?insufficient:q(metrics.scrap_rate)+'%'],['leanLostOutput',measure(metrics.lost_output_by_unit)],['unfinishedQuantity',measure(metrics.wip_by_unit)]].map(([label,value])=><div key={label}><span>{t(label)}</span><strong>{value}</strong></div>)}</div>
   <p className="muted">{t('leanEvidenceHelp')}</p><div className="lean-query-feedback"><HistoryQueryState {...data} t={t}/></div>{error&&<p className="notice" role="alert">{t(error)}</p>}
+  <details className="lean-specialized">
+   <summary>{t('leanSpecializedMetrics')}</summary>
+   <dl>
+    <div><dt>{t('line')}</dt><dd>{(row.line_id?[row.line_id]:row.lines||[]).map((id:string)=>name('production_lines',id)).join(' · ')||t('notAvailable')}</dd></div>
+    <div><dt>{t('leanLossRate')}</dt><dd>{row.loss_rate==null?t('leanDataInsufficient'):q(row.loss_rate)+' '+t('leanMinPerHour')}</dd></div>
+    <div><dt>{t('leanOperatingTime')}</dt><dd>{row.runtime_missing||row.runtime_hours==null?t('leanRuntimeMissing'):q(row.runtime_hours)+' '+t('hours')}</dd></div>
+    <div><dt>{t('leanCustomerRisk')}</dt><dd>{row.customer_risk==null?t('leanDataInsufficient'):t(row.customer_risk?'leanDeliveryAtRisk':'leanNoLinkedRisk')}</dd></div>
+   </dl>
+   {row.attention?.scrap&&<p className="lean-value-loss">{t('leanAttentionScrap')}</p>}
+   <h3>{t('leanTrend')}</h3>
+   {row.trends?.length?row.trends.map((trend:LeanRow)=><div key={trend.product_id} className="lean-trend">
+    <strong>{name('products',trend.product_id)}</strong>
+    {!trend.complete?<span>{t('leanInsufficientExposure')}</span>:
+     [['loss','leanEffectiveLoss'],['frequency','leanFrequency'],['scrap','recordingScrap']].map(([key,label])=>
+      <span key={key}>{t(label)} · {t('leanOutcome_'+(trend[key]?.suggestion||'INSUFFICIENT_DATA'))}
+       {trend[key]?.percent!=null&&<> · {q(trend[key].percent)}%</>}</span>)}
+   </div>):<p>{t('leanInsufficientExposure')}</p>}
+  </details>
   {can('lean','edit')&&row.problem_id&&<details><summary>{t('leanPrioritization')}</summary>
    <LeanPrioritization key={factory+':'+row.problem_id} problem={detail&&detail.problem?.id===row.problem_id?detail.problem:null}
     loading={data.loading} error={data.error} busy={busy} t={t} onReload={refresh}

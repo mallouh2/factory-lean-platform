@@ -9,6 +9,7 @@ import {spawn} from 'node:child_process';
 import {randomBytes,randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {createLeanComparisonHandler} from '../../supabase/functions/lean-comparison/handler.mjs';
+import {createLossEstimateHandler} from '../../supabase/functions/save-production-loss-estimate/handler.mjs';
 const runtimePath=process.argv[2];if(!runtimePath)throw Error('Explicit disposable runtime required');
 const config=JSON.parse(fs.readFileSync(runtimePath,'utf8').replace(/^\ufeff/,''));
 if(process.env.NODE_ENV==='production'||config.marker!=='FACTORY_LEAN_DISPOSABLE_LOOPBACK_ONLY'||config.databaseHost!=='127.0.0.1'||config.database!=='factory_lean_quality_local'||!path.resolve(config.root).startsWith(path.resolve(tmpdir())+path.sep))throw Error('Not a disposable local fixture');
@@ -39,20 +40,30 @@ const metadata=new Map();
 // accepted by the HTTP Data API. The existing Edge handler supplies evidence;
 // ordinary clients retain their authenticated SQL grants, never service_role.
 const leanService=randomBytes(48).toString('hex');
-const leanComparison=createLeanComparisonHandler({url:backendOrigin,key,service:leanService,fetch:async(input,init)=>{
+function trustedTransport(name,parameters){return async(input,init)=>{
  const url=new URL(input),headers=new Headers(init.headers);
  assert.equal(url.origin,backendOrigin);
  if(headers.get('authorization')!==`Bearer ${leanService}`)return fetch(input,init);
- assert.equal(url.pathname,'/rest/v1/rpc/store_lean_evidence');assert.equal(init.method,'POST');
+ assert.equal(url.pathname,`/rest/v1/rpc/${name}`);assert.equal(init.method,'POST');
  const a=JSON.parse(init.body);
  try{
-  const data=await sql(`begin;${databaseGuard(config)}set local statement_timeout='30s';set local lock_timeout='10s';do $$begin perform set_config('request.jwt.claim.role','service_role',true);perform set_config('request.jwt.claims','{"role":"service_role"}',true);end$$;set local role service_role;with args as(select ${quote(JSON.stringify(a))}::jsonb a)select public.store_lean_evidence((a->>'factory')::uuid,(a->>'actor')::uuid,a->>'operation',(a->>'target')::uuid,(a->>'expected_revision')::integer,a->'evidence',a->'payload',(a->>'request_id')::uuid)from args;commit;`);
+  const data=await sql(`begin;${databaseGuard(config)}set local statement_timeout='30s';set local lock_timeout='10s';do $$begin perform set_config('request.jwt.claim.role','service_role',true);perform set_config('request.jwt.claims','{"role":"service_role"}',true);end$$;set local role service_role;with args as(select ${quote(JSON.stringify(a))}::jsonb a)select to_jsonb(public.${name}(${parameters}))from args;commit;`);
   return new Response(data,{headers:{'Content-Type':'application/json'}});
  }catch(error){
   const match=/ERROR:\s+([A-Z0-9]{5}):\s+([^\r\n]+)/.exec(error.message||'');
   return Response.json({message:match?.[2]||'dataWarning'},{status:match?.[1]==='42501'?403:match?.[1]==='40001'?409:400});
  }
-}});
+}}
+const leanFunctions={
+ '/functions/v1/lean-comparison':createLeanComparisonHandler({
+  url:backendOrigin,key,service:leanService,
+  fetch:trustedTransport('store_lean_evidence',"(a->>'factory')::uuid,(a->>'actor')::uuid,a->>'operation',(a->>'target')::uuid,(a->>'expected_revision')::integer,a->'evidence',a->'payload',(a->>'request_id')::uuid")
+ }),
+ '/functions/v1/save-production-loss-estimate':createLossEstimateHandler({
+  url:backendOrigin,key,service:leanService,
+  fetch:trustedTransport('persist_production_loss_estimate',"(a->>'factory')::uuid,(a->>'event')::uuid,(a->>'actor')::uuid,a->'estimate',(a->>'correction')::uuid")
+ })
+};
 async function rpc(name,args,raw,identity,isGet=false){
  // Mirror the existing public Data API exposure. SQL EXECUTE grants and the
  // original authenticated actor remain authoritative; never expose private RPCs.
@@ -82,8 +93,8 @@ const server=createServer(async(req,res)=>{try{
   return account?json(issue(account,session)):json({code:'invalid_credentials',error_code:'invalid_credentials',msg:'Invalid local fixture credentials'},400);
  }
  if(!identity){counts.denied++;return json({code:'42501',message:'Invalid local fixture session'},401)}
- if(url.pathname==='/functions/v1/lean-comparison'){
-  const result=await leanComparison(new Request(backendOrigin+url.pathname,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:raw}:{})}));
+ if(Object.hasOwn(leanFunctions,url.pathname)){
+  const result=await leanFunctions[url.pathname](new Request(backendOrigin+url.pathname,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:raw}:{})}));
   res.writeHead(result.status,{'Content-Type':'application/json'});return res.end(await result.text());
  }
  if(url.pathname==='/auth/v1/user'&&req.method==='GET')return json(user(identity.account));

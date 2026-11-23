@@ -3,7 +3,7 @@ import { calculateProductionLoss, suggestScrapCalibration } from "./production-l
 const number = value => value === null || value === undefined || value === "" ? null : Number(value);
 const effective = record => ({ ...record.event,
   stop_nature: record.correction?.stop_nature || record.event.stop_nature,
-  planned_activity: record.correction?.planned_activity || record.event.planned_activity });
+  planned_activity: record.correction ? record.correction.planned_activity : record.event.planned_activity });
 
 /** Same review calculations and observation mapping, with event-scoped server reads.
  * @param {Record<string, any>} selected
@@ -12,8 +12,13 @@ const effective = record => ({ ...record.event,
  */
 export async function deliverLossReview(selected, candidates, contexts, now = Date.now()) {
   if (selected.saved?.result && typeof selected.saved.result === "object") {
-    // The accepted result is history, never a fresh comparison/recalculation.
-    return { ...selected, calculation: selected.saved.result, suggestions: [] };
+    const saved = selected.saved.result;
+    const stale = Date.parse(selected.correction?.corrected_at) >
+      Date.parse(selected.saved.calculated_at || saved.calculated_at);
+    const current_calculation = stale ? calculateProductionLoss(effective(selected),
+      await contexts(selected.event.id), selected.actual, now, [],
+      selected.maintenance?.evidence || null) : null;
+    return { ...selected, calculation: saved, current_calculation, suggestions: [] };
   }
   const observations = [];
   for (const item of candidates) {

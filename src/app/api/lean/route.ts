@@ -5,7 +5,7 @@ import { operatingRuntime, runtimeByShift, comparableExposure, metricChange } fr
 import { measuredHours, windowMetrics } from '@/utils/lean-comparison.mjs';
 import {productionScope} from '@/utils/production-periods.mjs';
 import {consumerFetch} from '@/utils/production-consumer-transport.mjs';
-import { annotateLeanAttention, leanDisplayStatus } from '@/utils/lean-presentation.mjs';
+import { annotateLeanAttention, leanDisplayStatus, leanLossRanking } from '@/utils/lean-presentation.mjs';
 export async function GET(req:NextRequest) {
   try {
     const context=await authenticatedClient(consumerFetch()),factory=historyUuid(req.nextUrl.searchParams.get('factory'));
@@ -58,7 +58,15 @@ export async function GET(req:NextRequest) {
           const prior=start?totals(start,from):null,current=totals(from,to);
           return {product_id,complete:before.complete,exposure_hours:exposure,frequency:metricChange(before.complete?prior?.frequency:null,current.frequency,row.threshold_percent),loss:metricChange(before.complete?prior?.loss_minutes:null,current.loss_minutes,row.threshold_percent),scrap:metricChange(before.complete?prior?.scrap_kg:null,current.scrap_kg,row.threshold_percent)};
         });
-        return {...row,event_ids:matching.filter(e=>productionScope(e,from,to)!=='OUTSIDE').map(e=>e.event_id),products:affected,
+        const visibleEvents=matching.filter(e=>productionScope(e,from,to)!=='OUTSIDE');
+        const quantified=visibleEvents.filter(e=>e.lost_output!=null&&e.output_unit);
+        // The reader coalesces actual output over the estimate. Equal quantities
+        // cannot prove which source was used, even if effective minutes are actual.
+        const outputMeasured=row.mechanism==='downtime'&&quantified.length>0&&quantified.every(e=>
+          e.loss_details?.estimated_lost_output_quantity==null||
+          Number(e.loss_details.estimated_lost_output_quantity)!==Number(e.lost_output)||
+          e.loss_details.unit!==e.output_unit);
+        return {...row,event_ids:visibleEvents.map(e=>e.event_id),products:affected,output_measured:outputMeasured,
           ...(row.mechanism==='scrap'?{scrap_kg:currentMetrics.scrap_kg,frequency:currentMetrics.frequency}:{}),
           evidence_status:complete?currentMetrics.status:'INCOMPLETE',quantity_evidence_status:currentMetrics.status,scrap_rate:currentMetrics.scrap_rate,runtime_hours:hours,loss_rate:hours&&row.loss_minutes!=null&&row.missing_loss===0?Number(row.loss_minutes)/hours:null,frequency_rate:hours&&currentMetrics.frequency!==null?Number(currentMetrics.frequency)/hours:null,
           runtime_missing:!complete,trends};
@@ -66,6 +74,7 @@ export async function GET(req:NextRequest) {
       const sort=['loss_minutes','scrap_kg','frequency','loss_rate'].includes(query.sort)?query.sort:'loss_minutes';
       enriched.sort((a:any,b:any)=>{if(a[sort]==null)return b[sort]==null?String(a.cause_id).localeCompare(String(b.cause_id)):1;if(b[sort]==null)return -1;return (Number(a[sort])-Number(b[sort]))*(query.direction==='asc'?1:-1)||String(a.cause_id).localeCompare(String(b.cause_id));});
       const eligible=status?enriched.filter(row=>leanDisplayStatus(row)===status):enriched;
+      body.loss_ranking=leanLossRanking(eligible);
       const presented=annotateLeanAttention(eligible,{entries:assessmentEntries,startups,links,from,to});
       const page=Number(query.page||1);if(!Number.isSafeInteger(page)||page<1)throw {code:'22023'};
       body.rows=presented.slice((page-1)*25,page*25);body.total=eligible.length;body.page=page;body.page_size=25;

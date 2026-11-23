@@ -1,18 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {transformSync} from 'esbuild';
-import {calculateProductionLoss} from '../src/utils/production-loss-impact.mjs';
-const source=await readFile(new URL('../supabase/functions/save-production-loss-estimate/index.ts',import.meta.url),'utf8');
-const code=transformSync(source.replace(/import \{ calculateProductionLoss \} from "[^"]+";/,''),{loader:'ts',target:'es2022'}).code;
+import {createLossEstimateHandler} from '../supabase/functions/save-production-loss-estimate/handler.mjs';
 const id=n=>`10000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const at=n=>new Date(Date.UTC(2026,9,14,10,n)).toISOString();
 const input={event:{id:id(2),factory_id:id(1),work_center_id:id(3),line_id:id(4),loss_model_version:1,stop_nature:'planned',planned_activity:'inspection',started_at:at(0),ended_at:at(30)},
  correction:null,actual:null,observations:[],input_hash:'a'.repeat(64),maintenance:{event_id:id(2),machine_id:id(3),operation:'LINK',valid:true,relationship:'PLANNED_MAINTENANCE',approved_start:at(0),approved_end:at(30)},
  samples:[{id:1,event_id:id(2),captured_at:at(0),context:{maintenance_loss_context_version:1,demand_complete:true,routing_steps:[],orders:[],centers:[{id:id(3),line_id:id(4),status:'stopped',dependency_mode:'blocking',impact_scope:'whole_line'}],transfers:[],stops:[],profiles:[],capabilities:[],products:[]}}]};
 async function run(mode='',body={factory:id(1),event:id(2)}){
- let handler;const calls=[];
- const Deno={env:{get:key=>({SUPABASE_URL:'https://synthetic.invalid',SUPABASE_ANON_KEY:'synthetic-public',SUPABASE_SERVICE_ROLE_KEY:'synthetic-service'})[key]},serve:h=>handler=h};
+ const calls=[];
  const fetch=async(url,options={})=>{
   const path=new URL(url).pathname;calls.push({path,options});
   if(path==='/auth/v1/user')return Response.json({id:id(5),email_confirmed_at:at(0)});
@@ -30,7 +25,7 @@ async function run(mode='',body={factory:id(1),event:id(2)}){
   }
   throw Error('Unbounded ledger read attempted');
  };
- new Function('Deno','fetch','calculateProductionLoss',code)(Deno,fetch,calculateProductionLoss);
+ const handler=createLossEstimateHandler({url:'https://synthetic.invalid',key:'synthetic-public',service:'synthetic-service',fetch});
  const response=await handler(new Request('https://synthetic.invalid/function',{method:'POST',headers:{Authorization:'Bearer synthetic-user', 'Content-Type':'application/json'},body:JSON.stringify(body)}));
  return {status:response.status,body:await response.json(),calls};
 }

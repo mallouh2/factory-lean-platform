@@ -86,9 +86,21 @@ test('Historical changed/unknown estimates never recalculate, duplicate, or cali
  assert.strictEqual(r.calculation,saved.result);assert.equal(r.maintenance.review_state,state);assert.deepEqual(r.suggestions,[]);
  }
 });
+test('A later classification correction exposes a separate calculation and retains the saved result',async()=>{
+ const saved={result:calc()};
+ const correctedAt=new Date(Date.parse(saved.result.calculated_at)+1000).toISOString();
+ const correction={stop_nature:'unplanned',planned_activity:null,corrected_at:correctedAt};
+ const result=await deliverLossReview({event,saved,correction},[],async()=>[
+  {id:1,event_id:event.id,captured_at:event.started_at,context:context()},
+ ],Date.parse(correctedAt));
+ assert.strictEqual(result.calculation,saved.result);
+ assert.equal(result.current_calculation.stop_nature,'unplanned');
+ assert.equal(result.current_calculation.planned_activity,null);
+ assert.deepEqual(result.suggestions,[]);
+});
 test('Forward SQL/trusted reader use actor union, consistent locks and no remote/ledger readers',async()=>{
  const sql=await readFile(new URL('../supabase/migrations/20261014065225_maintenance_loss_context_v1.sql',import.meta.url),'utf8');
- const edge=await readFile(new URL('../supabase/functions/save-production-loss-estimate/index.ts',import.meta.url),'utf8');
+ const edge=await readFile(new URL('../supabase/functions/save-production-loss-estimate/handler.mjs',import.meta.url),'utf8');
  assert.match(sql,/maintenance_planning_lock\(factory\)/);assert.match(sql,/input_hash.*distinct from estimate/s);
  assert.match(sql,/require_permission\(factory,'downtime','edit'\)/);assert.doesNotMatch(sql,/public\.user_permissions/);
  assert.match(sql,/EVIDENCE_CHANGED_AFTER_REVIEW/);assert.match(sql,/EVIDENCE_COMPARISON_UNKNOWN/);

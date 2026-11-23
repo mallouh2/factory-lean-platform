@@ -27,7 +27,6 @@ import ProductionRecording from "@/features/ProductionRecording";
 import ProductionPlanning from "@/features/ProductionPlanning";
 import PlatformDashboard from "@/features/PlatformDashboard";
 import PersonPermissions from "@/features/PersonPermissions";
-import DowntimeAnalysis from "@/features/DowntimeAnalysis";
 import DowntimeCapture from "@/features/DowntimeCapture";
 import Maintenance from '@/features/Maintenance';
 import LeanAnalysis from '@/features/LeanAnalysis';
@@ -104,8 +103,11 @@ export default function FactoryApp() {
       ),
     );
   const snapshotRequest=useRef(0);
-  const load = useCallback(async () => {
+  const loadingSnapshot = useRef(false);
+  const load = useCallback(async (background = false) => {
+    if (background && loadingSnapshot.current) return;
     const request=++snapshotRequest.current;
+    loadingSnapshot.current = true;
     try {
       const res = await fetch(
         "/api/data" +
@@ -136,7 +138,10 @@ export default function FactoryApp() {
       if(request===snapshotRequest.current)setLoadNotice("dataWarning");
       return false;
     } finally {
-      if(request===snapshotRequest.current)setLoading(false);
+      if(request===snapshotRequest.current) {
+        loadingSnapshot.current = false;
+        setLoading(false);
+      }
     }
   }, [supportFactory]);
   useEffect(() => {
@@ -146,7 +151,7 @@ export default function FactoryApp() {
   useEffect(() => {
     void load();
     const timer = setInterval(() => {
-      if (!document.hidden) void load();
+      if (!document.hidden) void load(true);
     }, 30000);
     return () => clearInterval(timer);
   }, [load]);
@@ -504,7 +509,7 @@ export default function FactoryApp() {
               {historyOpen&&props&&<ProductionRecording {...props} surface="history" historyMode={historyMode} onHistoryBack={()=>window.history.back()}/>}
               <div hidden={historyOpen}>{props &&
                 (can(view) ? (
-                  view === 'quality' ? <Quality key={String(snapshot.factory.id)} {...props}/> : view === 'lean' ? <><div className="module-navigation">{can('downtime')&&<button onClick={()=>navigate('downtime')}><SidebarIcon name="downtime"/>{t('downtime')}</button>}</div><LeanAnalysis key={String(snapshot.factory.id)} {...props}/></> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} initialRequestId={maintenanceRequestId} onRepairClose={()=>setMaintenanceRequestId('')} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} initialWorkspace={warehouseSection} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
+                  view === 'quality' ? <Quality key={String(snapshot.factory.id)} {...props}/> : view === 'lean' ? <LeanAnalysis key={String(snapshot.factory.id)} {...props} onDowntime={can('downtime')?()=>navigate('downtime'):undefined}/> : view === 'maintenance' ? <Maintenance key={String(snapshot.factory.id)} {...props} initialRequestId={maintenanceRequestId} onRepairClose={()=>setMaintenanceRequestId('')} /> : view === 'purchasing' ? <Purchasing key={String(snapshot.factory.id)} {...props}/> : view === 'myPurchaseRequests' ? <Purchasing key={String(snapshot.factory.id)} {...props} mine/> : view === 'suppliers' ? <Suppliers key={String(snapshot.factory.id)} {...props}/> : view === 'products' ? <Products key={String(snapshot.factory.id)} {...props}/> : view === 'materialRequests' ? <MaterialFlow key={String(snapshot.factory.id)} {...props}/> : view === 'sales' ? <SalesOrders {...props} /> : view === 'warehouse' ? <Warehouse key={String(snapshot.factory.id)} {...props} initialWorkspace={warehouseSection} /> : view === "unfinishedProducts" ? (<UnfinishedProducts {...props} />) : view === "dashboard" ? (
                     <Dashboard
                       {...props}
                       onCenter={setCenter}
@@ -513,10 +518,8 @@ export default function FactoryApp() {
                   ) : view === "downtime" ? (
                     <>
                       {can('lean')&&<button className="module-navigation-back" onClick={()=>navigate('lean')}>{t('back')} · {t('lean')}</button>}
-                      <DowntimeCapture {...props} initialEventId={downtimeEventId} onReferenceClose={() => setDowntimeEventId(null)} />
-                      <details className="panel"><summary>{t("impactRankedDowntime")}</summary>
-                        <DowntimeAnalysis {...props} />
-                      </details>
+                      <DowntimeCapture {...props} key={String(snapshot.factory.id)} onMaintenanceRepairOpen={openMaintenanceRepair}
+                        initialEventId={downtimeEventId} onReferenceClose={() => setDowntimeEventId(null)} />
                     </>
                   ) : view === "reports" ? (
                     <Reports {...props} view={view} />
