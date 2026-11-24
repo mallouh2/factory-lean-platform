@@ -4406,6 +4406,9 @@ dialog :is(.table-wrap, .quality-table-wrap, .inventory-table-scroll) {
 
 /* Shared Production Stock follows the existing operational dialog/form styles. */
 .production-stock-dialog{width:min(58rem,calc(100vw - 2rem));max-width:58rem}
+.production-stock-dialog.shift-handover-dialog{width:min(72rem,calc(100vw - 2rem));max-width:72rem}
+.shift-handover-dialog>header h2{font-size:clamp(1.15rem,3vw,1.55rem);line-height:1.25}
+.shift-handover-dialog nav{gap:.4rem;margin-block-end:.65rem}
 .production-stock-dialog nav{margin-block-end:1rem;flex-wrap:wrap}
 .production-stock-dialog nav [aria-pressed="true"]{font-weight:700;border-color:var(--primary)}
 .production-stock-dialog fieldset{border:0;padding:0;min-width:0;display:grid;gap:.75rem}

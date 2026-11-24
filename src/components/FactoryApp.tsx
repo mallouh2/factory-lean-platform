@@ -527,6 +527,7 @@ export default function FactoryApp() {
                     !lineManagement ? (
                       <FactoryFloorV2
                         {...props}
+                        onMaintenanceRepairOpen={openMaintenanceRepair}
                         onManage={(machineId) => {
                           setLineManagementMachineId(machineId || null);
                           if(can('lines','edit')||can('centers','edit')||can('lines','create')||can('centers','create'))setLineManagement(true);

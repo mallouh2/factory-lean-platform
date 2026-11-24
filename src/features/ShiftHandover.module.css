@@ -1,0 +1,60 @@
+.workspace { display:grid; gap:.8rem; min-inline-size:0; }
+.topbar,.section>header,.state,.note>div,.noteActions,.actions {
+  display:flex; align-items:center; gap:.5rem .8rem; flex-wrap:wrap;
+}
+.topbar,.section>header { justify-content:space-between; }
+.topbar h3,.section h4,.topbar p,.note p { margin:0; }
+.topbar p,.state span,.empty,.note small,.table small,.actions small {
+  color:var(--fl-text-secondary,var(--muted)); font-size:.86rem;
+}
+.state { border:1px solid var(--border); padding:.55rem .75rem; background:var(--fl-brand-primary-soft,#edf3ff);
+  border-inline-start:3px solid var(--primary); border-radius:.4rem; }
+.state[data-received=true] { background:#e9f6ed; border-inline-start-color:#427c54; }
+.section { border:1px solid var(--border); border-radius:.5rem; min-inline-size:0; background:var(--fl-surface-default,white); }
+.section>header { padding:.55rem .75rem; background:var(--fl-surface-subtle,#f5f7fa); border-start-start-radius:inherit; border-start-end-radius:inherit; }
+.section>header button,.noteActions button,.note button { font-size:.84rem; }
+.table { width:100%; border-collapse:collapse; margin:0; min-inline-size:0!important; font-variant-numeric:tabular-nums; }
+.table th,.table td { text-align:start; padding:.4rem .6rem; vertical-align:middle; border-block-start:1px solid var(--border); }
+.table th { font-size:.82rem; white-space:normal; }
+.table td { font-size:.9rem; }
+.table td:first-child { min-inline-size:9rem; }
+.table td bdi { white-space:nowrap; }
+.table td small { display:block; }
+.table input { display:block; inline-size:min(100%,7rem); min-inline-size:4.4rem; padding:.3rem .4rem; }
+.table input[aria-invalid=true] { border-color:#986425; background:#fff9ec; }
+.table input[aria-invalid=true]::placeholder { color:#76501f; }
+.table tr[data-discrepancy=true] { background:#fff7df; }
+.badge,.approved,.warning { display:inline-flex; align-items:center; gap:.25rem; border-radius:.3rem; padding:.13rem .35rem; font-size:.82rem; }
+.badge { background:#eef2f7; color:#304768; }
+.approved { background:#e5f5eb; color:#245639; }
+.warning { background:#ffefc7; color:#755116; }
+.warning small { color:inherit; }
+.empty,.note,.noteForm { margin:0; padding:.55rem .75rem; }
+.workspace .note { display:grid; gap:.3rem; padding:.55rem .75rem; overflow-wrap:anywhere; }
+.note button { justify-self:start; }
+.noteForm,.resolve { display:grid; gap:.5rem; }
+.noteForm label,.resolve label,.selection,.actions label { display:grid; gap:.2rem; }
+.noteActions label:has(input[type=checkbox]) { display:flex; align-items:center; gap:.4rem; }
+.noteActions button,.actions button:last-child { margin-inline-start:auto; }
+.contextLink { text-decoration:underline; }
+.actions { justify-content:flex-end; border-block-start:1px solid var(--border); padding-block-start:.7rem; }
+.actions label { flex:1 1 100%; }
+.workflowActions { display:flex; gap:.5rem .8rem; flex-wrap:wrap; }
+.workflowActions>div { display:grid; justify-items:start; align-content:start; gap:.25rem; }
+.workflowActions small { color:var(--fl-text-secondary,var(--muted)); }
+.workflowActions button[aria-pressed=true] {
+  border-color:var(--primary); background:var(--fl-brand-primary-soft,#edf3ff); font-weight:700;
+}
+.history { display:grid; gap:.35rem; }
+.history>button { text-align:start; }
+@media(max-width:720px) {
+  .topbar,.section>header { align-items:start; }
+  .table thead { position:absolute; inline-size:1px; block-size:1px; overflow:hidden; clip-path:inset(50%); }
+  .table,.table tbody,.table tr { display:block; }
+  .table tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem .65rem; padding:.5rem .65rem; border-block-start:1px solid var(--border); }
+  .table td { min-inline-size:0; border:0; padding:0; }
+  .table td:first-child { grid-column:1 / -1; min-inline-size:0; }
+  .table td:not(:first-child)::before { content:attr(data-label); display:block; font-size:.7rem; color:var(--fl-text-secondary,var(--muted)); }
+  .table input { min-block-size:2.6rem; }
+  .noteActions>* { max-inline-size:100%; }
+}

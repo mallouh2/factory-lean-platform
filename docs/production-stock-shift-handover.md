@@ -44,6 +44,44 @@ unreceived remainder. Legacy line-custody returns retain original provenance.
 
 ## Handover
 
+The two-sided handover is available in the canonical local review preview. It
+organizes raw counts, outstanding produced goods, line/equipment notes and
+order notes on one screen. Outgoing submission retains the existing immutable
+raw count and adds a linked goods and notes snapshot. Another authorized
+Production user records an independent receipt. Both users and actual shift
+occurrences are retained, including when receipt crosses a shift boundary.
+Submitted counts are immutable, with one submission per occurrence and one
+receipt per submission. Earlier raw-only handovers remain available in History.
+
+The owner accepted the four-section workflow for Group 7 on 24 November 2026.
+Raw physical counts use approximate whole kilograms. Discrepancies compare
+against the same rounded quantity shown on screen. Exact stock, reservations,
+consumption and historical handover evidence retain their original precision.
+Produced goods retain their unit and quantity precision. The incoming form
+starts with the outgoing counts and records an independent receipt after the
+technician verifies the quantities and explicitly confirms. A qualifying
+difference still requires an explanation. Equipment notes offer applicable
+Maintenance requests and the database validates the association on save.
+
+The approved forward migrations are `20261124120000_two_sided_shift_handover.sql`
+and `20261124150000_shift_handover_whole_kg.sql`. They were verified in the
+canonical local preview.
+
+Outstanding quantities come from the source production, Quality and Warehouse
+ledgers across shifts. Manufactured Output separates uninspected or held work,
+released finished goods, and recoverable unfinished quantities. It subtracts
+posted physical receipts. The legacy reader uses unacknowledged finished-stock
+postings. Rework physically available in the source ledger remains distinguishable
+from approved finished goods. Counts record evidence and never post inventory,
+release Quality, acknowledge Warehouse, or change production execution or plans.
+
+The focused local review is documented in
+`D:/FactoryLean/Reports/Project-Continuity/SHIFT-HANDOVER-REVIEW.md`.
+The workflow uses the established compact operational handoff and distinct
+physical custody cues. [Tulip Shift Summary Reporter](https://support.tulip.co/docs/fr/shift-handoff-summary) · [Fusion Operations WIP Inventory](https://help.fusionoperations.autodesk.com/en/articles/422489-how-to-use-the-work-in-process-wip-inventory)
+
+### Original raw-material handover contract
+
 Production's incoming engineer counts every listed raw material, including zero.
 The immutable handover stores server shift/actor/time, expected physical stock,
 reserved/unreserved quantities, actual quantities, signed kg/percentage differences
