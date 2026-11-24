@@ -1,3 +1,7 @@
+# 2026-11-23 — plan and execution comparison (local)
+
+The owner accepted F37, a read-only Lean comparison of original or latest approved plans and recorded execution across production lines. The synchronized scale and order detail follow established scheduling and comparison patterns, with distinct handling for historical baselines, timestamp-only records and missing reasons. Live improvement effectiveness remains unverified. [MRPeasy schedule and order details](https://www.mrpeasy.com/resources/user-manual/production-planning/production-schedule/) · [Autodesk planned and actual Gantt dates](https://help.autodesk.com/cloudhelp/2022/ENU/Navisworks/files/GUID-91B08CFD-0B6B-4A2B-A853-BC8E173BA78C.htm)
+
 # 2026-11-18 — confirmed return and stable machine sequence (local)
 
 F47/F48 keep machine order stable and provide one explicit reasoned recovery/handover return without inventing downtime on a healthy spare. Machine borrowing remains distinct from actual-line execution, and both preserve Planning and accounting. This is operational usability/integrity parity, not a measured Lean benefit or unique differentiator. Owner acceptance and hosted rollout remain pending; F37 stays future. See [the continuity contract](machine-alternatives-continuity.md).

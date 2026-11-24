@@ -10,7 +10,7 @@ The [Phase 0 specification](smart-planning-aps-phase-0.md) records the owner’s
 |---|---|---|
 | Group 4 Planning and Maintenance | Owner-accepted and checkpointed at `ed235fa5ec7c6d95578947bd269c8d0aad10443d`. It includes the unified queue, scheduling, late starts and Gantt stability. | Preserve those workflows. APS adds advisory proposals around the current Planning and Maintenance commands. |
 | Group 5 Quality and UI | F13/F16 were owner-accepted on 19 November 2026. The approved checkpoint `e0d8af7cd39dca6a0e932a51cfc67d6f007aee8a` was pushed and verified. | Preserve live Finished quantity, the exact Quality formula, protected audit and autocomplete scope. |
-| Group 6 Lean | Canonical Lean integration was technically verified. The owner scenario work is outstanding. The existing sequence verifies current Lean first and then defines controlled downtime, loss, root-cause, corrective action and plan-versus-actual exercises. | Reuse stable Lean evidence and preserve F37 as an explicitly scoped future dependency. APS 1–2 should retain the source evidence needed by F37 without treating the report as delivered. Require Group 6 evidence for APS 5 comparisons. |
+| Group 6 Lean | Complete and owner-accepted, including Group 6A, all seven Group 6B controlled scenarios, and the Group 6C F37 multi-order report. Live improvement effectiveness still lacks comparable operating evidence. | Reuse accepted Lean evidence. APS 1–2 should preserve the source records used by F37. APS 5 comparisons still require comparable operating evidence. |
 | Group 7 | Final integrated regression and owner acceptance after Group 6. G7a approves targeted revalidation of Groups 1B, 1C, 2 and the outstanding Group 3 cases. | Keep the existing checklist and final acceptance gates. Complete and obtain owner acceptance before any APS implementation. |
 | Staged release | Broad regression, security and whole-site validation are separate. Existing hosted parity is unverified in this audit. | Local APS work does not activate, deploy or reconcile hosted environments. Any later rollout needs its own approval. |
 
@@ -27,6 +27,13 @@ The [Phase 0 specification](smart-planning-aps-phase-0.md) records the owner’s
 | APS 6 | Integrated pipe extrusion scenarios and owner acceptance. | Accept all preceding phases. Run the signed scenario matrix in the canonical environment under its approved data rules. Exercise essential concurrency, stale approvals, idempotency, permissions, EN/AR and RTL, mobile, and existing operational regression. Review hosted release separately. |
 
 This sequence needs no automatic reordering. A dependency from a later phase can be investigated early through documentation, contracts and read-only evidence. Implementation stays behind its owner-approved gate.
+
+## Future objective: Production Bottleneck Detection and Throughput Improvement
+
+Owner-approved product goal, 24 November 2026. Phase assignment and implementation require separate approval. The existing Group 6, Group 7 and APS gates still apply.
+
+- **Lean continuous improvement.** Use operating evidence such as actual output, run time, queues or WIP, blocking and starvation, changeovers, downtime and scrap where available. Consider product mix, demand and comparable operating conditions before attributing a throughput constraint to a machine, line or stage. Show the evidence, gaps and uncertainty when several constraints are plausible. Carry supported findings through the existing root-cause, corrective-action and effectiveness workflow. Estimate practical gains in good output per unit of time for the affected flow, with assumptions visible. Verify gains against comparable before-and-after operating evidence and check whether the constraint moved elsewhere. Keep estimated gains distinct from measured results.
+- **Smart Planning capacity assumptions.** Keep configured rates and theoretical capacity separate from observed feasible throughput by product, line and operating conditions. Evidence-backed estimates may inform future APS proposals as explicit assumptions with their source and uncertainty visible. Weak evidence leaves capacity uncertain. Any future change to an approved capacity standard follows the existing approval rules. An observed constraint alone cannot change an approved plan or turn an estimate into committed capacity.
 
 ## Group 7 consolidated checklist for owner approval
 

@@ -9,7 +9,7 @@ import ar from '../src/locales/ar.json' with {type:'json'};
 const require=createRequire(import.meta.url),react=require('react');
 const bundles={};
 for(const name of ['LeanAnalysis','LeanProblem']){
- const out=await build({entryPoints:[`src/features/${name}.tsx`],bundle:true,platform:'node',format:'cjs',packages:'external',write:false,logLevel:'silent',plugins:[{name:'scoped-reader',setup(b){b.onResolve({filter:/hooks\/useHistoryData$/},()=>({path:'lean-test-reader',external:true}));}}]});
+ const out=await build({entryPoints:[`src/features/${name}.tsx`],bundle:true,platform:'node',format:'cjs',packages:'external',write:false,logLevel:'silent',plugins:[{name:'scoped-reader',setup(b){b.onResolve({filter:/hooks\/useHistoryData$/},()=>({path:'lean-test-reader',external:true}));b.onLoad({filter:/\.module\.css$/},()=>({contents:'export default {};',loader:'js'}));}}]});
  bundles[name]=out.outputFiles[0].text;
 }
 const row={mechanism:'scrap',problem_id:'problem',cause_id:'cause',cause:'Cooling low',cause_ar:'مياه التبريد منخفضة',line_id:'L',product_id:'P',products:['P'],frequency:2,loss_minutes:15,scrap_kg:10,scrap_rate:2,lost_output_by_unit:{piece:30,meter:12},wip_by_unit:{piece:5},shifts:[null],runtime_missing:true};

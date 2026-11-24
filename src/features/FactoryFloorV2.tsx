@@ -1002,7 +1002,7 @@ export default function FactoryFloorV2(
                             <option key={activity} value={activity}>{t(`lossActivity_${activity}`)}</option>)}
                         </select>
                       </label>}
-                      <label>{t("machineStopImpact")}<select required value={stopImpact} onChange={e=>setStopImpact(e.target.value)}><option value="">{t("select")}</option><option value="yes">{t("machineStopAffectsProduction")}</option><option value="no">{t("productionCanContinue")}</option></select></label>
+                      <label>{t("machineStopRequiredEquipment")}<select required value={stopImpact} onChange={e=>setStopImpact(e.target.value)}><option value="">{t("select")}</option><option value="yes">{t("machineStopAffectsProduction")}</option><option value="no">{t("machineStopNonessential")}</option></select></label>
                       <p className="muted">{t("machineStopImpactValidated")}</p>
                       <label>{t("downtimeOperatorNote")}
                         <textarea maxLength={2000} value={stopDetail}

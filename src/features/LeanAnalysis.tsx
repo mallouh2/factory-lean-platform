@@ -8,6 +8,7 @@ import type { FeatureProps } from './types';
 import type { Row } from '@/types';
 import LeanProblem from './LeanProblem';
 import LeanLibraries from './LeanLibraries';
+import PlanActual from './PlanActual';
 export type LeanRow=Record<string,any>; // Nested reader evidence is distinct from flat snapshot rows.
 export const typedMetric=(values:Record<string,number|null>|undefined,lang:string)=>Object.entries(values||{}).filter(([,v])=>v!=null).map(([unit,value])=>Number(value).toLocaleString(lang)+' '+unit).join(' · ')||'—';
 export default function LeanAnalysis({onDowntime,...props}:FeatureProps & {onDowntime?:()=>void}){
@@ -17,16 +18,26 @@ export default function LeanAnalysis({onDowntime,...props}:FeatureProps & {onDow
  const anchor=Number.isFinite(Date.parse(String(s.fetchedAt)))?new Date(s.fetchedAt).toISOString():initialAnchor;
  const [filters,setFilters]=useState<Record<string,string>>({}),[sort,setSort]=useState('loss_minutes'),[direction,setDirection]=useState('desc'),[page,setPage]=useState(1);
  const [selected,setSelected]=useState<LeanRow|null>(null),[libraries,setLibraries]=useState(false),[notice,setNotice]=useState(''),[opening,setOpening]=useState(false);
+ const [planActual,setPlanActual]=useState(()=>typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('report')==='plan-actual');
+ const showPlanActual=planActual&&can('orders','view')&&can('lean','view');
+ const openPlanActual=(open:boolean)=>{
+  setPlanActual(open);
+  const url=new URL(window.location.href);
+  if(open)url.searchParams.set('report','plan-actual');
+  else url.searchParams.delete('report');
+  window.history.replaceState(window.history.state,'',url);
+ };
  const from=days==='custom'&&customFrom?new Date(customFrom).toISOString():new Date(Date.parse(anchor)-Number(days==='custom'?30:days)*86400000).toISOString();
  const to=days==='custom'&&customTo?new Date(customTo).toISOString():anchor;
  const url='/api/lean?'+new URLSearchParams({factory,from,to,sort,direction,page:String(page),...Object.fromEntries(Object.entries(filters).filter(([,v])=>v))});
  const identity=JSON.stringify({factory,days,customFrom,customTo,filters,sort,direction,page});
- const data=useHistoryData<{rows:LeanRow[];total:number;summary:LeanRow;open_initiatives:number;overdue_actions:number;sales_at_risk?:number;loss_ranking?:{id:string;name:string;name_ar?:string;minutes:number;cumulative:number}[]}>(can('lean','view')?url:null,String(s.fetchedAt),identity);
- const library=useHistoryData<{causes:Row[]}>('/api/lean?'+new URLSearchParams({factory,mode:'library'}),String(s.fetchedAt));
+ const data=useHistoryData<{rows:LeanRow[];total:number;summary:LeanRow;open_initiatives:number;overdue_actions:number;sales_at_risk?:number;loss_ranking?:{id:string;name:string;name_ar?:string;minutes:number;cumulative:number}[]}>(!showPlanActual&&can('lean','view')?url:null,String(s.fetchedAt),identity);
+ const library=useHistoryData<{causes:Row[]}>(showPlanActual?null:'/api/lean?'+new URLSearchParams({factory,mode:'library'}),String(s.fetchedAt));
  const change=(key:string,value:string)=>{setFilters(x=>({...x,[key]:value}));setPage(1);};
  const name=(table:string,id:unknown)=>localName(s.tables[table]?.find(x=>x.id===id),lang)||t('notAvailable');
  const q=(v:unknown)=>v==null?'—':Number(v).toLocaleString(lang,{maximumFractionDigits:2});
  const selector=(key:string,label:string,rows:Row[]) => <Field label={t(label)}><select value={filters[key]||''} onChange={e=>change(key,e.target.value)}><option value="">{t('all')}</option>{rows.map(x=><option key={String(x.id)} value={String(x.id)}>{localName(x,lang)}</option>)}</select></Field>;
+ if(showPlanActual)return <PlanActual {...props} onBack={()=>openPlanActual(false)}/>;
  if(libraries)return <LeanLibraries {...props} onBack={()=>{setLibraries(false);data.reload();library.reload();}}/>;
  if(selected)return <LeanProblem {...props} row={selected} from={from} to={to} refreshIdentity={identity} onBack={()=>{setSelected(null);data.reload();}}/>;
  async function open(row:LeanRow){setOpening(true);setNotice('');try{
@@ -75,6 +86,7 @@ export default function LeanAnalysis({onDowntime,...props}:FeatureProps & {onDow
  return <section className="lean-page lean-overview" dir={lang==='ar'?'rtl':'ltr'} aria-label={t('lean')}>
   <div className="lean-overview-intro"><p>{t('leanHelp')}</p><div>
    {onDowntime&&<button type="button" onClick={onDowntime}>{t('leanReviewDowntime')}</button>}
+   {can('orders','view')&&can('lean','view')&&<button type="button" onClick={()=>openPlanActual(true)}>{t('f37Title')}</button>}
    {(can('lean','edit')||can('lean_standards','edit'))&&<button type="button" onClick={()=>setLibraries(true)}>{t('leanLibraries')}</button>}
   </div></div>
   <section className="lean-filter-area" aria-label={t('leanFilters')}>

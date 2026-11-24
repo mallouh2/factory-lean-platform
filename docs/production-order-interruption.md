@@ -196,10 +196,26 @@ F34 pause-clears-assignment behavior; the dated F34 report remains historical ev
 F34.1 evidence: `D:/FactoryLean/Reports/F34.1-20261116/REPORT.md`.
 Post-F34.1 evidence: `D:/FactoryLean/Reports/Post-F341-20261116/REPORT.md`.
 
-**F37 — future, not implemented:** Lean dual-Gantt comparison of original approved
-plan, subsequent explicit Planning revisions and actual execution, with deviations,
-reasons and actors. Current run/revision evidence supports later design; no report,
-automatic analysis or historical reconstruction is claimed here.
+**F37 — owner-accepted multi-order comparison:**
+Lean opens the selected period across all production lines and orders. Each line has
+a planned and an actual track on the same scale. The report compares the original
+approved plan by default and can switch to the latest approved plan for every order.
+Order details show original and latest approved intervals, actual runs and recorded
+execution reasons. Both comparison modes use the existing revision ledger. Missing
+history remains explicit.
+
+**Future Planning Gantt visual reference:** The owner approved F37's timeline,
+production bars, line organization, colors and spacing, readable time axis, short-bar
+labels, hover and keyboard focus details, and responsive presentation as the reference
+for a future Planning Gantt improvement. Planning must preserve scheduling, drag and
+drop, rescheduling, conflict validation and operational behavior. This is design
+direction for future work.
+
+Group 6 is complete and owner-approved. Group 6A covers the Lean, Downtime and
+Startup improvements. All seven Group 6B controlled validation scenarios passed.
+Group 6C covers F37. Live improvement effectiveness still requires comparable
+operating evidence.
+
 Focused API/client/Planning/Floor checks, rollback lifecycle/accounting/ACL tests,
 real independent-session races and EN desktop/AR mobile browser evidence are in
 `D:/FactoryLean/Reports/F34-20261115/`. The report records final results, local
