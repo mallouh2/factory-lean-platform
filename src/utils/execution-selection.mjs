@@ -5,13 +5,13 @@ export const executionCandidate=o=>executionScheduled(o)&&['planned','active'].i
 export function selectedExecution(items,line,id){const rows=items.filter(o=>String(executionLine(o))===String(line)&&executionCandidate(o));return rows.find(o=>String(o.id)===String(id))||rows.find(o=>o.status==='active')||rows[0]||null;}
 // Pack only true intervals. Details and accessible short-order targets live
 // outside the time track, so annotation width cannot displace sequential work.
-export function executionTimeline(items,pixelsPerHour=64,rowHeight=56){
+export function executionTimeline(items,pixelsPerHour=64){
  const rows=items.filter(executionCandidate).map((o,n)=>({order:o,index:n,start:Date.parse(o.start_time),finish:Date.parse(o.expected_finish)})).sort((a,b)=>a.start-b.start||a.index-b.index);
- if(!rows.length)return {from:0,until:0,width:720,height:0,slots:[],ticks:[]};
+ if(!rows.length)return {from:0,until:0,width:720,tracks:0,tickWidth:0,slots:[],ticks:[]};
  const hour=3600000,from=Math.floor(Math.min(...rows.map(r=>r.start))/hour)*hour,until=Math.max(Math.ceil(Math.max(...rows.map(r=>r.finish))/hour)*hour+hour,from+Math.ceil(720/pixelsPerHour)*hour),width=(until-from)/hour*pixelsPerHour,ends=[];
  const slots=rows.map(r=>{const left=(r.start-from)/(until-from)*width,duration=(r.finish-r.start)/(until-from)*width;let row=ends.findIndex(end=>end<=r.start);if(row<0)row=ends.length;ends[row]=r.finish;return {...r,left,width:duration,row};});
  const step=pixelsPerHour<24?Math.ceil(180/(pixelsPerHour*24))*24:Math.max(1,Math.ceil(180/pixelsPerHour)),ticks=[];for(let t=from;t<until;t+=step*hour)ticks.push({at:t,left:(t-from)/(until-from)*width});
- return {from,until,width,height:68+ends.length*rowHeight,slots,ticks};
+ return {from,until,width,tracks:ends.length,tickWidth:step*pixelsPerHour,slots,ticks};
 }
 // A page is never a complete selector: bind all pages to one factory/revision,
 // reject duplicates or changed lists, and enable commands only after completion.

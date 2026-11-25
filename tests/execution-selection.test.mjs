@@ -12,3 +12,13 @@ test('timeline markers retain approved duration and ordering; sequential bars st
 test('only genuine overlaps create another lane independently of zoom',()=>{const a={...rows[0],id:'A',start_time:'2026-11-16T07:00:00Z',expected_finish:'2026-11-16T08:00:00Z'},b={...a,id:'B',start_time:'2026-11-16T07:59:00Z'},c={...a,id:'C',start_time:'2026-11-16T08:00:00Z',expected_finish:'2026-11-16T08:01:00Z'};for(const scale of [3,12,64])assert.deepEqual(executionTimeline([c,b,a],scale).slots.map(s=>[s.order.id,s.row]),[['A',0],['B',1],['C',0]]);});
 
 test('zoom changes actual pixels per hour even for a short schedule',()=>{for(const scale of [3,12,64]){const t=executionTimeline([rows[0]],scale);assert.ok(Math.abs(t.slots[0].width-scale)<1e-10);assert.ok(t.width>=720);}});
+
+test('grid stays aligned with the time axis at each zoom without reserving space for labels',()=>{
+ const long={...rows[0],expected_finish:'2026-11-17T08:00:00Z'};
+ for(const scale of [3,12,64]){
+  const chart=executionTimeline([long],scale);
+  assert.equal(chart.tracks,1);
+  assert.equal(chart.slots[0].width,25*scale);
+  assert.ok(chart.ticks.every((tick,index)=>Math.abs(tick.left-index*chart.tickWidth)<1e-9));
+ }
+});

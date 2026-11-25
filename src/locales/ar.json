@@ -2743,6 +2743,7 @@
   "executionTimelineHelp": "اختر شريط الوقت ثم راجع تفاصيل الأمر أدناه. الاختيار لا يغيّر الخطة.",
   "executionTimelineScale": "مقياس الخط الزمني",
   "executionScaleHours": "ساعات",
+  "executionScaleHoursDetail": "ساعات (تفصيلي)",
   "executionScaleDays": "أيام",
   "executionScaleWeeks": "أسابيع",
   "executionNoUnfinished": "لا توجد أوامر غير مكتملة مجدولة على هذا الخط.",

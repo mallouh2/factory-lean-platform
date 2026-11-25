@@ -2743,6 +2743,7 @@
   "executionTimelineHelp": "Select a time bar, then review the order below. Selection does not change the plan.",
   "executionTimelineScale": "Timeline scale",
   "executionScaleHours": "Hours",
+  "executionScaleHoursDetail": "Hours (detail)",
   "executionScaleDays": "Days",
   "executionScaleWeeks": "Weeks",
   "executionNoUnfinished": "No unfinished orders are scheduled on this line.",

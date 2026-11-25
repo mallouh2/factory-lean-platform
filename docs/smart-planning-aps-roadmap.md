@@ -1,8 +1,8 @@
 # Smart Planning APS roadmap and acceptance criteria
 
-**22 November 2026 · Owner decisions recorded · APS implementation on hold**
+**25 November 2026 · Groups 1–7 closed and owner-approved · APS 1 awaits separate authorization**
 
-The [Phase 0 specification](smart-planning-aps-phase-0.md) records the owner’s requirements. The [compatibility audit](smart-planning-aps-architecture.md) maps each area to current code, evidence, risks and the decisions below. The sequence is the owner’s provisional sequence. APS implementation remains on hold until Groups 6 and 7 are both completed and accepted. Separate authorization is still required for APS 1.
+The [Phase 0 specification](smart-planning-aps-phase-0.md) records the owner’s requirements. The [compatibility audit](smart-planning-aps-architecture.md) maps each area to current code, evidence, risks and the decisions below. Groups 6 and 7 have met the APS roadmap’s completion and acceptance prerequisite. APS 1 is ready to begin under the existing roadmap once separately authorized.
 
 ## Existing roadmap dependencies
 
@@ -11,8 +11,10 @@ The [Phase 0 specification](smart-planning-aps-phase-0.md) records the owner’s
 | Group 4 Planning and Maintenance | Owner-accepted and checkpointed at `ed235fa5ec7c6d95578947bd269c8d0aad10443d`. It includes the unified queue, scheduling, late starts and Gantt stability. | Preserve those workflows. APS adds advisory proposals around the current Planning and Maintenance commands. |
 | Group 5 Quality and UI | F13/F16 were owner-accepted on 19 November 2026. The approved checkpoint `e0d8af7cd39dca6a0e932a51cfc67d6f007aee8a` was pushed and verified. | Preserve live Finished quantity, the exact Quality formula, protected audit and autocomplete scope. |
 | Group 6 Lean | Complete and owner-accepted, including Group 6A, all seven Group 6B controlled scenarios, and the Group 6C F37 multi-order report. Live improvement effectiveness still lacks comparable operating evidence. | Reuse accepted Lean evidence. APS 1–2 should preserve the source records used by F37. APS 5 comparisons still require comparable operating evidence. |
-| Group 7 | Final integrated regression and owner acceptance after Group 6. G7a approves targeted revalidation of Groups 1B, 1C, 2 and the outstanding Group 3 cases. | Keep the existing checklist and final acceptance gates. Complete and obtain owner acceptance before any APS implementation. |
+| Group 7 | Owner accepted the integrated validation scenarios, the G7a targeted gaps in Groups 1B, 1C, 2 and 3, comprehensive Shift Handover, and the F37-style Factory Floor order selector. | Acceptance gate met on 25 November 2026. Preserve the accepted workflows in APS. |
 | Staged release | Broad regression, security and whole-site validation are separate. Existing hosted parity is unverified in this audit. | Local APS work does not activate, deploy or reconcile hosted environments. Any later rollout needs its own approval. |
+
+The approved F37 visual identity is shared by the Lean report and Factory Floor selector and remains the reference for a future Planning Gantt redesign. PO-0000298 retains the unresolved 0.16 kg historical custody. Live Lean improvement effectiveness still needs comparable operating evidence. The [Production Bottleneck Detection and Throughput Improvement objective](#future-objective-production-bottleneck-detection-and-throughput-improvement) remains future work.
 
 ## Implementation sequence and gates
 
